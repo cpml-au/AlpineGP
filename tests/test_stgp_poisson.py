@@ -9,10 +9,10 @@ import operator
 # import jax
 
 from deap import gp, tools
-from dctkit.gp import gp_fix
+from alpine.gp import gp_fix
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
-from dctkit.gp import gpsymbreg as gps
+from alpine.gp import gpsymbreg as gps
 from jax import jit
 
 import os
