@@ -11,7 +11,9 @@ import operator
 from deap import gp, tools
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
+from alpine.gp import gp_fix
 from alpine.gp import gpsymbreg as gps
+from alpine.data import poisson_dataset as data
 from jax import jit
 
 import os
@@ -51,36 +53,27 @@ def generate_mesh_poisson(filename):
     bnodes, _ = gmsh.model.mesh.getNodesForPhysicalGroup(1, 1)
     bnodes -= 1
 
-    u_true = jnp.array(node_coords[:, 0]**2 + node_coords[:, 1]**2)
-    b_values = u_true[bnodes]
-
-    '''
-    triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
-    plt.tricontourf(triang, u_true, cmap='RdBu', levels=20)
-    plt.triplot(triang, 'ko-')
-    plt.colorbar()
-    plt.show()
-    '''
-
-    boundary_values = (jnp.array(bnodes), jnp.array(b_values))
-
-    dim_0 = S.num_nodes
-    f_vec = jnp.array(4.*np.ones(dim_0))
-    f = C.CochainP0(S, f_vec, type="jax")
-
-    u_0_vec = 0.01*np.random.rand(dim_0)
-    u_0 = C.CochainP0(S, u_0_vec, type="jax")
-
-    k = 1.0
-    gamma = 1000.
-    return u_0, u_true, S, f, k, boundary_values, gamma
+    return S, bnodes
 
 
-u_0, u_true, S, f, k, boundary_values, gamma = generate_mesh_poisson("test3.msh")
+# generate mesh and dataset
+S, bnodes = generate_mesh_poisson("test3.msh")
+dim_0 = S.num_nodes
+data_X, data_y = data.generate_dataset(S, 10)
+
+bvalues = data_X[:, bnodes]
+boundary_values = (jnp.array(bnodes), jnp.array(bvalues))
+
+gamma = 1000.
+u_0_vec = 0.01*np.random.rand(dim_0)
+u_0 = C.CochainP0(S, u_0_vec, type="jax")
+
+# FIXME: Fix validation process
 
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0], float,  "u")
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float,  "u")
 # define cochain operations
+
 
 # sum
 pset.addPrimitive(add, [float, float], float, name="Add")
@@ -113,14 +106,8 @@ pset.addPrimitive(C.inner_product, [C.CochainP0, C.CochainP0], float, "Inner0")
 pset.addPrimitive(C.inner_product, [C.CochainP1, C.CochainP1], float, "Inner1")
 pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "Inner2")
 
-# add sources and diffusivity
-pset.addTerminal(f, C.CochainP0, name="f")
-pset.addTerminal(k, float, name="k")
+# add constant = 0.5
 pset.addTerminal(0.5, float, name="1/2")
-
-
-# extract positions and values of boundary nodes
-pos, value = boundary_values
 
 
 class ObjFunctional:
@@ -132,14 +119,15 @@ class ObjFunctional:
         self.individual = individual
 
     # @profile
-    def evalEnergy(self, vec):
+    def evalEnergy(self, vec_x, vec_y, vec_bvalues):
         # Transform the tree expression in a callable function
-        penalty = 0.5*gamma*jnp.sum((vec[pos] - value)**2)
-
-        c = C.CochainP0(S, vec, "jax")
-
-        energy = self.energy_func(c) + penalty
-
+        penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - bvalues)**2)
+        # jax.debug.print("{x}", x=penalty)
+        c = C.CochainP0(S, vec_x, "jax")
+        fk = C.CochainP0(S, vec_y, "jax")
+        # jax.debug.print("{x}", x=jnp.linalg.norm(c.coeffs - f.coeffs))
+        energy = self.energy_func(c, fk) + penalty
+        # jax.debug.print("{x}", x=energy)
         return energy
 
 
@@ -154,26 +142,37 @@ warnings.filterwarnings('ignore')
 def evalPoisson(individual):
     # NOTE: we are introducing a BIAS...
     if len(individual) > 15:
-        return 100,
+        return 10000,
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
     # the current objective function is the current energy
     obj = ObjFunctional()
     obj.setFunc(energy_func, individual)
-    # minimize the energy w.r.t. data
-    jac = jit(grad(obj.evalEnergy))
-    # solver = jaxopt.LBFGS(obj.evalEnergy, maxiter=1000)
-    # print("STOP")
-    x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs, method="BFGS", jac=jac).x
+    result = 0
+    for i, vec_y in enumerate(data_y):
+        # minimize the energy w.r.t. data
+        jac = jit(grad(obj.evalEnergy))
+        vec_bvalues = bvalues[i]
 
-    result = np.linalg.norm(x-u_true)
+        x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs,
+                     args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
+        current_result = np.linalg.norm(x-data_X[i, :])**2
 
     # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
     # it a default big number
     if result > 10 or math.isnan(result):
         result = 100
+        # to avoid strange numbers, if result is too distance from 0 or is nan we
+        # assign to it a default big number
+        if current_result > 100 or math.isnan(current_result):
+            current_result = 100
 
+        result += current_result
+
+    length_factor = math.prod([(len(individual) - i) for i in range(10, 21)])
+    penalty_length = gamma*abs(length_factor)
+    result += penalty_length
     return result,
 
 
@@ -188,7 +187,7 @@ limitLength = 15
 toolbox.decorate("mate", gp.staticLimit(key=len, max_value=limitLength))
 toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=limitLength))
 '''
-NINDIVIDUALS = 500
+NINDIVIDUALS = 400
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
