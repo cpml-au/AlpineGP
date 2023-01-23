@@ -123,6 +123,12 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...")
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
+        # init_individ = "Add(MulFloat(Inner1(CoboundaryP0(u0), CoboundaryP0(u0)), 1/2), Inner0(u0, u1))"
+        # self.pop[0] = creator.Individual.from_string(init_individ, self.pset)
+        # print(len(self.pop[0]))
+
+        # for i in range(self.NINDIVIDUALS):
+        #    print(self.pop[i])
 
         # Populate the history and the Hall Of Fame
         self.history.update(self.pop)
