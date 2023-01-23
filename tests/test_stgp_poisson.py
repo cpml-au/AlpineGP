@@ -9,7 +9,6 @@ import operator
 # import jax
 
 from deap import gp, tools
-from alpine.gp import gp_fix
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
 from alpine.gp import gpsymbreg as gps
@@ -136,12 +135,11 @@ class ObjFunctional:
     def evalEnergy(self, vec):
         # Transform the tree expression in a callable function
         penalty = 0.5*gamma*jnp.sum((vec[pos] - value)**2)
-        penalty_length = gamma*abs((len(self.individual) - 13))
-        # jax.debug.print("{x}", x=penalty)
+
         c = C.CochainP0(S, vec, "jax")
-        # jax.debug.print("{x}", x=jnp.linalg.norm(c.coeffs - f.coeffs))
-        energy = self.energy_func(c) + penalty + penalty_length
-        # jax.debug.print("{x}", x=energy)
+
+        energy = self.energy_func(c) + penalty
+
         return energy
 
 
@@ -149,14 +147,11 @@ class ObjFunctional:
 warnings.filterwarnings('ignore')
 
 # define evaluation function
+
 # @profile
 
 
-# @profile
 def evalPoisson(individual):
-    # print(individual)
-    # print(len(individual))
-    # we dont want individual too much long
     # NOTE: we are introducing a BIAS...
     if len(individual) > 15:
         return 100,
@@ -171,21 +166,14 @@ def evalPoisson(individual):
     # solver = jaxopt.LBFGS(obj.evalEnergy, maxiter=1000)
     # print("STOP")
     x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs, method="BFGS", jac=jac).x
-    # print(x)
-    # x = solver.run(u_0.coeffs).params
-    # x = sol.params
-    # jax.debug.print("{x}", x=x)
-    # jax.debug.print("{x}", x=jnp.linalg.norm(x[pos]-value))
+
     result = np.linalg.norm(x-u_true)
 
-    # result = jnp.linalg.norm(x-u_true)
     # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
     # it a default big number
     if result > 10 or math.isnan(result):
         result = 100
 
-    # jax.debug.print("{x}", x=result)
-    # result = sol.state.value
     return result,
 
 
@@ -215,11 +203,12 @@ GPproblem = gps.GPSymbRegProblem(pset,
 
 # Register fitness function, selection and mutate operators
 GPproblem.toolbox.register("evaluate", evalPoisson)
-GPproblem.toolbox.register("select", tools.selTournament, tournsize=3)
-GPproblem.toolbox.register("mate", gp_fix.cxOnePoint)
-GPproblem.toolbox.register("expr_mut", gp_fix.genGrow, min_=1, max_=3)
+GPproblem.toolbox.register(
+    "select", GPproblem.selElitistAndTournament, frac_elitist=0.1)
+GPproblem.toolbox.register("mate", gp.cxOnePoint)
+GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
 GPproblem.toolbox.register("mutate",
-                           gp_fix.mutUniform,
+                           gp.mutUniform,
                            expr=GPproblem.toolbox.expr_mut,
                            pset=pset)
 
@@ -232,22 +221,14 @@ GPproblem.toolbox.decorate(
 
 def test_stgp_poisson():
 
-    stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
-    stats_size = tools.Statistics(len)
-    mstats = tools.MultiStatistics(fitness=stats_fit, size=stats_size)
-    mstats.register("avg", np.mean)
-    mstats.register("std", np.std)
-    mstats.register("min", np.min)
-    mstats.register("max", np.max)
-
     # start learning
-    pool = multiprocessing.Pool()
-    GPproblem.toolbox.register("map", pool.map)
+    # pool = multiprocessing.Pool()
+    # GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=False,
                   seed=None)
-    pool.close()
+    # pool.close()
 
     # Print best individual
     best = tools.selBest(GPproblem.pop, k=1)

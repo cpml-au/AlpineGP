@@ -1,8 +1,6 @@
 from deap import algorithms, tools, gp, base, creator
 import matplotlib.pyplot as plt
 import numpy as np
-import random
-from . import gp_fix
 from memory_profiler import profile
 
 
@@ -53,8 +51,8 @@ class GPSymbRegProblem():
         self.logbook = tools.Logbook()
         # Headers of fields to be printed during log
         self.logbook.header = "gen", "evals", "fitness", "size"
-        self.logbook.chapters["fitness"].header = "min", "avg", "max"
-        self.logbook.chapters["size"].header = "min", "avg", "max"
+        self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
+        self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
         # Create history object to build the genealogy tree
         self.history = tools.History()
@@ -73,7 +71,7 @@ class GPSymbRegProblem():
         # Register functions to create individuals and initialize population
         self.toolbox = base.Toolbox()
         self.toolbox.register("expr",
-                              gp_fix.genHalfAndHalf,
+                              gp.genHalfAndHalf,
                               pset=pset,
                               min_=min_,
                               max_=max_)
@@ -96,6 +94,22 @@ class GPSymbRegProblem():
             # Print statistics for the current population
             print(self.logbook.stream)
 
+    def selElitistAndTournament(self, individuals, frac_elitist, tournsize=3):
+        """Performs tournament selection with elitism.
+
+            Args:
+                individuals: a list of individuals to select from.
+                frac_elitist: best individuals to keep expressed as a percentage of the population (ex. 0.1 = keep top 10% individuals)
+                tournsize: tournament size.
+
+            Returns:
+                population after selection/tournament.
+        """
+        n_elitist = int(frac_elitist*self.NINDIVIDUALS)
+        n_tournament = self.NINDIVIDUALS - n_elitist
+
+        return tools.selBest(individuals, n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=tournsize)
+
     # @profile
     def run(self,
             plot_history=False,
@@ -107,7 +121,6 @@ class GPSymbRegProblem():
         """Runs symbolic regression."""
 
         # Generate initial population
-        random.seed(318)
         print("Generating initial population...")
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
 
@@ -127,6 +140,7 @@ class GPSymbRegProblem():
         fitnesses = list(self.toolbox.map(self.toolbox.evaluate, self.pop))
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
+        print("DONE.")
 
         for gen in range(self.NGEN):
             cgen = gen + 1
@@ -134,11 +148,12 @@ class GPSymbRegProblem():
             # Select and clone the next generation individuals
             offspring = list(
                 map(self.toolbox.clone,
-                    self.toolbox.select(self.pop, len(self.pop))))
+                    # self.toolbox.select(self.pop, len(self.pop))))
+                    self.toolbox.select(self.pop)))
 
             # Apply crossover and mutation to the offspring (like eaSimple)
-            offspring = algorithms.varAnd(offspring, self.toolbox, self.CXPB,
-                                          self.MUTPB)
+            offspring = algorithms.varOr(
+                offspring, self.toolbox, self.NINDIVIDUALS, self.CXPB, self.MUTPB)
 
             # Evaluate the individuals with an invalid fitness (subject to crossover and mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
@@ -171,7 +186,7 @@ class GPSymbRegProblem():
                 plt.xlabel("Generation #")
                 plt.ylabel("Best Fitness")
                 plt.draw()
-                plt.pause(0.01)
+                plt.pause(0.02)
 
             if plot_best and (plot_best_func
                               is not None) and cgen % plot_freq == 0:
