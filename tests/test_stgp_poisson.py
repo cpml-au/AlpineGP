@@ -59,7 +59,8 @@ def generate_mesh_poisson(filename):
 # generate mesh and dataset
 S, bnodes = generate_mesh_poisson("test3.msh")
 dim_0 = S.num_nodes
-data_X, data_y = data.generate_dataset(S, 10)
+num_data = 2
+data_X, data_y = data.generate_dataset(S, num_data)
 
 bvalues = data_X[:, bnodes]
 boundary_values = (jnp.array(bnodes), jnp.array(bvalues))
@@ -121,7 +122,7 @@ class ObjFunctional:
     # @profile
     def evalEnergy(self, vec_x, vec_y, vec_bvalues):
         # Transform the tree expression in a callable function
-        penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - bvalues)**2)
+        penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
         # jax.debug.print("{x}", x=penalty)
         c = C.CochainP0(S, vec_x, "jax")
         fk = C.CochainP0(S, vec_y, "jax")
@@ -141,8 +142,10 @@ warnings.filterwarnings('ignore')
 
 def evalPoisson(individual):
     # NOTE: we are introducing a BIAS...
-    if len(individual) > 15:
-        return 10000,
+    if (len(individual) < 10) or (len(individual) > 20):
+        result = 1000
+        # print(result)
+        return result,
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
@@ -153,11 +156,15 @@ def evalPoisson(individual):
     for i, vec_y in enumerate(data_y):
         # minimize the energy w.r.t. data
         jac = jit(grad(obj.evalEnergy))
-        vec_bvalues = bvalues[i]
+        # solver = jaxopt.LBFGS(obj.evalEnergy, maxiter=1000)
+        # print("STOP")
+        # extract bvalues
+        vec_bvalues = bvalues[i, :]
 
         x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
         current_result = np.linalg.norm(x-data_X[i, :])**2
+        # print(current_result)
 
     # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
     # it a default big number
@@ -170,8 +177,11 @@ def evalPoisson(individual):
 
         result += current_result
 
-    length_factor = math.prod([(len(individual) - i) for i in range(10, 21)])
+    result = 1/(3*num_data)*result
+    length_factor = math.prod([1 - i/len(individual)
+                              for i in range(10, 21)])
     penalty_length = gamma*abs(length_factor)
+    # print(penalty_length)
     result += penalty_length
     return result,
 
@@ -187,8 +197,8 @@ limitLength = 15
 toolbox.decorate("mate", gp.staticLimit(key=len, max_value=limitLength))
 toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=limitLength))
 '''
-NINDIVIDUALS = 400
-NGEN = 20
+NINDIVIDUALS = 500
+NGEN = 15
 CXPB = 0.5
 MUTPB = 0.1
 

@@ -22,20 +22,21 @@ def generate_dataset(S, mult):
         # ith quadratic function
         q_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
         rhs_qi = (4/(i+1)**2) * np.ones(num_nodes)
+
         # ith exponential function
-        e_i = np.exp(i*node_coords[:, 0]) + np.exp(i*node_coords[:, 1])
-        rhs_ei = i**2 * e_i
+        trig_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
+        rhs_trigi = -i**2 * trig_i
 
         # ith power function
         p_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
-        rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**i + node_coords[:, 1]**i)
+        rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
 
         # fill the dataset
-        data_X[i, :] = q_i
-        data_X[i+1, :] = e_i
-        data_X[i+2, :] = p_i
-        data_y[i, :] = rhs_qi
-        data_y[i+1, :] = rhs_ei
-        data_y[i+2, :] = rhs_pi
+        data_X[3*i, :] = q_i
+        data_X[3*i+1, :] = trig_i
+        data_X[3*i+2, :] = p_i
+        data_y[3*i, :] = rhs_qi
+        data_y[3*i+1, :] = rhs_trigi
+        data_y[3*i+2, :] = rhs_pi
 
     return data_X, data_y
