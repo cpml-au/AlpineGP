@@ -23,6 +23,8 @@ import networkx as nx
 import multiprocessing
 
 from scipy.optimize import minimize
+from sklearn.model_selection import train_test_split, KFold
+
 
 config.update("jax_enable_x64", True)
 
@@ -48,8 +50,16 @@ def generate_mesh_poisson(filename):
 # generate mesh and dataset
 S, bnodes = generate_mesh_poisson("test3.msh")
 dim_0 = S.num_nodes
-num_data = 2
+num_data = 4
 data_X, data_y = data.generate_dataset(S, num_data)
+
+# split the dataset in training and test set
+X_train, X_test, y_train, y_test = train_test_split(
+    data_X, data_y, test_size=0.33, random_state=42)
+
+# initialize KFOLD
+k = 2
+kf = KFold(n_splits=k, random_state=None)
 
 bvalues = data_X[:, bnodes]
 boundary_values = (jnp.array(bnodes), jnp.array(bvalues))
@@ -69,7 +79,6 @@ class ObjFunctional:
         self.energy_func = func
         self.individual = individual
 
-    # @profile
     def evalEnergy(self, vec_x, vec_y, vec_bvalues):
         # Transform the tree expression in a callable function
         penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
@@ -86,7 +95,7 @@ class ObjFunctional:
 warnings.filterwarnings('ignore')
 
 
-def evalPoisson(individual):
+def evalPoisson(individual, X, y):
     # NOTE: we are introducing a BIAS...
     if (len(individual) < 10) or (len(individual) > 20):
         result = 1000
@@ -97,8 +106,9 @@ def evalPoisson(individual):
     # the current objective function is the current energy
     obj = ObjFunctional()
     obj.setFunc(energy_func, individual)
+
     result = 0
-    for i, vec_y in enumerate(data_y):
+    for i, vec_y in enumerate(y):
         # minimize the energy w.r.t. data
         jac = jit(grad(obj.evalEnergy))
 
@@ -107,7 +117,7 @@ def evalPoisson(individual):
 
         x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
-        current_result = np.linalg.norm(x-data_X[i, :])**2
+        current_result = np.linalg.norm(x-X[i, :])**2
 
     # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
     # it a default big number
@@ -138,7 +148,6 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  max_=4)
 
 # Register fitness function, selection and mutate operators
-GPproblem.toolbox.register("evaluate", evalPoisson)
 GPproblem.toolbox.register(
     "select", GPproblem.selElitistAndTournament, frac_elitist=0.1)
 GPproblem.toolbox.register("mate", gp.cxOnePoint)
@@ -154,24 +163,76 @@ GPproblem.toolbox.decorate(
 GPproblem.toolbox.decorate(
     "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
+# initialize list of best individuals and list of best scores
+best_individuals = []
+best_train_scores = []
+best_val_scores = []
+
 
 def test_stgp_poisson():
-
     # start learning
-    pool = multiprocessing.Pool()
-    GPproblem.toolbox.register("map", pool.map)
-    GPproblem.run(plot_history=True,
-                  print_log=True,
-                  plot_best=False,
-                  seed=None)
-    pool.close()
+    for train_index, valid_index in kf.split(X_train, y_train):
+        # divide the dataset in training and validation set
+        X_t, X_val = X_train[train_index, :], X_train[valid_index, :]
+        y_t, y_val = y_train[train_index, :], y_train[valid_index, :]
 
-    # Print best individual
-    best = tools.selBest(GPproblem.pop, k=1)
-    print(str(best[0]))
+        GPproblem.toolbox.register("evaluate", evalPoisson, X=X_t, y=y_t)
+
+        # train the model in the training set
+        pool = multiprocessing.Pool()
+        GPproblem.toolbox.register("map", pool.map)
+        GPproblem.run(plot_history=False,
+                      print_log=False,
+                      plot_best=False,
+                      seed=None)
+        pool.close()
+
+        # Print best individual
+        best = tools.selBest(GPproblem.pop, k=1)
+        print(f"The best individual in this fold is {str(best[0])}")
+
+        # evaluate score on the current training and validation set
+        score_train = GPproblem.min_history[-1]
+        score_val = evalPoisson(best, X_val, y_val)
+
+        print(f"The best score on training set in this fold is {score_train}")
+        print(f"The best score on validation set in this fold is {score_val}")
+
+        # save best individual and best score on training and validation set
+        best_individuals.append(best)
+
+        # FIXME: do I need it?
+        best_train_scores.append(score_train)
+        best_val_scores.append(score_train)
+
+        print("-FOLD COMPLETED-")
+
+    # retrain all the k best models on the entire training set
+    FinalGP = gps.GPSymbRegProblem(pset,
+                                   NINDIVIDUALS,
+                                   NGEN,
+                                   CXPB,
+                                   MUTPB,
+                                   min_=1,
+                                   max_=4,
+                                   best_individuals=best_individuals)
+    pool = multiprocessing.Pool()
+    FinalGP.toolbox.register("map", pool.map)
+    FinalGP.run(plot_history=False,
+                print_log=False,
+                plot_best=False,
+                seed=None)
+    pool.close()
+    real_best = tools.selBest(FinalGP.pop, k=1)
+
+    score_train = FinalGP.min_history[-1]
+    score_test = evalPoisson(best, X_val, y_val)
+
+    print(f"The best score on training set in this fold is {score_train}")
+    print(f"The best score on validation set in this fold is {score_test}")
 
     # plot the best solution
-    nodes, edges, labels = gp.graph(best[0])
+    nodes, edges, labels = gp.graph(real_best[0])
     graph = nx.Graph()
     graph.add_nodes_from(nodes)
     graph.add_edges_from(edges)

@@ -14,7 +14,8 @@ class GPSymbRegProblem():
                  min_=1,
                  max_=2,
                  individualCreator=None,
-                 toolbox=None):
+                 toolbox=None,
+                 best_individuals=None):
 
         self.pset = pset
         self.NINDIVIDUALS = NINDIVIDUALS
@@ -23,6 +24,7 @@ class GPSymbRegProblem():
         self.CXPB = CXPB
         self.MUTPB = MUTPB
         self.pop = None
+        self.best_individuals = best_individuals
 
         if individualCreator is None:
             self.__default_creator()
@@ -123,14 +125,19 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...")
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
-        # init_individ = "Add(MulFloat(Inner1(CoboundaryP0(u0), CoboundaryP0(u0)), 1/2), Inner0(u0, u1))"
-        # self.pop[0] = creator.Individual.from_string(init_individ, self.pset)
-        # print(len(self.pop[0]))
+        if self.best_individuals is not None:
+            for i in range(len(self.best_individuals)):
+                print(str(self.best_individuals[i][0]))
+                self.pop[i] = creator.Individual.from_string(
+                    str(self.best_individuals[i][0]), self.pset)
+                # init_individ = "Add(MulFloat(Inner1(CoboundaryP0(u0), CoboundaryP0(u0)), 1/2), Inner0(u0, u1))"
+                # self.pop[0] = creator.Individual.from_string(init_individ, self.pset)
+                # print(len(self.pop[0]))
 
-        # for i in range(self.NINDIVIDUALS):
-        #    print(self.pop[i])
+                # for i in range(self.NINDIVIDUALS):
+                #    print(self.pop[i])
 
-        # Populate the history and the Hall Of Fame
+                # Populate the history and the Hall Of Fame
         self.history.update(self.pop)
         self.halloffame.update(self.pop)
 
