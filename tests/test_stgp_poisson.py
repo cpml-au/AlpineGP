@@ -6,38 +6,27 @@ import jax.config as config
 # import jaxopt
 import math
 import operator
-# import jax
 
 from deap import gp, tools
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
-from alpine.gp import gp_fix
 from alpine.gp import gpsymbreg as gps
 from alpine.data import poisson_dataset as data
+from alpine.apps.poisson import pset
 from jax import jit
 
 import os
 import gmsh
-# import matplotlib.tri as tri
 import matplotlib.pyplot as plt
 import networkx as nx
 
 import multiprocessing
-# from memory_profiler import profile
 
 from scipy.optimize import minimize
 
 config.update("jax_enable_x64", True)
 
 cwd = os.path.dirname(simplex.__file__)
-
-
-def add(a, b):
-    return a + b
-
-
-def scalar_mul_float(a, b):
-    return a*b
 
 
 def generate_mesh_poisson(filename):
@@ -71,45 +60,6 @@ u_0 = C.CochainP0(S, u_0_vec, type="jax")
 
 # FIXME: Fix validation process
 
-# define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float,  "u")
-# define cochain operations
-
-
-# sum
-pset.addPrimitive(add, [float, float], float, name="Add")
-pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0)
-pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1)
-
-
-# coboundary
-pset.addPrimitive(C.coboundary, [C.CochainP0], C.CochainP1, name="CoboundaryP0")
-pset.addPrimitive(C.coboundary, [C.CochainP1], C.CochainP2, name="CoboundaryP1")
-pset.addPrimitive(C.coboundary, [C.CochainD0], C.CochainD1, name="CoboundaryD0")
-pset.addPrimitive(C.coboundary, [C.CochainD1], C.CochainD2, name="CoboundaryD1")
-
-# hodge star
-pset.addPrimitive(C.star, [C.CochainP0], C.CochainD2, name="Star0")
-pset.addPrimitive(C.star, [C.CochainP1], C.CochainD1, name="Star1")
-pset.addPrimitive(C.star, [C.CochainP2], C.CochainD0, name="Star2")
-
-# scalar multiplication
-pset.addPrimitive(C.scalar_mul, [C.CochainP0, float], C.CochainP0, "MulP0")
-pset.addPrimitive(C.scalar_mul, [C.CochainP1, float], C.CochainP1, "MulP1")
-pset.addPrimitive(C.scalar_mul, [C.CochainP2, float], C.CochainP2, "MulP2")
-pset.addPrimitive(C.scalar_mul, [C.CochainD0, float], C.CochainD0, "MulD0")
-pset.addPrimitive(C.scalar_mul, [C.CochainD1, float], C.CochainD1, "MulD1")
-pset.addPrimitive(C.scalar_mul, [C.CochainD2, float], C.CochainD2, "MulD2")
-pset.addPrimitive(scalar_mul_float, [float, float], float, "MulFloat")
-
-# inner product
-pset.addPrimitive(C.inner_product, [C.CochainP0, C.CochainP0], float, "Inner0")
-pset.addPrimitive(C.inner_product, [C.CochainP1, C.CochainP1], float, "Inner1")
-pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "Inner2")
-
-# add constant = 0.5
-pset.addTerminal(0.5, float, name="1/2")
-
 
 class ObjFunctional:
     def __init__(self) -> None:
@@ -135,16 +85,11 @@ class ObjFunctional:
 # suppress warnings
 warnings.filterwarnings('ignore')
 
-# define evaluation function
-
-# @profile
-
 
 def evalPoisson(individual):
     # NOTE: we are introducing a BIAS...
     if (len(individual) < 10) or (len(individual) > 20):
         result = 1000
-        # print(result)
         return result,
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
@@ -156,24 +101,18 @@ def evalPoisson(individual):
     for i, vec_y in enumerate(data_y):
         # minimize the energy w.r.t. data
         jac = jit(grad(obj.evalEnergy))
-        # solver = jaxopt.LBFGS(obj.evalEnergy, maxiter=1000)
-        # print("STOP")
-        # extract bvalues
+
+        # extract current bvalues
         vec_bvalues = bvalues[i, :]
 
         x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
         current_result = np.linalg.norm(x-data_X[i, :])**2
-        # print(current_result)
 
     # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
     # it a default big number
-    if result > 10 or math.isnan(result):
-        result = 100
-        # to avoid strange numbers, if result is too distance from 0 or is nan we
-        # assign to it a default big number
-        if current_result > 100 or math.isnan(current_result):
-            current_result = 100
+    if current_result > 100 or math.isnan(current_result):
+        current_result = 100
 
         result += current_result
 
@@ -181,24 +120,12 @@ def evalPoisson(individual):
     length_factor = math.prod([1 - i/len(individual)
                               for i in range(10, 21)])
     penalty_length = gamma*abs(length_factor)
-    # print(penalty_length)
     result += penalty_length
     return result,
 
 
-'''
-limitHeight = 6
-toolbox.decorate("mate", gp.staticLimit(
-    key=operator.attrgetter("height"), max_value=limitHeight))
-toolbox.decorate("mutate", gp.staticLimit(
-    key=operator.attrgetter("height"), max_value=limitHeight))
-
-limitLength = 15
-toolbox.decorate("mate", gp.staticLimit(key=len, max_value=limitLength))
-toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=limitLength))
-'''
-NINDIVIDUALS = 500
-NGEN = 15
+NINDIVIDUALS = 10
+NGEN = 1
 CXPB = 0.5
 MUTPB = 0.1
 
@@ -231,13 +158,13 @@ GPproblem.toolbox.decorate(
 def test_stgp_poisson():
 
     # start learning
-    # pool = multiprocessing.Pool()
-    # GPproblem.toolbox.register("map", pool.map)
+    pool = multiprocessing.Pool()
+    GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=False,
                   seed=None)
-    # pool.close()
+    pool.close()
 
     # Print best individual
     best = tools.selBest(GPproblem.pop, k=1)
