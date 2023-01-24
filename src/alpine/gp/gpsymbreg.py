@@ -127,9 +127,10 @@ class GPSymbRegProblem():
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
         if self.best_individuals is not None:
             for i in range(len(self.best_individuals)):
-                print(str(self.best_individuals[i][0]))
-                self.pop[i] = creator.Individual.from_string(
-                    str(self.best_individuals[i][0]), self.pset)
+                # print(str(self.best_individuals[i]))
+                # print(type(self.best_individuals[i]))
+                # print(type(self.pop[i]))
+                self.pop[i] = self.best_individuals[i]
                 # init_individ = "Add(MulFloat(Inner1(CoboundaryP0(u0), CoboundaryP0(u0)), 1/2), Inner0(u0, u1))"
                 # self.pop[0] = creator.Individual.from_string(init_individ, self.pset)
                 # print(len(self.pop[0]))

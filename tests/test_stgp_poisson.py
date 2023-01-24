@@ -55,7 +55,7 @@ data_X, data_y = data.generate_dataset(S, num_data)
 
 # split the dataset in training and test set
 X_train, X_test, y_train, y_test = train_test_split(
-    data_X, data_y, test_size=0.33, random_state=42)
+    data_X, data_y, test_size=0.33, random_state=None)
 
 # initialize KFOLD
 k = 2
@@ -97,9 +97,11 @@ warnings.filterwarnings('ignore')
 
 def evalPoisson(individual, X, y):
     # NOTE: we are introducing a BIAS...
+    '''
     if (len(individual) < 10) or (len(individual) > 20):
         result = 1000
         return result,
+    '''
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
@@ -119,10 +121,10 @@ def evalPoisson(individual, X, y):
                      args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
         current_result = np.linalg.norm(x-X[i, :])**2
 
-    # to avoid strange numbers, if result is too distance from 0 or is nan we assign to
-    # it a default big number
-    if current_result > 100 or math.isnan(current_result):
-        current_result = 100
+        # to avoid strange numbers, if result is too distance from 0 or is nan we
+        # assign to it a default big number
+        if current_result > 100 or math.isnan(current_result):
+            current_result = 100
 
         result += current_result
 
@@ -171,6 +173,8 @@ best_val_scores = []
 
 def test_stgp_poisson():
     # start learning
+    # pool = multiprocessing.Pool()
+    # GPproblem.toolbox.register("map", pool.map)
     for train_index, valid_index in kf.split(X_train, y_train):
         # divide the dataset in training and validation set
         X_t, X_val = X_train[train_index, :], X_train[valid_index, :]
@@ -181,9 +185,9 @@ def test_stgp_poisson():
         # train the model in the training set
         pool = multiprocessing.Pool()
         GPproblem.toolbox.register("map", pool.map)
-        GPproblem.run(plot_history=False,
-                      print_log=False,
-                      plot_best=False,
+        GPproblem.run(plot_history=True,
+                      print_log=True,
+                      plot_best=True,
                       seed=None)
         pool.close()
 
@@ -193,19 +197,22 @@ def test_stgp_poisson():
 
         # evaluate score on the current training and validation set
         score_train = GPproblem.min_history[-1]
-        score_val = evalPoisson(best, X_val, y_val)
+        score_val = evalPoisson(best[0], X_val, y_val)
 
         print(f"The best score on training set in this fold is {score_train}")
         print(f"The best score on validation set in this fold is {score_val}")
 
         # save best individual and best score on training and validation set
-        best_individuals.append(best)
+        best_individuals.append(best[0])
 
         # FIXME: do I need it?
         best_train_scores.append(score_train)
         best_val_scores.append(score_train)
 
         print("-FOLD COMPLETED-")
+
+    # modify toolbox for the final fase
+    # GPproblem.toolbox.register("evaluate", evalPoisson, X=X_train, y=y_train)
 
     # retrain all the k best models on the entire training set
     FinalGP = gps.GPSymbRegProblem(pset,
@@ -216,17 +223,33 @@ def test_stgp_poisson():
                                    min_=1,
                                    max_=4,
                                    best_individuals=best_individuals)
-    pool = multiprocessing.Pool()
-    FinalGP.toolbox.register("map", pool.map)
-    FinalGP.run(plot_history=False,
-                print_log=False,
-                plot_best=False,
+    # Set toolbox for FinalGP
+    FinalGP.toolbox.register(
+        "select", FinalGP.selElitistAndTournament, frac_elitist=0.1)
+    FinalGP.toolbox.register("mate", gp.cxOnePoint)
+    FinalGP.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
+    FinalGP.toolbox.register("mutate",
+                             gp.mutUniform,
+                             expr=FinalGP.toolbox.expr_mut,
+                             pset=pset)
+    FinalGP.toolbox.decorate(
+        "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+    FinalGP.toolbox.decorate(
+        "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+    FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train, y=y_train)
+
+    # def test_stgp_poisson_assessment():
+    # pool = multiprocessing.Pool()
+    # FinalGP.toolbox.register("map", pool.map)
+    FinalGP.run(plot_history=True,
+                print_log=True,
+                plot_best=True,
                 seed=None)
-    pool.close()
+    # pool.close()
     real_best = tools.selBest(FinalGP.pop, k=1)
 
     score_train = FinalGP.min_history[-1]
-    score_test = evalPoisson(best, X_val, y_val)
+    score_test = evalPoisson(real_best[0], X_test, y_test)
 
     print(f"The best score on training set in this fold is {score_train}")
     print(f"The best score on validation set in this fold is {score_test}")
@@ -249,3 +272,4 @@ def test_stgp_poisson():
 
 if __name__ == '__main__':
     test_stgp_poisson()
+    # test_stgp_poisson_assessment()
