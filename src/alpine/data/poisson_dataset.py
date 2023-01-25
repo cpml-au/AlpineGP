@@ -42,6 +42,8 @@ def generate_dataset(S, mult, diff):
         are defined.
         mult (int): the multiplicity of every class (for now 3) of functions of the
         dataset.
+        diff (int): integer (from 1 to 3) that expresses the number of classes of
+        different functions in the dataset.
 
     Returns:
         (np.array): np.array of the dataset samples.
@@ -82,16 +84,17 @@ def split_dataset(S, num_per_data, diff, k, is_valid=False):
 
     Args:
         S (SimplicialComplex): a simplicial complex.
-        bnodes (np.array): np.array containing the positions of the boundary nodes.
         num_per_data (int): 1/3 of the size of the dataset
+        diff (int): integer (from 1 to 3) that expresses the number of classes of
+        different functions in the dataset.
         k (int): number of folds for cross validation
+        is_valid (bool): boolean that it is True if we want to do model selection
+        (validation process).
 
     Returns:
-        (np.array): training samples
-        (np.array): test samples
-        (np.array): training labels
-        (np.array): test labels
-        (KFold): KFold class initialized
+        (tuple): tuple of training and test samples.
+        (tuple): tuple of training and test targets.
+        (KFold): KFold class initialized.
     """
     data_X, data_y = generate_dataset(S, num_per_data, diff)
 
@@ -104,7 +107,7 @@ def split_dataset(S, num_per_data, diff, k, is_valid=False):
 
     # initialize KFOLD
     kf = KFold(n_splits=k, random_state=None)
-    data_X = (X_train, X_test)
-    data_y = (y_train, y_test)
+    X = (X_train, X_test)
+    y = (y_train, y_test)
 
-    return data_X, data_y, kf
+    return X, y, kf

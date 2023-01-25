@@ -130,8 +130,10 @@ class GPSymbRegProblem():
 
         if seed is not None:
             print("Seeding population with individuals...")
-            seedTree = gp.PrimitiveTree.from_string(seed, self.pset)
-            self.pop[-1] = self.createIndividual(seedTree)
+            for i in range(len(seed)):
+                self.pop[i] = seed[i]
+            # seedTree = gp.PrimitiveTree.from_string(seed, self.pset)
+            # self.pop[-1] = self.createIndividual(seedTree)
 
         print(" -= START OF EVOLUTION =- ")
 
