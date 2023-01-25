@@ -62,11 +62,27 @@ pset.addTerminal(0.5, float, name="1/2")
 # generate mesh and dataset
 S, bnodes = d.generate_complex("test3.msh")
 dim_0 = S.num_nodes
-num_data = 4
+num_data = 1
+diff = 1
 k = 2
-X_train, X_test, y_train, y_test, kf = d.split_dataset(
-    S, bnodes, num_data, k)
-dataset = (X_train, y_train, X_test, y_test)
+is_valid = False
+X, y, kf = d.split_dataset(S, num_data, diff, k)
+
+if is_valid:
+    X_train, X_test = X
+    y_train, y_test = y
+    # extract bvalues_test
+    bvalues_test = X_test[:, bnodes]
+    dataset = (X_train, y_train, X_test, y_test)
+else:
+    dataset = (X, y)
+    X_train = X
+    y_train = y
+    # otherwise I have problem with import
+    bvalues_test = None
+
+# extract bvalues_train
+bvalues_train = X_train[:, bnodes]
 
 gamma = 1000.
 u_0_vec = 0.01*np.random.rand(dim_0)
@@ -99,11 +115,10 @@ warnings.filterwarnings('ignore')
 
 def evalPoisson(individual, X, y, current_bvalues):
     # NOTE: we are introducing a BIAS...
-    '''
-    if (len(individual) < 10) or (len(individual) > 20):
+    if len(individual) > 50:
         result = 1000
+        # print(result)
         return result,
-    '''
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
@@ -130,16 +145,16 @@ def evalPoisson(individual, X, y, current_bvalues):
 
         result += current_result
 
-    result = 1/(3*num_data)*result
-    length_factor = math.prod([1 - i/len(individual)
-                              for i in range(10, 21)])
-    penalty_length = gamma*abs(length_factor)
-    result += penalty_length
+    result = 1/(diff*num_data)*result
+    # length_factor = math.prod([1 - i/len(individual)
+    # for i in range(0, 50)])
+    # penalty_length = gamma*abs(length_factor)
+    # result += penalty_length
     return result,
 
 
-NINDIVIDUALS = 10
-NGEN = 1
+NINDIVIDUALS = 350
+NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
 
@@ -170,9 +185,6 @@ GPproblem.toolbox.decorate(
 
 FinalGP = GPproblem
 
-# extract bvalues_test
-bvalues_test = X_test[:, bnodes]
-
 # Set toolbox for FinalGP
 FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
-                         y=y_train, current_bvalues=bvalues_test)
+                         y=y_train, current_bvalues=bvalues_train)
