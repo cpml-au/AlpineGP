@@ -34,7 +34,7 @@ def generate_complex(filename):
     return S, bnodes
 
 
-def generate_dataset(S, mult):
+def generate_dataset(S, mult, diff):
     """Generate a dataset for the Poisson problem.
 
     Args:
@@ -49,33 +49,34 @@ def generate_dataset(S, mult):
     """
     node_coords = S.node_coord
     num_nodes = S.num_nodes
-    data_X = np.empty((3*mult, num_nodes))
-    data_y = np.empty((3*mult, num_nodes))
+    data_X = np.empty((diff*mult, num_nodes))
+    data_y = np.empty((diff*mult, num_nodes))
     for i in range(mult):
-        # ith quadratic function
-        q_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
-        rhs_qi = (4/(i+1)**2) * np.ones(num_nodes)
+        if diff >= 1:
+            # ith quadratic function
+            q_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
+            rhs_qi = (4/(i+1)**2) * np.ones(num_nodes)
+            data_X[diff*i, :] = q_i
+            data_y[diff*i, :] = rhs_qi
 
-        # ith exponential function
-        trig_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
-        rhs_trigi = -i**2 * trig_i
+        if diff >= 2:
+            # ith exponential function
+            trig_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
+            rhs_trigi = -i**2 * trig_i
+            data_X[diff*i+1, :] = trig_i
+            data_y[diff*i+1, :] = rhs_trigi
 
-        # ith power function
-        p_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
-        rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
-
-        # fill the dataset
-        data_X[3*i, :] = q_i
-        data_X[3*i+1, :] = trig_i
-        data_X[3*i+2, :] = p_i
-        data_y[3*i, :] = rhs_qi
-        data_y[3*i+1, :] = rhs_trigi
-        data_y[3*i+2, :] = rhs_pi
+        if diff >= 3:
+            # ith power function
+            p_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
+            rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
+            data_X[diff*i+2, :] = p_i
+            data_y[diff*i+2, :] = rhs_pi
 
     return data_X, data_y
 
 
-def split_dataset(S, bnodes, num_per_data, k):
+def split_dataset(S, num_per_data, diff, k, is_valid=False):
     """Split the dataset in training and test set (hold out) and initialize k-fold
     cross validation.
 
@@ -92,7 +93,10 @@ def split_dataset(S, bnodes, num_per_data, k):
         (np.array): test labels
         (KFold): KFold class initialized
     """
-    data_X, data_y = generate_dataset(S, num_per_data)
+    data_X, data_y = generate_dataset(S, num_per_data, diff)
+
+    if not is_valid:
+        return data_X, data_y, 0
 
     # split the dataset in training and test set
     X_train, X_test, y_train, y_test = train_test_split(
@@ -100,5 +104,7 @@ def split_dataset(S, bnodes, num_per_data, k):
 
     # initialize KFOLD
     kf = KFold(n_splits=k, random_state=None)
+    data_X = (X_train, X_test)
+    data_y = (y_train, y_test)
 
-    return X_train, X_test, y_train, y_test, kf
+    return data_X, data_y, kf
