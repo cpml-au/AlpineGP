@@ -172,7 +172,7 @@ def stgp_poisson():
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool()
+    pool = mpire.WorkerPool(n_jobs=4)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
@@ -236,5 +236,4 @@ def stgp_poisson():
 
 
 if __name__ == '__main__':
-    multiprocessing.set_start_method("fork")
     stgp_poisson()
