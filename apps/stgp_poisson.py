@@ -1,4 +1,3 @@
-import multiprocessing
 import networkx as nx
 import matplotlib.pyplot as plt
 import jax.config as config
@@ -42,17 +41,14 @@ num_samples_per_source = 2
 # whether to use validation dataset
 use_validation = True
 
-X, y = d.split_dataset(S, num_samples_per_source, num_sources, 0.25, use_validation)
+data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources)
+X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
 
 if use_validation:
-    X_train, X_test = X
-    y_train, y_test = y
+    X_train, X_val, X_test = X
+    y_train, y_val,  y_test = y
     # extract boundary values for the test set
     bvalues_test = X_test[:, bnodes]
-    Xval, yval = d.split_dataset(S, num_samples_per_source,
-                                 num_sources, 0.25, use_validation)
-    X_t, X_val = Xval
-    y_t, y_val = yval
 else:
     X_train = X
     y_train = y
@@ -153,21 +149,26 @@ FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
 def stgp_poisson():
     # initialize list of best individuals and list of best scores
     best_individuals = []
-    best_train_scores = []
-    best_val_scores = []
+    # best_train_scores = []
+    # best_val_scores = []
 
     start = time.perf_counter()
 
     # define current bvalues datasets
-    bvalues_train = X_t[:, bnodes]
+    bvalues_train = X_train[:, bnodes]
     bvalues_val = X_val[:, bnodes]
 
     # update toolbox
-    GPproblem.toolbox.register("evaluate",
+    GPproblem.toolbox.register("evaluate_train",
                                evalPoisson,
-                               X=X_t,
-                               y=y_t,
+                               X=X_train,
+                               y=y_train,
                                current_bvalues=bvalues_train)
+    GPproblem.toolbox.register("evaluate_val",
+                               evalPoisson,
+                               X=X_val,
+                               y=y_val,
+                               current_bvalues=bvalues_val)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
@@ -176,25 +177,21 @@ def stgp_poisson():
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=True,
-                  seed=None)
+                  seed=None,
+                  early_stopping=(True, 3))
 
     # Print best individual
-    best = tools.selBest(GPproblem.pop, k=1)
+    best = GPproblem.best
     print(f"The best individual is {str(best[0])}", flush=True)
 
-    # evaluate score on the current training and validation set
-    score_train = GPproblem.min_history[-1]
-    score_val = evalPoisson(best[0], X_val, y_val, bvalues_val)[0]
-
-    print(f"Best score on the training set = {score_train}")
-    print(f"Best score on the validation set = {score_val}")
-
-    # save best individual and best score on training and validation set
-    best_individuals.append(best[0])
+    # evaluate score on the training and validation set
+    print(f"The best score on the training set is {GPproblem.tbtp}")
+    print(f"The best score on the validation set is {GPproblem.bvp}")
 
     # FIXME: do I need it?
-    best_train_scores.append(score_train)
-    best_val_scores.append(score_train)
+    best_individuals.append(best)
+    # best_train_scores.append(score_train)
+    # best_val_scores.append(score_train)
 
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
