@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import jax.config as config
 from deap import gp, tools
 from dctkit.dec import cochain as C
-from alpine.apps.poisson import pset
+from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
 
@@ -144,7 +144,7 @@ FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
                          y=y_train, current_bvalues=bvalues_train)
 
 
-def test_stgp_poisson():
+def stgp_poisson():
     # initialize list of best individuals and list of best scores
     best_individuals = []
     best_train_scores = []
@@ -247,4 +247,4 @@ def test_stgp_poisson():
 
 
 if __name__ == '__main__':
-    test_stgp_poisson()
+    stgp_poisson()
