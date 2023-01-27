@@ -172,17 +172,18 @@ def stgp_poisson():
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool(n_jobs=4)
+    pool = mpire.WorkerPool()
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=True,
                   seed=None,
+                  n_splits=20,
                   early_stopping=(True, 3))
 
     # Print best individual
     best = GPproblem.best
-    print(f"The best individual is {str(best[0])}", flush=True)
+    print(f"The best individual is {str(best)}", flush=True)
 
     # evaluate score on the training and validation set
     print(f"The best score on the training set is {GPproblem.tbtp}")
@@ -204,6 +205,7 @@ def stgp_poisson():
     FinalGP.run(plot_history=True,
                 print_log=True,
                 plot_best=True,
+                n_splits=20,
                 seed=best_individuals)
 
     pool.terminate()
