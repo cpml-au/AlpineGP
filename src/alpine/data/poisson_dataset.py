@@ -3,7 +3,7 @@ import numpy as np
 import gmsh
 from dctkit.mesh import simplex, util
 import os
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split
 
 
 cwd = os.path.dirname(simplex.__file__)
@@ -78,16 +78,13 @@ def generate_dataset(S, mult, diff):
     return data_X, data_y
 
 
-def split_dataset(S, num_per_data, diff, perc, is_valid=False):
-    """Split the dataset in training and test set (hold out) and initialize k-fold
-    cross validation.
-
+def split_dataset(X, y, perc_val, perc_test, is_valid=False):
+    """Split the dataset in training, validation and test set (double hold out).
     Args:
-        S (SimplicialComplex): a simplicial complex.
-        num_per_data (int): 1/3 of the size of the dataset
-        diff (int): integer (from 1 to 3) that expresses the number of classes of
-        different functions in the dataset.
-        perc (float): percentage of the dataset dedicated to test set
+        X (np.array): samples of the dataset
+        y (np.array): targets of the dataset
+        perc_val (float): percentage of the dataset dedicated to validation set
+        perc_test (float): percentage of the dataset dedicated to validation set
         is_valid (bool): boolean that it is True if we want to do model selection
         (validation process).
 
@@ -96,16 +93,20 @@ def split_dataset(S, num_per_data, diff, perc, is_valid=False):
         (tuple): tuple of training and test targets.
         (KFold): KFold class initialized.
     """
-    data_X, data_y = generate_dataset(S, num_per_data, diff)
 
     if not is_valid:
-        return data_X, data_y
+        return X, y
 
     # split the dataset in training and test set
     X_train, X_test, y_train, y_test = train_test_split(
-        data_X, data_y, test_size=perc, random_state=None)
+        X, y, test_size=perc_test, random_state=None)
 
-    X = (X_train, X_test)
-    y = (y_train, y_test)
+    # split X_train in training and validation set
+
+    X_t, y_t, X_valid, y_valid = train_test_split(
+        X_train, y_train, test_size=perc_val, random_state=None)
+
+    X = (X_train, X_valid, X_test)
+    y = (y_train, y_valid, y_test)
 
     return X, y

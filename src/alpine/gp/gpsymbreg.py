@@ -24,6 +24,9 @@ class GPSymbRegProblem():
         self.CXPB = CXPB
         self.MUTPB = MUTPB
         self.pop = None
+        self.overfit = None
+        self.bvp = None
+        self.tbtp = None
 
         if individualCreator is None:
             self.__default_creator()
@@ -82,6 +85,18 @@ class GPSymbRegProblem():
                               self.toolbox.individual)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
+    def __overfitting_measure(self, training_fit, validation_fit):
+        if (training_fit > validation_fit):
+            overfit = 0
+        elif (validation_fit < self.bvp):
+            overfit = 0
+            self.bvp = validation_fit
+            self.tbtp = training_fit
+        else:
+            overfit = np.abs(training_fit - validation_fit) - \
+                np.abs(self.tbtp - self.bvp)
+        self.overfit = overfit
+
     def compute_statistics(self, pop, gen, evals, print_log=False):
         """Computes and prints statistics (max, min, avg, std) of a population."""
 
@@ -119,7 +134,8 @@ class GPSymbRegProblem():
             plot_best_func=None,
             plot_freq=5,
             seed=None,
-            n_splits=10):
+            n_splits=10,
+            early_stopping=(False, 0)):
         """Runs symbolic regression."""
 
         # Generate initial population
@@ -143,9 +159,23 @@ class GPSymbRegProblem():
             self.pop), iterable_len=self.NINDIVIDUALS, n_splits=n_splits))
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
+
+        if early_stopping[0]:
+            print("Using early-stopping.")
+            best = tools.selBest(self.pop, k=1)
+            self.tbtp = best[0].fitness.values[0]
+            self.bvp = self.toolbox.evaluate_val(best[0])[0]
+            self.best = best[0]
+            self.last_improvement = self.tbtp
+            # initialize m
+            m = 0
         print("DONE.", flush=True)
 
         for gen in range(self.NGEN):
+            if early_stopping[0]:
+                if m == early_stopping[1]:
+                    self.pop = self.best
+                    break
             cgen = gen + 1
 
             # Select and clone the next generation individuals
@@ -168,9 +198,24 @@ class GPSymbRegProblem():
             # The population is entirely replaced by the offspring
             self.pop[:] = offspring
 
+            if early_stopping[0]:
+                best = tools.selBest(self.pop, k=1)
+                training_fit = best[0].fitness.values[0]
+                valid_fit = self.toolbox.evaluate_val(best[0])[0]
+                self.__overfitting_measure(training_fit, valid_fit)
+                print(f"The current overfit measure is {self.overfit}")
+                if self.overfit == 0:
+                    m = 0
+                    self.best = best[0]
+                elif np.abs(self.overfit) > 10 ** -3 and np.abs(self.last_improvement - training_fit) >= 10**-1:
+                    m += 1
+
+                self.last_improvement = training_fit
+
+                print(f"The current validation error is {valid_fit}")
+
             # Update Hall Of Fame
             self.halloffame.update(self.pop)
-
             self.compute_statistics(self.pop,
                                     cgen,
                                     len(invalid_ind),
