@@ -78,7 +78,7 @@ def generate_dataset(S, mult, diff):
     return data_X, data_y
 
 
-def split_dataset(S, num_per_data, diff, k, is_valid=False):
+def split_dataset(S, num_per_data, diff, perc, is_valid=False):
     """Split the dataset in training and test set (hold out) and initialize k-fold
     cross validation.
 
@@ -87,7 +87,7 @@ def split_dataset(S, num_per_data, diff, k, is_valid=False):
         num_per_data (int): 1/3 of the size of the dataset
         diff (int): integer (from 1 to 3) that expresses the number of classes of
         different functions in the dataset.
-        k (int): number of folds for cross validation
+        perc (float): percentage of the dataset dedicated to test set
         is_valid (bool): boolean that it is True if we want to do model selection
         (validation process).
 
@@ -99,15 +99,13 @@ def split_dataset(S, num_per_data, diff, k, is_valid=False):
     data_X, data_y = generate_dataset(S, num_per_data, diff)
 
     if not is_valid:
-        return data_X, data_y, 0
+        return data_X, data_y
 
     # split the dataset in training and test set
     X_train, X_test, y_train, y_test = train_test_split(
-        data_X, data_y, test_size=0.33, random_state=None)
+        data_X, data_y, test_size=perc, random_state=None)
 
-    # initialize KFOLD
-    kf = KFold(n_splits=k, random_state=None)
     X = (X_train, X_test)
     y = (y_train, y_test)
 
-    return X, y, kf
+    return X, y

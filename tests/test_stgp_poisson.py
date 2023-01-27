@@ -22,24 +22,25 @@ config.update("jax_enable_x64", True)
 # generate mesh and dataset
 S, bnodes = d.generate_complex("test3.msh")
 dim_0 = S.num_nodes
+# set params
 NINDIVIDUALS = 10
 NGEN = 1
 CXPB = 0.5
 MUTPB = 0.1
 num_data = 2
 diff = 3
-k = 2
 is_valid = True
-X, y, kf = d.split_dataset(S, num_data, diff, k, is_valid)
+X, y = d.split_dataset(S, num_data, diff, 0.25, is_valid)
 
 if is_valid:
     X_train, X_test = X
     y_train, y_test = y
     # extract bvalues_test
     bvalues_test = X_test[:, bnodes]
-    # dataset = (X_train, y_train, X_test, y_test)
+    Xval, yval = d.split_dataset(S, num_data, diff, 0.25, is_valid)
+    X_t, X_val = Xval
+    y_t, y_val = yval
 else:
-    # dataset = (X, y)
     X_train = X
     y_train = y
 
@@ -62,12 +63,9 @@ class ObjFunctional:
     def evalEnergy(self, vec_x, vec_y, vec_bvalues):
         # Transform the tree expression in a callable function
         penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
-        # jax.debug.print("{x}", x=penalty)
         c = C.CochainP0(S, vec_x, "jax")
         fk = C.CochainP0(S, vec_y, "jax")
-        # jax.debug.print("{x}", x=jnp.linalg.norm(c.coeffs - f.coeffs))
         energy = self.energy_func(c, fk) + penalty
-        # jax.debug.print("{x}", x=energy)
         return energy
 
 
@@ -79,7 +77,6 @@ def evalPoisson(individual, X, y, current_bvalues):
     # NOTE: we are introducing a BIAS...
     if len(individual) > 50:
         result = 1000
-        # print(result)
         return result,
 
     energy_func = GPproblem.toolbox.compile(expr=individual)
@@ -153,63 +150,54 @@ def test_stgp_poisson():
     best_train_scores = []
     best_val_scores = []
 
-    # extract dataset
-    if kf != 0:
-        # X_train, y_train, X_test, y_test = dataset
+    if is_valid:
+        # define current bvalues datasets
+        bvalues_train = X_t[:, bnodes]
+        bvalues_val = X_val[:, bnodes]
 
-        # start learning
-        for train_index, valid_index in kf.split(X_train, y_train):
-            # divide the dataset in training and validation set
-            X_t, X_val = X_train[train_index, :], X_train[valid_index, :]
-            y_t, y_val = y_train[train_index, :], y_train[valid_index, :]
+        # update toolbox
+        GPproblem.toolbox.register("evaluate",
+                                   evalPoisson,
+                                   X=X_t,
+                                   y=y_t,
+                                   current_bvalues=bvalues_train)
 
-            # define current bvalues datasets
-            current_bvalues_train = X_t[:, bnodes]
-            current_bvalues_val = X_val[:, bnodes]
+        # train the model in the training set
+        print("Starting the pool...")
+        pool = multiprocessing.Pool()
+        print("Multiprocessing completed")
+        GPproblem.toolbox.register("map", pool.map)
+        GPproblem.run(plot_history=True,
+                      print_log=True,
+                      plot_best=True,
+                      seed=None)
+        pool.close()
+        print("Multiprocessing closed")
 
-            # update toolbox
-            GPproblem.toolbox.register("evaluate",
-                                       evalPoisson,
-                                       X=X_t,
-                                       y=y_t,
-                                       current_bvalues=current_bvalues_train)
+        # Print best individual
+        best = tools.selBest(GPproblem.pop, k=1)
+        print(f"The best individual in this fold is {str(best[0])}")
 
-            # train the model in the training set
-            print("Starting the pool...")
-            pool = multiprocessing.Pool()
-            print("Multiprocessing completed")
-            GPproblem.toolbox.register("map", pool.map)
-            GPproblem.run(plot_history=True,
-                          print_log=True,
-                          plot_best=True,
-                          seed=None)
-            pool.close()
-            print("Multiprocessing closed")
+        # evaluate score on the current training and validation set
+        score_train = GPproblem.min_history[-1]
+        score_val = evalPoisson(best[0], X_val, y_val, bvalues_val)
+        score_val = score_val[0]
 
-            # Print best individual
-            best = tools.selBest(GPproblem.pop, k=1)
-            print(f"The best individual in this fold is {str(best[0])}")
+        print(f"The best score on training set in this fold is {score_train}")
+        print(f"The best score on validation set in this fold is {score_val}")
 
-            # evaluate score on the current training and validation set
-            score_train = GPproblem.min_history[-1]
-            score_val = evalPoisson(best[0], X_val, y_val, current_bvalues_val)
-            score_val = score_val[0]
+        # save best individual and best score on training and validation set
+        best_individuals.append(best[0])
 
-            print(f"The best score on training set in this fold is {score_train}")
-            print(f"The best score on validation set in this fold is {score_val}")
+        # FIXME: do I need it?
+        best_train_scores.append(score_train)
+        best_val_scores.append(score_train)
 
-            # save best individual and best score on training and validation set
-            best_individuals.append(best[0])
-
-            # FIXME: do I need it?
-            best_train_scores.append(score_train)
-            best_val_scores.append(score_train)
-
-            print("-FOLD COMPLETED-")
+        print("-VALIDATION COMPLETED-")
 
         print("-FINAL TRAINING STARTED-")
 
-        # now we retrain all the k best models on the entire training set
+        # now we retrain the best model on the entire training set
         print("Starting the pool...")
         pool = multiprocessing.Pool()
         print("Multiprocessing completed")
@@ -230,8 +218,6 @@ def test_stgp_poisson():
         print(f"The best score on test set is {score_test}")
 
     else:
-        # X_train, y_train = dataset
-        # now we retrain all the k best models on the entire training set
         print("Starting the pool...")
         pool = multiprocessing.Pool()
         print("Multiprocessing completed")
