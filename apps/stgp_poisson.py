@@ -15,29 +15,42 @@ from jax import jit, grad
 from scipy.optimize import minimize
 import operator
 import math
+import mpire
+import time
 
-
+# choose whether to use GPU or CPU and precision
+config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
+
+# suppress warnings
+warnings.filterwarnings('ignore')
 
 # generate mesh and dataset
 S, bnodes = d.generate_complex("test3.msh")
-dim_0 = S.num_nodes
-# set params
-NINDIVIDUALS = 10
-NGEN = 1
+num_nodes = S.num_nodes
+
+# set GP parameters
+NINDIVIDUALS = 100
+NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
-num_data = 2
-diff = 3
-is_valid = True
-X, y = d.split_dataset(S, num_data, diff, 0.25, is_valid)
 
-if is_valid:
+# number of different source term functions to use to generate the dataset
+num_sources = 3
+# number of cases for each source term function
+num_samples_per_source = 2
+# whether to use validation dataset
+use_validation = True
+
+X, y = d.split_dataset(S, num_samples_per_source, num_sources, 0.25, use_validation)
+
+if use_validation:
     X_train, X_test = X
     y_train, y_test = y
-    # extract bvalues_test
+    # extract boundary values for the test set
     bvalues_test = X_test[:, bnodes]
-    Xval, yval = d.split_dataset(S, num_data, diff, 0.25, is_valid)
+    Xval, yval = d.split_dataset(S, num_samples_per_source,
+                                 num_sources, 0.25, use_validation)
     X_t, X_val = Xval
     y_t, y_val = yval
 else:
@@ -48,7 +61,9 @@ else:
 bvalues_train = X_train[:, bnodes]
 
 gamma = 1000.
-u_0_vec = 0.01*np.random.rand(dim_0)
+
+# initial guess for the solution
+u_0_vec = 0.01*np.random.rand(num_nodes)
 u_0 = C.CochainP0(S, u_0_vec, type="jax")
 
 
@@ -56,12 +71,12 @@ class ObjFunctional:
     def __init__(self) -> None:
         pass
 
-    def setFunc(self, func, individual):
+    def setEnergyFunc(self, func, individual):
+        """Set the energy function to be used for the computation of the objective function."""
         self.energy_func = func
         self.individual = individual
 
-    def evalEnergy(self, vec_x, vec_y, vec_bvalues):
-        # Transform the tree expression in a callable function
+    def evalObjFunc(self, vec_x, vec_y, vec_bvalues):
         penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
         c = C.CochainP0(S, vec_x, "jax")
         fk = C.CochainP0(S, vec_y, "jax")
@@ -69,46 +84,41 @@ class ObjFunctional:
         return energy
 
 
-# suppress warnings
-warnings.filterwarnings('ignore')
-
-
 def evalPoisson(individual, X, y, current_bvalues):
-    # NOTE: we are introducing a BIAS...
+    # discard individuals with too many terminals (avoid error during compilation)
     if len(individual) > 50:
         result = 1000
         return result,
 
+    # transform the individual expression into a callable function
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
-    # the current objective function is the current energy
+    # create objective function and set its energy function
     obj = ObjFunctional()
-    obj.setFunc(energy_func, individual)
+    obj.setEnergyFunc(energy_func, individual)
+
+    # compute/compile jacobian of the objective wrt its first argument (vec_x)
+    jac = jit(grad(obj.evalObjFunc))
 
     result = 0
-    for i, vec_y in enumerate(y):
-        # minimize the energy w.r.t. data
-        jac = jit(grad(obj.evalEnergy))
 
+    # TODO: parallelize using vmap once we can use jaxopt
+    for i, vec_y in enumerate(y):
         # extract current bvalues
         vec_bvalues = current_bvalues[i, :]
 
-        x = minimize(fun=obj.evalEnergy, x0=u_0.coeffs,
-                     args=(vec_y, vec_bvalues), method="BFGS", jac=jac).x
+        # minimize the objective
+        x = minimize(fun=obj.evalObjFunc, x0=u_0.coeffs,
+                     args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
         current_result = np.linalg.norm(x-X[i, :])**2
 
-        # to avoid strange numbers, if result is too distance from 0 or is nan we
-        # assign to it a default big number
         if current_result > 100 or math.isnan(current_result):
             current_result = 100
 
         result += current_result
 
-    result = 1/(diff*num_data)*result
-    # length_factor = math.prod([1 - i/len(individual)
-    # for i in range(0, 50)])
-    # penalty_length = gamma*abs(length_factor)
-    # result += penalty_length
+    result = 1/(num_sources*num_samples_per_source)*result
+
     return result,
 
 
@@ -116,9 +126,7 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  NINDIVIDUALS,
                                  NGEN,
                                  CXPB,
-                                 MUTPB,
-                                 min_=1,
-                                 max_=4)
+                                 MUTPB)
 
 # Register fitness function, selection and mutate operators
 GPproblem.toolbox.register(
@@ -136,10 +144,8 @@ GPproblem.toolbox.decorate(
 GPproblem.toolbox.decorate(
     "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
-
+# copy GPproblem (needed to have a separate object shared among the processed to be modified in the last run)
 FinalGP = GPproblem
-
-# Set toolbox for FinalGP
 FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
                          y=y_train, current_bvalues=bvalues_train)
 
@@ -150,87 +156,73 @@ def stgp_poisson():
     best_train_scores = []
     best_val_scores = []
 
-    if is_valid:
-        # define current bvalues datasets
-        bvalues_train = X_t[:, bnodes]
-        bvalues_val = X_val[:, bnodes]
+    start = time.perf_counter()
 
-        # update toolbox
-        GPproblem.toolbox.register("evaluate",
-                                   evalPoisson,
-                                   X=X_t,
-                                   y=y_t,
-                                   current_bvalues=bvalues_train)
+    # define current bvalues datasets
+    bvalues_train = X_t[:, bnodes]
+    bvalues_val = X_val[:, bnodes]
 
-        # train the model in the training set
-        print("Starting the pool...")
-        pool = multiprocessing.Pool()
-        print("Multiprocessing completed")
-        GPproblem.toolbox.register("map", pool.map)
-        GPproblem.run(plot_history=True,
-                      print_log=True,
-                      plot_best=True,
-                      seed=None)
-        pool.close()
-        print("Multiprocessing closed")
+    # update toolbox
+    GPproblem.toolbox.register("evaluate",
+                               evalPoisson,
+                               X=X_t,
+                               y=y_t,
+                               current_bvalues=bvalues_train)
 
-        # Print best individual
-        best = tools.selBest(GPproblem.pop, k=1)
-        print(f"The best individual in this fold is {str(best[0])}")
+    print("> MODEL TRAINING/SELECTION STARTED", flush=True)
+    # train the model in the training set
+    pool = mpire.WorkerPool()
+    GPproblem.toolbox.register("map", pool.map)
+    GPproblem.run(plot_history=True,
+                  print_log=True,
+                  plot_best=True,
+                  seed=None)
 
-        # evaluate score on the current training and validation set
-        score_train = GPproblem.min_history[-1]
-        score_val = evalPoisson(best[0], X_val, y_val, bvalues_val)
-        score_val = score_val[0]
+    # Print best individual
+    best = tools.selBest(GPproblem.pop, k=1)
+    print(f"The best individual is {str(best[0])}", flush=True)
 
-        print(f"The best score on training set in this fold is {score_train}")
-        print(f"The best score on validation set in this fold is {score_val}")
+    # evaluate score on the current training and validation set
+    score_train = GPproblem.min_history[-1]
+    score_val = evalPoisson(best[0], X_val, y_val, bvalues_val)[0]
 
-        # save best individual and best score on training and validation set
-        best_individuals.append(best[0])
+    print(f"Best score on the training set = {score_train}")
+    print(f"Best score on the validation set = {score_val}")
 
-        # FIXME: do I need it?
-        best_train_scores.append(score_train)
-        best_val_scores.append(score_train)
+    # save best individual and best score on training and validation set
+    best_individuals.append(best[0])
 
-        print("-VALIDATION COMPLETED-")
+    # FIXME: do I need it?
+    best_train_scores.append(score_train)
+    best_val_scores.append(score_train)
 
-        print("-FINAL TRAINING STARTED-")
+    print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
-        # now we retrain the best model on the entire training set
-        print("Starting the pool...")
-        pool = multiprocessing.Pool()
-        print("Multiprocessing completed")
-        FinalGP.toolbox.register("map", pool.map)
-        FinalGP.run(plot_history=True,
-                    print_log=True,
-                    plot_best=True,
-                    seed=best_individuals)
-        pool.close()
-        print("Multiprocessing closed")
-        real_best = tools.selBest(FinalGP.pop, k=1)
+    print("> FINAL TRAINING STARTED", flush=True)
 
-        score_train = FinalGP.min_history[-1]
-        score_test = evalPoisson(real_best[0], X_test, y_test, bvalues_test)
-        score_test = score_test[0]
+    # now we retrain the best model on the entire training set
+    # FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
+    #                          y=y_train, current_bvalues=bvalues_train)
+    FinalGP.toolbox.register("map", pool.map)
+    FinalGP.run(plot_history=True,
+                print_log=True,
+                plot_best=True,
+                seed=best_individuals)
 
-        print(f"The best score on training set is {score_train}")
-        print(f"The best score on test set is {score_test}")
+    pool.terminate()
+    real_best = tools.selBest(FinalGP.pop, k=1)
+    print(f"The best individual is {str(real_best[0])}", flush=True)
 
-    else:
-        print("Starting the pool...")
-        pool = multiprocessing.Pool()
-        print("Multiprocessing completed")
-        FinalGP.toolbox.register("map", pool.map)
-        FinalGP.run(plot_history=True,
-                    print_log=True,
-                    plot_best=True,
-                    seed=None)
-        pool.close()
-        print("Multiprocessing closed")
-        real_best = tools.selBest(FinalGP.pop, k=1)
+    score_train = FinalGP.min_history[-1]
+    score_test = evalPoisson(real_best[0], X_test, y_test, bvalues_test)
+    score_test = score_test[0]
 
-    # plot the best solution
+    print(f"Best score on the training set = {score_train}")
+    print(f"Best score on the test set = {score_test}")
+
+    print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
+
+    # plot the tree of the best individual
     nodes, edges, labels = gp.graph(real_best[0])
     graph = nx.Graph()
     graph.add_nodes_from(nodes)

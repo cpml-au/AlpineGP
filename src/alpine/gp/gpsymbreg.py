@@ -2,6 +2,7 @@ from deap import algorithms, tools, gp, base, creator
 import matplotlib.pyplot as plt
 import numpy as np
 from memory_profiler import profile
+from mpire.utils import make_single_arguments
 
 
 class GPSymbRegProblem():
@@ -92,7 +93,7 @@ class GPSymbRegProblem():
 
         if print_log:
             # Print statistics for the current population
-            print(self.logbook.stream)
+            print(self.logbook.stream, flush=True)
 
     def selElitistAndTournament(self, individuals, frac_elitist, tournsize=3):
         """Performs tournament selection with elitism.
@@ -117,11 +118,12 @@ class GPSymbRegProblem():
             plot_best=False,
             plot_best_func=None,
             plot_freq=5,
-            seed=None):
+            seed=None,
+            n_splits=10):
         """Runs symbolic regression."""
 
         # Generate initial population
-        print("Generating initial population...")
+        print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
 
         # Populate the history and the Hall Of Fame
@@ -129,20 +131,19 @@ class GPSymbRegProblem():
         self.halloffame.update(self.pop)
 
         if seed is not None:
-            print("Seeding population with individuals...")
+            print("Seeding population with individuals...", flush=True)
             for i in range(len(seed)):
                 self.pop[i] = seed[i]
-            # seedTree = gp.PrimitiveTree.from_string(seed, self.pset)
-            # self.pop[-1] = self.createIndividual(seedTree)
 
-        print(" -= START OF EVOLUTION =- ")
+        print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the entire population
-        print("Evaluating initial population...")
-        fitnesses = list(self.toolbox.map(self.toolbox.evaluate, self.pop))
+        print("Evaluating initial population...", flush=True)
+        fitnesses = list(self.toolbox.map(self.toolbox.evaluate, make_single_arguments(
+            self.pop), iterable_len=self.NINDIVIDUALS, n_splits=n_splits))
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
-        print("DONE.")
+        print("DONE.", flush=True)
 
         for gen in range(self.NGEN):
             cgen = gen + 1
@@ -157,9 +158,10 @@ class GPSymbRegProblem():
             offspring = algorithms.varOr(
                 offspring, self.toolbox, self.NINDIVIDUALS, self.CXPB, self.MUTPB)
 
-            # Evaluate the individuals with an invalid fitness (subject to crossover and mutation)
+            # Evaluate the individuals with an invalid fitness (subject to crossover or mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = self.toolbox.map(self.toolbox.evaluate, invalid_ind)
+            fitnesses = self.toolbox.map(
+                self.toolbox.evaluate, make_single_arguments(invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
@@ -195,4 +197,4 @@ class GPSymbRegProblem():
                 best = tools.selBest(self.pop, k=1)
                 plot_best_func(best[0])
 
-        print(" -= END OF EVOLUTION =- ")
+        print(" -= END OF EVOLUTION =- ", flush=True)
