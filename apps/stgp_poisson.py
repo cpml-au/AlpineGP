@@ -178,7 +178,7 @@ def stgp_poisson():
                   plot_best=True,
                   seed=None,
                   n_splits=20,
-                  early_stopping=(True, 3))
+                  early_stopping={'enabled': True, 'max_overfit': 3})
 
     # Print best individual
     best = GPproblem.best

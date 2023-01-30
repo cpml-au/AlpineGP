@@ -43,8 +43,9 @@ class GPSymbRegProblem():
         self.CXPB = CXPB
         self.MUTPB = MUTPB
         self.pop = None
-        self.overfit = None
+        # best validation score among all the populations
         self.bvp = None
+        # best training score among all the populations
         self.tbtp = None
 
         self.tournsize = tournsize
@@ -64,7 +65,7 @@ class GPSymbRegProblem():
             self.toolbox = toolbox
 
         # Initialize variables for statistics
-        self.hof = tools.HallOfFame(1)
+        # self.hof = tools.HallOfFame(1)
 
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
         self.stats_size = tools.Statistics(len)
@@ -75,18 +76,24 @@ class GPSymbRegProblem():
         self.mstats.register("min", np.min)
         self.mstats.register("max", np.max)
 
-        # Initialize logbook to collect statistics
-        self.logbook = tools.Logbook()
-        # Headers of fields to be printed during log
-        self.logbook.header = "gen", "evals", "fitness", "size"
-        self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
-        self.logbook.chapters["size"].header = "min", "avg", "max", "std"
+        self.__init_logbook()
 
         # Create history object to build the genealogy tree
         self.history = tools.History()
 
         # Create Hall Of Fame object
         self.halloffame = tools.HallOfFame(maxsize=5)
+
+        self.plot_initialized = False
+        self.fig_id = 0
+
+    def __init_logbook(self):
+        # Initialize logbook to collect statistics
+        self.logbook = tools.Logbook()
+        # Headers of fields to be printed during log
+        self.logbook.header = "gen", "evals", "fitness", "size"
+        self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
+        self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
     def __default_creator(self):
         creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
@@ -122,7 +129,7 @@ class GPSymbRegProblem():
         else:
             overfit = np.abs(training_fit - validation_fit) - \
                 np.abs(self.tbtp - self.bvp)
-        self.overfit = overfit
+        return overfit
 
     def compute_statistics(self, pop, gen, evals, print_log=False):
         """Computes and prints statistics of a population."""
@@ -158,7 +165,7 @@ class GPSymbRegProblem():
             plot_freq=5,
             seed=None,
             n_splits=10,
-            early_stopping=(False, 0)):
+            early_stopping={'enabled': False, 'max_overfit': 0}):
         """Runs symbolic regression.
 
             Args:
@@ -172,11 +179,12 @@ class GPSymbRegProblem():
         # Populate the history and the Hall Of Fame
         self.history.update(self.pop)
         self.halloffame.update(self.pop)
+        # Initialize logbook for statistics
+        self.__init_logbook()
 
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
-            for i in range(len(seed)):
-                self.pop[i] = seed[i]
+            self.pop[:len(seed)] = seed
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
@@ -189,25 +197,18 @@ class GPSymbRegProblem():
 
         print("DONE.", flush=True)
 
-        if early_stopping[0]:
+        if early_stopping['enabled']:
             print("Using early-stopping.")
-            best = tools.selBest(self.pop, k=1)
-            self.tbtp = best[0].fitness.values[0]
-            self.bvp = self.toolbox.evaluate_val(best[0])[0]
-            self.best = best[0]
+            best = tools.selBest(self.pop, k=1)[0]
+            self.tbtp = best.fitness.values[0]
+            self.bvp = self.toolbox.evaluate_val(best)[0]
+            self.best = best
             self.last_improvement = self.tbtp
             # initialize m
             m = 0
 
         for gen in range(self.NGEN):
             cgen = gen + 1
-
-            if early_stopping[0]:
-                if m == early_stopping[1]:
-                    self.pop = self.best
-                    self.NGEN = cgen
-                    print("-= EARLY STOPPED =-")
-                    break
 
             # Select and clone the next generation individuals
             offspring = list(
@@ -229,21 +230,27 @@ class GPSymbRegProblem():
             # The population is entirely replaced by the offspring
             self.pop[:] = offspring
 
-            if early_stopping[0]:
+            if early_stopping['enabled']:
                 best = tools.selBest(self.pop, k=1)
                 training_fit = best[0].fitness.values[0]
                 valid_fit = self.toolbox.evaluate_val(best[0])[0]
-                self.__overfitting_measure(training_fit, valid_fit)
-                print(f"The current overfit measure is {self.overfit}")
-                if self.overfit == 0:
+                overfit = self.__overfitting_measure(training_fit, valid_fit)
+                print(f"The current overfit measure is {overfit}")
+                if overfit == 0:
                     m = 0
                     self.best = best[0]
-                elif np.abs(self.overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
+                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
                     m += 1
 
                 self.last_improvement = training_fit
 
                 print(f"The current validation error is {valid_fit}")
+
+                if m == early_stopping['max_overfit']:
+                    # save number of generations when stopping for the last training run
+                    self.NGEN = cgen
+                    print("-= EARLY STOPPED =-")
+                    break
 
             # Update Hall Of Fame
             self.halloffame.update(self.pop)
@@ -254,8 +261,13 @@ class GPSymbRegProblem():
 
             self.min_history = self.logbook.chapters["fitness"].select("min")
 
-            if plot_history and cgen % plot_freq == 0:
-                plt.figure(1)
+            if plot_history and (cgen % plot_freq == 0 or cgen == 1):
+                if not self.plot_initialized:
+                    self.plot_initialized = True
+                    # new figure number when starting with new evolution
+                    self.fig_id = self.fig_id + 1
+
+                plt.figure(self.fig_id)
 
                 # Array of generations starts from 1
                 x = range(1, len(self.min_history) + 1)
@@ -265,12 +277,15 @@ class GPSymbRegProblem():
                 # plt.yscale('log')
                 plt.xlabel("Generation #")
                 plt.ylabel("Best Fitness")
+
                 plt.draw()
-                plt.pause(0.02)
+
+                plt.pause(0.01)
 
             if plot_best and (plot_best_func
                               is not None) and cgen % plot_freq == 0:
                 best = tools.selBest(self.pop, k=1)
                 plot_best_func(best[0])
 
+        self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
