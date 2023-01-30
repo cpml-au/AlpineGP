@@ -17,8 +17,8 @@ pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float,  "u")
 
 # sum
 pset.addPrimitive(add, [float, float], float, name="Add")
-pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0)
-pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1)
+pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")
+pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1, name="AddP1")
 
 
 # coboundary

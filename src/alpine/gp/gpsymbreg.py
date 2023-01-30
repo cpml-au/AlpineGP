@@ -4,6 +4,19 @@ import numpy as np
 from mpire.utils import make_single_arguments
 
 
+def set_population(creator_package, n):
+    pop = []
+    length = 100
+    createIndiv, expr = creator_package
+    for _ in range(n):
+        while length > 50:
+            individual = tools.initIterate(createIndiv, expr)
+            length = len(individual)
+        pop.append(individual)
+        length = 100
+    return pop
+
+
 class GPSymbRegProblem():
     def __init__(self,
                  pset,
@@ -92,8 +105,8 @@ class GPSymbRegProblem():
                               max_=max_)
         self.toolbox.register("individual", tools.initIterate,
                               self.createIndividual, self.toolbox.expr)
-        self.toolbox.register("population", tools.initRepeat, list,
-                              self.toolbox.individual)
+        creator_package = (self.createIndividual, self.toolbox.expr)
+        self.toolbox.register("population", set_population, creator_package)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator
@@ -192,6 +205,8 @@ class GPSymbRegProblem():
             if early_stopping[0]:
                 if m == early_stopping[1]:
                     self.pop = self.best
+                    self.NGEN = cgen
+                    print("-= EARLY STOPPED =-")
                     break
 
             # Select and clone the next generation individuals
