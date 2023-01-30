@@ -29,7 +29,7 @@ S, bnodes = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
 
 # set GP parameters
-NINDIVIDUALS = 20
+NINDIVIDUALS = 200
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
@@ -43,7 +43,7 @@ num_samples_per_source = 4
 use_validation = True
 
 # noise factor
-noise = 0.1*np.random.rand(num_nodes)
+noise = 0.*np.random.rand(num_nodes)
 
 data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
 X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
@@ -59,6 +59,7 @@ else:
 
 # extract bvalues_train
 bvalues_train = X_train[:, bnodes]
+bvalues_val = X_val[:, bnodes]
 
 gamma = 1000.
 
@@ -142,8 +143,8 @@ GPproblem.toolbox.decorate(
 # copy GPproblem (needed to have a separate object shared among the processed
 # to be modified in the last run)
 FinalGP = GPproblem
-FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
-                         y=y_train, current_bvalues=bvalues_train)
+FinalGP.toolbox.register("evaluate", evalPoisson, X=np.vstack((X_train, X_val)),
+                         y=np.vstack((y_train, y_val)), current_bvalues=np.vstack((bvalues_train, bvalues_val)))
 
 
 def stgp_poisson():
@@ -151,10 +152,6 @@ def stgp_poisson():
     best_individuals = []
 
     start = time.perf_counter()
-
-    # define current bvalues datasets
-    bvalues_train = X_train[:, bnodes]
-    bvalues_val = X_val[:, bnodes]
 
     # add functions for fitness evaluation on training and validation sets to the
     # toolbox

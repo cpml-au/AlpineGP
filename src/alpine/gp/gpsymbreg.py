@@ -25,6 +25,9 @@ class GPSymbRegProblem():
                  CXPB,
                  MUTPB,
                  frac_elitist=0.,
+                 parsimony_pressure={'enabled': False,
+                                     'fitness_first': True,
+                                     'parsimony_size': 1.5},
                  tournsize=3,
                  min_=1,
                  max_=2,
@@ -48,6 +51,7 @@ class GPSymbRegProblem():
         # best training score among all the populations
         self.tbtp = None
 
+        self.parsimony_pressure = parsimony_pressure
         self.tournsize = tournsize
 
         # Elitism settings
@@ -171,6 +175,9 @@ class GPSymbRegProblem():
         """
         n_tournament = self.NINDIVIDUALS - self.n_elitist
 
+        if self.parsimony_pressure['enabled']:
+            return tools.selBest(individuals, self.n_elitist) + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
+
         return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
 
     def run(self,
@@ -222,6 +229,8 @@ class GPSymbRegProblem():
             self.last_improvement = self.tbtp
             # initialize overfit index m
             m = 0
+            # initialize last generation without overfitting
+            self.last_gen_no_overfit = 0
 
         for gen in range(self.NGEN):
             cgen = gen + 1
@@ -290,17 +299,19 @@ class GPSymbRegProblem():
                 # print(f"The current overfit measure is {overfit}")
                 if overfit == 0:
                     m = 0
+                    self.last_gen_no_overfit = cgen
                     self.best = best[0]
                 elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
                     m += 1
 
                 self.last_improvement = training_fit
+                # self.min_valerr = min(self.logbook.chapters["overfit"].select("valerr"))
 
                 # print(f"The current validation error is {valid_fit}")
 
                 if m == early_stopping['max_overfit']:
                     # save number of generations when stopping for the last training run
-                    self.NGEN = cgen
+                    self.NGEN = self.last_gen_no_overfit
                     print("-= EARLY STOPPED =-")
                     break
 
