@@ -33,6 +33,7 @@ NINDIVIDUALS = 100
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
+frac_elitist = 0.1
 
 # number of different source term functions to use to generate the dataset
 num_sources = 3
@@ -122,11 +123,10 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  NINDIVIDUALS,
                                  NGEN,
                                  CXPB,
-                                 MUTPB)
+                                 MUTPB,
+                                 frac_elitist=frac_elitist)
 
 # Register fitness function, selection and mutate operators
-GPproblem.toolbox.register(
-    "select", GPproblem.selElitistAndTournament, frac_elitist=0.1)
 GPproblem.toolbox.register("mate", gp.cxOnePoint)
 GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
 GPproblem.toolbox.register("mutate",
@@ -147,10 +147,8 @@ FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
 
 
 def stgp_poisson():
-    # initialize list of best individuals and list of best scores
+    # initialize list of best individuals
     best_individuals = []
-    # best_train_scores = []
-    # best_val_scores = []
 
     start = time.perf_counter()
 
@@ -158,7 +156,8 @@ def stgp_poisson():
     bvalues_train = X_train[:, bnodes]
     bvalues_val = X_val[:, bnodes]
 
-    # update toolbox
+    # add functions for fitness evaluation on training and validation sets to the
+    # toolbox
     GPproblem.toolbox.register("evaluate_train",
                                evalPoisson,
                                X=X_train,
@@ -199,8 +198,6 @@ def stgp_poisson():
     print("> FINAL TRAINING STARTED", flush=True)
 
     # now we retrain the best model on the entire training set
-    # FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
-    #                          y=y_train, current_bvalues=bvalues_train)
     FinalGP.toolbox.register("map", pool.map)
     FinalGP.run(plot_history=True,
                 print_log=True,
