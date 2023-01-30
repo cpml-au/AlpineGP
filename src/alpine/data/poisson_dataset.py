@@ -107,7 +107,7 @@ def split_dataset(X, y, perc_val, perc_test, is_valid=False):
     X_t, y_t, X_valid, y_valid = train_test_split(
         X_train, y_train, test_size=perc_val, random_state=None)
 
-    X = (X_train, X_valid, X_test)
-    y = (y_train, y_valid, y_test)
+    X = (X_t, X_valid, X_test)
+    y = (y_t, y_valid, y_test)
 
     return X, y

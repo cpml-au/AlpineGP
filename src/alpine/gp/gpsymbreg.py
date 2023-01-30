@@ -87,11 +87,15 @@ class GPSymbRegProblem():
         self.plot_initialized = False
         self.fig_id = 0
 
-    def __init_logbook(self):
+    def __init_logbook(self, overfit_stats=False):
         # Initialize logbook to collect statistics
         self.logbook = tools.Logbook()
         # Headers of fields to be printed during log
-        self.logbook.header = "gen", "evals", "fitness", "size"
+        if overfit_stats:
+            self.logbook.header = "gen", "evals", "fitness", "size", "overfit"
+            self.logbook.chapters["overfit"].header = "meas", "trainerr", "valerr"
+        else:
+            self.logbook.header = "gen", "evals", "fitness", "size"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
@@ -131,11 +135,23 @@ class GPSymbRegProblem():
                 np.abs(self.tbtp - self.bvp)
         return overfit
 
-    def compute_statistics(self, pop, gen, evals, print_log=False):
+    def __compute_overfit_stats(self):
+        best = tools.selBest(self.pop, k=1)
+        training_fit = best[0].fitness.values[0]
+        valid_fit = self.toolbox.evaluate_val(best[0])[0]
+        overfit = self.__overfitting_measure(training_fit, valid_fit)
+        return overfit, training_fit, valid_fit
+
+    def compute_statistics(self, pop, gen, evals, overfit_stats=False, print_log=False):
         """Computes and prints statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
+
+        if overfit_stats:
+            overfit, training_err, valid_err = self.__compute_overfit_stats()
+            record["overfit"] = {"meas": overfit,
+                                 "trainerr": training_err, "valerr": valid_err}
 
         # Record the statistics in the logbook
         self.logbook.record(gen=gen, evals=evals, **record)
@@ -180,7 +196,7 @@ class GPSymbRegProblem():
         self.history.update(self.pop)
         self.halloffame.update(self.pop)
         # Initialize logbook for statistics
-        self.__init_logbook()
+        self.__init_logbook(overfit_stats=early_stopping['enabled'])
 
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
@@ -204,7 +220,7 @@ class GPSymbRegProblem():
             self.bvp = self.toolbox.evaluate_val(best)[0]
             self.best = best
             self.last_improvement = self.tbtp
-            # initialize m
+            # initialize overfit index m
             m = 0
 
         for gen in range(self.NGEN):
@@ -230,33 +246,12 @@ class GPSymbRegProblem():
             # The population is entirely replaced by the offspring
             self.pop[:] = offspring
 
-            if early_stopping['enabled']:
-                best = tools.selBest(self.pop, k=1)
-                training_fit = best[0].fitness.values[0]
-                valid_fit = self.toolbox.evaluate_val(best[0])[0]
-                overfit = self.__overfitting_measure(training_fit, valid_fit)
-                print(f"The current overfit measure is {overfit}")
-                if overfit == 0:
-                    m = 0
-                    self.best = best[0]
-                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
-                    m += 1
-
-                self.last_improvement = training_fit
-
-                print(f"The current validation error is {valid_fit}")
-
-                if m == early_stopping['max_overfit']:
-                    # save number of generations when stopping for the last training run
-                    self.NGEN = cgen
-                    print("-= EARLY STOPPED =-")
-                    break
-
             # Update Hall Of Fame
             self.halloffame.update(self.pop)
             self.compute_statistics(self.pop,
                                     cgen,
                                     len(invalid_ind),
+                                    overfit_stats=early_stopping['enabled'],
                                     print_log=print_log)
 
             self.min_history = self.logbook.chapters["fitness"].select("min")
@@ -286,6 +281,28 @@ class GPSymbRegProblem():
                               is not None) and cgen % plot_freq == 0:
                 best = tools.selBest(self.pop, k=1)
                 plot_best_func(best[0])
+
+            if early_stopping['enabled']:
+                best = tools.selBest(self.pop, k=1)
+                training_fit = best[0].fitness.values[0]
+                valid_fit = self.toolbox.evaluate_val(best[0])[0]
+                overfit = self.__overfitting_measure(training_fit, valid_fit)
+                # print(f"The current overfit measure is {overfit}")
+                if overfit == 0:
+                    m = 0
+                    self.best = best[0]
+                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
+                    m += 1
+
+                self.last_improvement = training_fit
+
+                # print(f"The current validation error is {valid_fit}")
+
+                if m == early_stopping['max_overfit']:
+                    # save number of generations when stopping for the last training run
+                    self.NGEN = cgen
+                    print("-= EARLY STOPPED =-")
+                    break
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
