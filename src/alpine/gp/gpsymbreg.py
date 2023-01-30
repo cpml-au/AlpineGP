@@ -1,7 +1,6 @@
 from deap import algorithms, tools, gp, base, creator
 import matplotlib.pyplot as plt
 import numpy as np
-from memory_profiler import profile
 from mpire.utils import make_single_arguments
 
 
@@ -12,11 +11,18 @@ class GPSymbRegProblem():
                  NGEN,
                  CXPB,
                  MUTPB,
+                 frac_elitist=0.,
+                 tournsize=3,
                  min_=1,
                  max_=2,
                  individualCreator=None,
                  toolbox=None):
+        """Symbolic regression problem via GP.
 
+            Args:
+                frac_elitist: best individuals to keep expressed as a percentage of the
+                population (ex. 0.1 = keep top 10% individuals)
+        """
         self.pset = pset
         self.NINDIVIDUALS = NINDIVIDUALS
         self.NGEN = NGEN
@@ -27,6 +33,11 @@ class GPSymbRegProblem():
         self.overfit = None
         self.bvp = None
         self.tbtp = None
+
+        self.tournsize = tournsize
+
+        # Elitism settings
+        self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
 
         if individualCreator is None:
             self.__default_creator()
@@ -85,6 +96,9 @@ class GPSymbRegProblem():
                               self.toolbox.individual)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
+        # Register selection with elitism operator
+        self.toolbox.register("select", self.selElitistAndTournament)
+
     def __overfitting_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
             overfit = 0
@@ -98,7 +112,7 @@ class GPSymbRegProblem():
         self.overfit = overfit
 
     def compute_statistics(self, pop, gen, evals, print_log=False):
-        """Computes and prints statistics (max, min, avg, std) of a population."""
+        """Computes and prints statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
@@ -110,23 +124,19 @@ class GPSymbRegProblem():
             # Print statistics for the current population
             print(self.logbook.stream, flush=True)
 
-    def selElitistAndTournament(self, individuals, frac_elitist, tournsize=3):
+    def selElitistAndTournament(self, individuals):
         """Performs tournament selection with elitism.
 
             Args:
                 individuals: a list of individuals to select from.
-                frac_elitist: best individuals to keep expressed as a percentage of the population (ex. 0.1 = keep top 10% individuals)
-                tournsize: tournament size.
 
             Returns:
                 population after selection/tournament.
         """
-        n_elitist = int(frac_elitist*self.NINDIVIDUALS)
-        n_tournament = self.NINDIVIDUALS - n_elitist
+        n_tournament = self.NINDIVIDUALS - self.n_elitist
 
-        return tools.selBest(individuals, n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=tournsize)
+        return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
 
-    # @profile
     def run(self,
             plot_history=False,
             print_log=False,
@@ -136,7 +146,11 @@ class GPSymbRegProblem():
             seed=None,
             n_splits=10,
             early_stopping=(False, 0)):
-        """Runs symbolic regression."""
+        """Runs symbolic regression.
+
+            Args:
+                seed: list of individuals to seed in the initial population.
+        """
 
         # Generate initial population
         print("Generating initial population...", flush=True)
@@ -160,6 +174,8 @@ class GPSymbRegProblem():
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
+        print("DONE.", flush=True)
+
         if early_stopping[0]:
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)
@@ -169,26 +185,26 @@ class GPSymbRegProblem():
             self.last_improvement = self.tbtp
             # initialize m
             m = 0
-        print("DONE.", flush=True)
 
         for gen in range(self.NGEN):
+            cgen = gen + 1
+
             if early_stopping[0]:
                 if m == early_stopping[1]:
                     self.pop = self.best
                     break
-            cgen = gen + 1
 
             # Select and clone the next generation individuals
             offspring = list(
                 map(self.toolbox.clone,
-                    # self.toolbox.select(self.pop, len(self.pop))))
                     self.toolbox.select(self.pop)))
 
-            # Apply crossover and mutation to the offspring (like eaSimple)
-            offspring = algorithms.varOr(
-                offspring, self.toolbox, self.NINDIVIDUALS, self.CXPB, self.MUTPB)
+            # Apply crossover and mutation to the offspring, except elite individuals
+            offspring = tools.selBest(offspring, self.n_elitist) + algorithms.varOr(
+                offspring, self.toolbox, self.NINDIVIDUALS - self.n_elitist, self.CXPB, self.MUTPB)
 
-            # Evaluate the individuals with an invalid fitness (subject to crossover or mutation)
+            # Evaluate the individuals with an invalid fitness (subject to crossover or
+            # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
             fitnesses = self.toolbox.map(
                 self.toolbox.evaluate, make_single_arguments(invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
@@ -207,7 +223,7 @@ class GPSymbRegProblem():
                 if self.overfit == 0:
                     m = 0
                     self.best = best[0]
-                elif np.abs(self.overfit) > 10 ** -3 and np.abs(self.last_improvement - training_fit) >= 10**-1:
+                elif np.abs(self.overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
                     m += 1
 
                 self.last_improvement = training_fit
