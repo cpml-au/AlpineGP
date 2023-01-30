@@ -34,7 +34,7 @@ def generate_complex(filename):
     return S, bnodes
 
 
-def generate_dataset(S, mult, diff):
+def generate_dataset(S, mult, diff, noise):
     """Generate a dataset for the Poisson problem.
 
     Args:
@@ -44,6 +44,7 @@ def generate_dataset(S, mult, diff):
         dataset.
         diff (int): integer (from 1 to 3) that expresses the number of classes of
         different functions in the dataset.
+        noise (np.array): noise to perturb data
 
     Returns:
         (np.array): np.array of the dataset samples.
@@ -58,21 +59,21 @@ def generate_dataset(S, mult, diff):
             # ith quadratic function
             q_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
             rhs_qi = (4/(i+1)**2) * np.ones(num_nodes)
-            data_X[diff*i, :] = q_i
+            data_X[diff*i, :] = q_i + noise
             data_y[diff*i, :] = rhs_qi
 
         if diff >= 2:
             # ith exponential function
             trig_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
             rhs_trigi = -i**2 * trig_i
-            data_X[diff*i+1, :] = trig_i
+            data_X[diff*i+1, :] = trig_i + noise
             data_y[diff*i+1, :] = rhs_trigi
 
         if diff >= 3:
             # ith power function
             p_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
             rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
-            data_X[diff*i+2, :] = p_i
+            data_X[diff*i+2, :] = p_i + noise
             data_y[diff*i+2, :] = rhs_pi
 
     return data_X, data_y

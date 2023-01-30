@@ -29,7 +29,7 @@ S, bnodes = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
 
 # set GP parameters
-NINDIVIDUALS = 100
+NINDIVIDUALS = 20
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
@@ -38,11 +38,14 @@ frac_elitist = 0.1
 # number of different source term functions to use to generate the dataset
 num_sources = 3
 # number of cases for each source term function
-num_samples_per_source = 2
+num_samples_per_source = 4
 # whether to use validation dataset
 use_validation = True
 
-data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources)
+# noise factor
+noise = 0.1*np.random.rand(num_nodes)
+
+data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
 X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
 
 if use_validation:
@@ -69,7 +72,8 @@ class ObjFunctional:
         pass
 
     def setEnergyFunc(self, func, individual):
-        """Set the energy function to be used for the computation of the objective function."""
+        """Set the energy function to be used for the computation of the objective
+        function."""
         self.energy_func = func
         self.individual = individual
 
@@ -82,11 +86,6 @@ class ObjFunctional:
 
 
 def evalPoisson(individual, X, y, current_bvalues):
-    # discard individuals with too many terminals (avoid error during compilation)
-    if len(individual) > 50:
-        result = 1000
-        return result,
-
     # transform the individual expression into a callable function
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
@@ -140,7 +139,8 @@ GPproblem.toolbox.decorate(
 GPproblem.toolbox.decorate(
     "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
-# copy GPproblem (needed to have a separate object shared among the processed to be modified in the last run)
+# copy GPproblem (needed to have a separate object shared among the processed
+# to be modified in the last run)
 FinalGP = GPproblem
 FinalGP.toolbox.register("evaluate", evalPoisson, X=X_train,
                          y=y_train, current_bvalues=bvalues_train)
@@ -171,7 +171,7 @@ def stgp_poisson():
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool()
+    pool = mpire.WorkerPool(n_jobs=4)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
@@ -197,6 +197,9 @@ def stgp_poisson():
 
     print("> FINAL TRAINING STARTED", flush=True)
 
+    # update FinalGP.NGEN according to early stopping
+    FinalGP.NGEN = GPproblem.NGEN
+
     # now we retrain the best model on the entire training set
     FinalGP.toolbox.register("map", pool.map)
     FinalGP.run(plot_history=True,
@@ -205,7 +208,7 @@ def stgp_poisson():
                 n_splits=20,
                 seed=best_individuals)
 
-    pool.terminate()
+    # pool.terminate()
     real_best = tools.selBest(FinalGP.pop, k=1)
     print(f"The best individual is {str(real_best[0])}", flush=True)
 
