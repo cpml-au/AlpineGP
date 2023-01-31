@@ -182,8 +182,8 @@ def stgp_poisson():
     print(f"The best individual is {str(best)}", flush=True)
 
     # evaluate score on the training and validation set
-    print(f"The best score on the training set is {GPproblem.tbtp}")
-    print(f"The best score on the validation set is {GPproblem.bvp}")
+    print(f"The best score on the training set is {GPproblem.min_history[-1]}")
+    print(f"The best score on the validation set is {GPproblem.min_valerr}")
 
     # FIXME: do I need it?
     best_individuals.append(best)
@@ -205,7 +205,7 @@ def stgp_poisson():
                 n_splits=20,
                 seed=best_individuals)
 
-    # pool.terminate()
+    pool.terminate()
     real_best = tools.selBest(FinalGP.pop, k=1)
     print(f"The best individual is {str(real_best[0])}", flush=True)
 
