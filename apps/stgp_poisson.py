@@ -16,6 +16,8 @@ import operator
 import math
 import mpire
 import time
+import sys
+import yaml
 
 # choose whether to use GPU or CPU and precision
 config.update("jax_platform_name", "cpu")
@@ -28,12 +30,13 @@ warnings.filterwarnings('ignore')
 S, bnodes = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
 
-# set GP parameters
+# set default GP parameters
 NINDIVIDUALS = 10
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
 frac_elitist = 0.1
+
 
 # number of different source term functions to use to generate the dataset
 num_sources = 3
@@ -147,9 +150,26 @@ FinalGP.toolbox.register("evaluate", evalPoisson, X=np.vstack((X_train, X_val)),
                          y=np.vstack((y_train, y_val)), current_bvalues=np.vstack((bvalues_train, bvalues_val)))
 
 
-def stgp_poisson():
+def stgp_poisson(config=None):
     # initialize list of best individuals
     best_individuals = []
+
+    early_stopping = {'enabled': True, 'max_overfit': 3}
+    final_training = True
+
+    # multiprocessing parameters
+    n_jobs = 4
+    n_splits = 20
+
+    if config is not None:
+        GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
+        GPproblem.NGEN = config["gp"]["NGEN"]
+        n_jobs = config["mp"]["n_jobs"]
+        n_splits = config["mp"]["n_splits"]
+        early_stopping = config["gp"]["early_stopping"]
+        GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
+        FinalGP.parsimony_pressure = config["gp"]["parsimony_pressure"]
+        final_training = config["gp"]["final_training"]
 
     start = time.perf_counter()
 
@@ -168,14 +188,14 @@ def stgp_poisson():
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool(n_jobs=4)
+    pool = mpire.WorkerPool(n_jobs=n_jobs)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=True,
                   seed=None,
-                  n_splits=20,
-                  early_stopping={'enabled': True, 'max_overfit': 3})
+                  n_splits=n_splits,
+                  early_stopping=early_stopping)
 
     # Print best individual
     best = GPproblem.best
@@ -192,34 +212,34 @@ def stgp_poisson():
 
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
-    print("> FINAL TRAINING STARTED", flush=True)
+    if final_training:
+        print("> FINAL TRAINING STARTED", flush=True)
 
-    # update FinalGP.NGEN according to early stopping
-    FinalGP.NGEN = GPproblem.NGEN
+        # update FinalGP.NGEN according to early stopping
+        FinalGP.NGEN = GPproblem.NGEN
 
-    # now we retrain the best model on the entire training set
-    FinalGP.toolbox.register("map", pool.map)
-    FinalGP.run(plot_history=True,
-                print_log=True,
-                plot_best=True,
-                n_splits=20,
-                seed=best_individuals)
+        # now we retrain the best model on the entire training set
+        FinalGP.toolbox.register("map", pool.map)
+        FinalGP.run(plot_history=True,
+                    print_log=True,
+                    plot_best=True,
+                    n_splits=n_splits,
+                    seed=best_individuals)
 
-    pool.terminate()
-    real_best = tools.selBest(FinalGP.pop, k=1)
-    print(f"The best individual is {str(real_best[0])}", flush=True)
+        pool.terminate()
+        best = tools.selBest(FinalGP.pop, k=1)[0]
+        print(f"The best individual is {str(best)}", flush=True)
 
-    score_train = FinalGP.min_history[-1]
-    score_test = evalPoisson(real_best[0], X_test, y_test, bvalues_test)
-    score_test = score_test[0]
+        score_train = FinalGP.min_history[-1]
+        print(f"Best score on the training set = {score_train}")
 
-    print(f"Best score on the training set = {score_train}")
+    score_test = evalPoisson(best, X_test, y_test, bvalues_test)[0]
     print(f"Best score on the test set = {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
     # plot the tree of the best individual
-    nodes, edges, labels = gp.graph(real_best[0])
+    nodes, edges, labels = gp.graph(best)
     graph = nx.Graph()
     graph.add_nodes_from(nodes)
     graph.add_edges_from(edges)
@@ -235,4 +255,12 @@ def stgp_poisson():
 
 
 if __name__ == '__main__':
-    stgp_poisson()
+    n_args = len(sys.argv)
+    config = None
+    if n_args > 1:
+        param_file = sys.argv[1]
+        print("Parameters file: ", param_file)
+        with open(param_file) as file:
+            config = yaml.safe_load(file)
+            print(yaml.dump(config))
+    stgp_poisson(config)
