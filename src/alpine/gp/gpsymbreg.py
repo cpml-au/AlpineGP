@@ -75,10 +75,10 @@ class GPSymbRegProblem():
         self.stats_size = tools.Statistics(len)
         self.mstats = tools.MultiStatistics(fitness=self.stats_fit,
                                             size=self.stats_size)
-        self.mstats.register("avg", np.mean)
-        self.mstats.register("std", np.std)
-        self.mstats.register("min", np.min)
-        self.mstats.register("max", np.max)
+        self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
+        self.mstats.register("std", lambda ind: np.around(np.std(ind), 4))
+        self.mstats.register("min", lambda ind: np.around(np.min(ind), 4))
+        self.mstats.register("max", lambda ind: np.around(np.max(ind), 4))
 
         self.__init_logbook()
 
@@ -91,15 +91,15 @@ class GPSymbRegProblem():
         self.plot_initialized = False
         self.fig_id = 0
 
-    def __init_logbook(self, overfit_stats=False):
+    def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
         self.logbook = tools.Logbook()
         # Headers of fields to be printed during log
-        if overfit_stats:
-            self.logbook.header = "gen", "evals", "fitness", "size", "overfit"
-            self.logbook.chapters["overfit"].header = "meas", "trainerr", "valerr"
+        if overfit_measure:
+            self.logbook.header = "gen", "evals", "fitness", "size", "valid"
+            self.logbook.chapters["valid"].header = "overfit", "err"
         else:
-            self.logbook.header = "gen", "evals", "fitness", "size"
+            self.logbook.header = "gen", "evals", "fitness", "size", "valerr"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
@@ -139,26 +139,31 @@ class GPSymbRegProblem():
                 np.abs(self.tbtp - self.bvp)
         return overfit
 
-    def __compute_overfit_stats(self):
+    def __compute_valid_stats(self, overfit_measure=False):
         best = tools.selBest(self.pop, k=1)
-        training_fit = best[0].fitness.values[0]
-        valid_fit = self.toolbox.evaluate_val(best[0])[0]
-        overfit = self.__overfitting_measure(training_fit, valid_fit)
-        return overfit, training_fit, valid_fit
+        valid_err = self.toolbox.evaluate_val(best[0])[0]
+        overfit = 0
+        if overfit_measure:
+            training_fit = best[0].fitness.values[0]
+            overfit = self.__overfitting_measure(training_fit, valid_err)
+        return overfit, valid_err
 
-    def compute_statistics(self, pop, gen, evals, overfit_stats=False, print_log=False):
+    def compute_statistics(self, pop, gen, evals, overfit_measure=False, print_log=False):
         """Computes and prints statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
 
-        if overfit_stats:
-            overfit, training_err, valid_err = self.__compute_overfit_stats()
-            record["overfit"] = {"meas": overfit,
-                                 "trainerr": training_err, "valerr": valid_err}
+        # Compute satistics related to the validation set
+        overfit, valid_err = self.__compute_valid_stats(overfit_measure)
 
         # Record the statistics in the logbook
-        self.logbook.record(gen=gen, evals=evals, **record)
+        if overfit_measure:
+            record["valid"] = {"overfit": overfit,
+                               "err": valid_err}
+            self.logbook.record(gen=gen, evals=evals, **record)
+        else:
+            self.logbook.record(gen=gen, evals=evals, valerr=valid_err, **record)
 
         if print_log:
             # Print statistics for the current population
@@ -203,7 +208,7 @@ class GPSymbRegProblem():
         self.history.update(self.pop)
         self.halloffame.update(self.pop)
         # Initialize logbook for statistics
-        self.__init_logbook(overfit_stats=early_stopping['enabled'])
+        self.__init_logbook(overfit_measure=early_stopping['enabled'])
 
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
@@ -260,7 +265,7 @@ class GPSymbRegProblem():
             self.compute_statistics(self.pop,
                                     cgen,
                                     len(invalid_ind),
-                                    overfit_stats=early_stopping['enabled'],
+                                    overfit_measure=early_stopping['enabled'],
                                     print_log=print_log)
 
             self.min_history = self.logbook.chapters["fitness"].select("min")
@@ -270,8 +275,11 @@ class GPSymbRegProblem():
                     self.plot_initialized = True
                     # new figure number when starting with new evolution
                     self.fig_id = self.fig_id + 1
+                    plt.figure(self.fig_id).show()
+                    plt.pause(0.01)
 
                 plt.figure(self.fig_id)
+                fig = plt.gcf()
 
                 # Array of generations starts from 1
                 x = range(1, len(self.min_history) + 1)
@@ -282,7 +290,7 @@ class GPSymbRegProblem():
                 plt.xlabel("Generation #")
                 plt.ylabel("Best Fitness")
 
-                plt.draw()
+                fig.canvas.draw()
 
                 plt.pause(0.01)
 

@@ -29,7 +29,7 @@ S, bnodes = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
 
 # set GP parameters
-NINDIVIDUALS = 200
+NINDIVIDUALS = 10
 NGEN = 20
 CXPB = 0.5
 MUTPB = 0.1
