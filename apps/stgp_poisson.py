@@ -120,7 +120,9 @@ def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
 
         result += current_result
 
-    result = 1/(num_sources*num_samples_per_source)*result
+    result *= 1/(num_sources*num_samples_per_source)
+    length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
+    result += length_penalty
 
     return result,
 

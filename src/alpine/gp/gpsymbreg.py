@@ -9,7 +9,7 @@ def set_population(creator_package, n):
     length = 100
     createIndiv, expr = creator_package
     for _ in range(n):
-        while length > 50:
+        while length > 15:
             individual = tools.initIterate(createIndiv, expr)
             length = len(individual)
         pop.append(individual)
@@ -338,6 +338,8 @@ class GPSymbRegProblem():
                 # print("best individual: ", str(best))
 
                 self.last_improvement = training_fit
+                print(f"The best of this generation is: {best}")
+                print(f"The best until now is: {self.best}")
 
                 if m == early_stopping['max_overfit']:
                     # save number of generations when stopping for the last training run

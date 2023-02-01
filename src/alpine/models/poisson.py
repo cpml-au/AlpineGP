@@ -11,7 +11,7 @@ def scalar_mul_float(a, b):
 
 
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float,  "u")
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
 # define cochain operations
 
 
@@ -48,3 +48,7 @@ pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "Inner2")
 
 # add constant = 0.5
 pset.addTerminal(0.5, float, name="1/2")
+
+# rename arguments
+pset.renameArguments(ARG0="u")
+pset.renameArguments(ARG1="f/k")
