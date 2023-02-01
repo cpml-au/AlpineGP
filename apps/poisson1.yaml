@@ -1,7 +1,7 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 200
-  NGEN: 30
+  NINDIVIDUALS: 20
+  NGEN: 50
   CXPB: 0.5
   MUTPB: 0.2
   frac_elitist: 0.01
