@@ -225,7 +225,7 @@ def stgp_poisson(config=None):
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool(n_jobs=n_jobs)
+    pool = mpire.WorkerPool(n_jobs=n_jobs, start_method="spawn")
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
