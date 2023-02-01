@@ -4,7 +4,7 @@ import gmsh
 from dctkit.mesh import simplex, util
 import os
 from sklearn.model_selection import train_test_split
-
+from matplotlib import tri
 
 cwd = os.path.dirname(simplex.__file__)
 
@@ -22,6 +22,7 @@ def generate_complex(filename):
     full_path = os.path.join(cwd, filename)
     _, _, S_2, node_coords = util.read_mesh(full_path)
 
+    triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
     S = simplex.SimplicialComplex(S_2, node_coords)
     S.get_circumcenters()
     S.get_primal_volumes()
@@ -31,7 +32,7 @@ def generate_complex(filename):
     bnodes, _ = gmsh.model.mesh.getNodesForPhysicalGroup(1, 1)
     bnodes -= 1
 
-    return S, bnodes
+    return S, bnodes, triang
 
 
 def generate_dataset(S, mult, diff, noise):
