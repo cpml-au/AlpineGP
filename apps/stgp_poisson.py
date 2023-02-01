@@ -27,7 +27,7 @@ config.update("jax_enable_x64", True)
 warnings.filterwarnings('ignore')
 
 # generate mesh and dataset
-S, bnodes = d.generate_complex("test3.msh")
+S, bnodes, triang = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
 
 # set default GP parameters
@@ -89,7 +89,7 @@ class ObjFunctional:
         return energy
 
 
-def evalPoisson(individual, X, y, current_bvalues):
+def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
     # transform the individual expression into a callable function
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
@@ -110,6 +110,9 @@ def evalPoisson(individual, X, y, current_bvalues):
         # minimize the objective
         x = minimize(fun=obj.evalObjFunc, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
+        if return_best_sol:
+            return x
+
         current_result = np.linalg.norm(x-X[i, :])**2
 
         if current_result > 100 or math.isnan(current_result):
@@ -143,10 +146,25 @@ GPproblem.toolbox.decorate(
 GPproblem.toolbox.decorate(
     "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
+# Plot best solution
+
+
+def plotSol(ind):
+    u = evalPoissonObj(ind, X=X_train, y=y_train,
+                       current_bvalues=bvalues_train, return_best_sol=True)
+    plt.figure(10)
+    fig = plt.gcf()
+    plt.tricontourf(triang, u, cmap='RdBu', levels=20)
+    plt.triplot(triang, 'ko-')
+    plt.colorbar()
+    fig.canvas.draw()
+    plt.pause(0.05)
+
+
 # copy GPproblem (needed to have a separate object shared among the processed
 # to be modified in the last run)
 FinalGP = GPproblem
-FinalGP.toolbox.register("evaluate", evalPoisson, X=np.vstack((X_train, X_val)),
+FinalGP.toolbox.register("evaluate", evalPoissonObj, X=np.vstack((X_train, X_val)),
                          y=np.vstack((y_train, y_val)), current_bvalues=np.vstack((bvalues_train, bvalues_val)))
 
 
@@ -156,6 +174,8 @@ def stgp_poisson(config=None):
 
     early_stopping = {'enabled': True, 'max_overfit': 3}
     final_training = True
+
+    plot_best = True
 
     # multiprocessing parameters
     n_jobs = 4
@@ -170,18 +190,25 @@ def stgp_poisson(config=None):
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         FinalGP.parsimony_pressure = config["gp"]["parsimony_pressure"]
         final_training = config["gp"]["final_training"]
+        mutate_fun = config["gp"]["mutate"]["fun"]
+        mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
+        GPproblem.toolbox.register("mutate",
+                                   eval(mutate_fun), **mutate_kargs)
+        FinalGP.toolbox.register("mutate",
+                                 eval(mutate_fun), **mutate_kargs)
+        plot_best = config["plot"]["plot_best"]
 
     start = time.perf_counter()
 
     # add functions for fitness evaluation on training and validation sets to the
     # toolbox
     GPproblem.toolbox.register("evaluate_train",
-                               evalPoisson,
+                               evalPoissonObj,
                                X=X_train,
                                y=y_train,
                                current_bvalues=bvalues_train)
     GPproblem.toolbox.register("evaluate_val",
-                               evalPoisson,
+                               evalPoissonObj,
                                X=X_val,
                                y=y_val,
                                current_bvalues=bvalues_val)
@@ -192,7 +219,8 @@ def stgp_poisson(config=None):
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,
-                  plot_best=True,
+                  plot_best=plot_best,
+                  plot_best_func=plotSol,
                   seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping)
@@ -222,7 +250,7 @@ def stgp_poisson(config=None):
         FinalGP.toolbox.register("map", pool.map)
         FinalGP.run(plot_history=True,
                     print_log=True,
-                    plot_best=True,
+                    plot_best=plot_best,
                     n_splits=n_splits,
                     seed=best_individuals)
 
@@ -233,7 +261,7 @@ def stgp_poisson(config=None):
         score_train = FinalGP.min_history[-1]
         print(f"Best score on the training set = {score_train}")
 
-    score_test = evalPoisson(best, X_test, y_test, bvalues_test)[0]
+    score_test = evalPoissonObj(best, X_test, y_test, bvalues_test)[0]
     print(f"Best score on the test set = {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
