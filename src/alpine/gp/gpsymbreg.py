@@ -5,15 +5,22 @@ from mpire.utils import make_single_arguments
 
 
 def set_population(creator_package, n):
+    # FIXME: ADD DOCUMENTATION
     pop = []
-    length = 100
+    terminal_and_length_check = False
     createIndiv, expr = creator_package
     for _ in range(n):
-        while length > 15:
+        while not terminal_and_length_check:
             individual = tools.initIterate(createIndiv, expr)
             length = len(individual)
+            # check that the individual has both terminals
+            if ("u0" in str(individual)) and ("u1" in str(individual)):
+                # check that the individual has the right length
+                if length <= 15:
+                    terminal_and_length_check = True
         pop.append(individual)
-        length = 100
+        # redefine terminal_and_length_check to enter again in the while
+        terminal_and_length_check = False
     return pop
 
 

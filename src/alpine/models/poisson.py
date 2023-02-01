@@ -50,5 +50,5 @@ pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "Inner2")
 pset.addTerminal(0.5, float, name="1/2")
 
 # rename arguments
-pset.renameArguments(ARG0="u")
-pset.renameArguments(ARG1="f/k")
+pset.renameArguments(ARG0="u0")
+pset.renameArguments(ARG1="u1")
