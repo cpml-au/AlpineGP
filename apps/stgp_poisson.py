@@ -197,6 +197,10 @@ def stgp_poisson(config=None):
         FinalGP.toolbox.register("mutate",
                                  eval(mutate_fun), **mutate_kargs)
         plot_best = config["plot"]["plot_best"]
+        GPproblem.toolbox.decorate(
+            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+        GPproblem.toolbox.decorate(
+            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
     start = time.perf_counter()
 
