@@ -122,7 +122,7 @@ def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
 
     result *= 1/(num_sources*num_samples_per_source)
     length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
-    terminal_penalty = int("u0" not in str(individual) or "u1" in str(individual))
+    terminal_penalty = int("u0" not in str(individual) or "u1" not in str(individual))
     result += length_penalty
     result += 100*terminal_penalty
 
