@@ -1,22 +1,27 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 10
-  NGEN: 5
+  NINDIVIDUALS: 200
+  NGEN: 30
   CXPB: 0.5
-  MUTPB: 0.1
+  MUTPB: 0.2
   frac_elitist: 0.01
   early_stopping: {'enabled': True, 'max_overfit': 3}
-  parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
+  parsimony_pressure: {'enabled': True, 'fitness_first': True, 'parsimony_size': 1.3}
   final_training: False
   mutate:
     fun: gp.mutUniform
+    # fun: gp.mutNodeReplacement
     # fun: gp.mutShrink
     kargs: "{'expr': GPproblem.toolbox.expr_mut, 'pset': pset}" # string is important
+    # kargs: "{'pset': pset}"
     # kargs: "{}"
+    expr_mut: gp.genHalfAndHalf
+    # expr_mut: gp.genFull
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
 
 plot:
   plot_best: False
 
 mp:
-  n_splits: 10
+  n_splits: 20
   n_jobs: 4

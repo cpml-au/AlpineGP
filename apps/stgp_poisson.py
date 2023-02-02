@@ -192,10 +192,14 @@ def stgp_poisson(config=None):
         final_training = config["gp"]["final_training"]
         mutate_fun = config["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
+        expr_mut_fun = config["gp"]["mutate"]["expr_mut"]
+        expr_mut_kargs = eval(config["gp"]["mutate"]["expr_mut_kargs"])
         GPproblem.toolbox.register("mutate",
                                    eval(mutate_fun), **mutate_kargs)
         FinalGP.toolbox.register("mutate",
                                  eval(mutate_fun), **mutate_kargs)
+        GPproblem.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
+        FinalGP.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
         plot_best = config["plot"]["plot_best"]
         GPproblem.toolbox.decorate(
             "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
