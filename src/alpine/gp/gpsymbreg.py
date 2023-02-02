@@ -124,6 +124,7 @@ class GPSymbRegProblem():
 
         # Register selection with elitism operator
         self.toolbox.register("select", self.selElitistAndTournament)
+        # self.toolbox.register("select", self.selElitistAndRoulette)
 
     def __overfit_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
@@ -182,6 +183,19 @@ class GPSymbRegProblem():
             return tools.selBest(individuals, self.n_elitist) + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
 
         return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
+
+    def selElitistAndRoulette(self, individuals):
+        """Performs roulette selection with elitism.
+
+            Args:
+                individuals: a list of individuals to select from.
+
+            Returns:
+                population after selection.
+        """
+        n_tournament = self.NINDIVIDUALS - self.n_elitist
+
+        return tools.selBest(individuals, self.n_elitist) + tools.selRoulette(individuals, n_tournament)
 
     def run(self,
             plot_history=False,
@@ -247,6 +261,11 @@ class GPSymbRegProblem():
             # Apply crossover and mutation to the offspring, except elite individuals
             offspring = tools.selBest(offspring, self.n_elitist) + algorithms.varOr(
                 offspring, self.toolbox, self.NINDIVIDUALS - self.n_elitist, self.CXPB, self.MUTPB)
+            # elite_ind = tools.selBest(offspring, self.n_elitist)
+            # for _, i in enumerate(elite_ind):
+            #     offspring.remove(i)
+            # offspring = elite_ind + \
+            #     algorithms.varAnd(offspring, self.toolbox, self.CXPB, self.MUTPB)
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
@@ -315,6 +334,8 @@ class GPSymbRegProblem():
                     self.best = best
                 elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
                     m += 1
+
+                # print("best individual: ", str(best))
 
                 self.last_improvement = training_fit
 
