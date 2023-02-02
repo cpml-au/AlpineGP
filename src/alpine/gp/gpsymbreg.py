@@ -14,13 +14,14 @@ def set_population(creator_package, n):
             individual = tools.initIterate(createIndiv, expr)
             length = len(individual)
             # check that the individual has both terminals
-            if ("u0" in str(individual)) and ("u1" in str(individual)):
-                # check that the individual has the right length
-                if length <= 15:
-                    terminal_and_length_check = True
+            # if ("u0" in str(individual)) and ("u1" in str(individual)):
+            # check that the individual has the right length
+            if length <= 15:
+                terminal_and_length_check = True
         pop.append(individual)
         # redefine terminal_and_length_check to enter again in the while
         terminal_and_length_check = False
+        # print(i)
     return pop
 
 
