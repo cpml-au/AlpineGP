@@ -1,4 +1,5 @@
 from deap import algorithms, tools, gp, base, creator
+from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
 from mpire.utils import make_single_arguments
@@ -190,7 +191,28 @@ class GPSymbRegProblem():
         if self.parsimony_pressure['enabled']:
             return tools.selBest(individuals, self.n_elitist) + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
 
-        return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
+        # return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
+        return tools.selBest(individuals, self.n_elitist) + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize)
+
+    def selStochasticTournament(self, individuals, k, tournsize, fit_attr="fitness"):
+        """Select the best individual among *tournsize* randomly chosen
+        individuals, *k* times. The list returned contains
+        references to the input *individuals*.
+        :param individuals: A list of individuals to select from.
+        :param k: The number of individuals to select.
+        :param tournsize: The number of individuals participating in each tournament.
+        :param fit_attr: The attribute of individuals to use as selection criterion
+        :returns: A list of selected individuals.
+        This function uses the :func:`~random.choice` function from the python base
+        :mod:`random` module.
+        """
+        chosen = []
+        for i in range(k):
+            aspirants = tools.selection.selRandom(individuals, tournsize)
+            aspirants.sort(key=attrgetter(fit_attr), reverse=True)
+            chosen_index = int(np.random.choice(range(3), 1, p=[0.7, 0.2, 0.1]))
+            chosen.append(aspirants[chosen_index])
+        return chosen
 
     def selElitistAndRoulette(self, individuals):
         """Performs roulette selection with elitism.
@@ -273,7 +295,9 @@ class GPSymbRegProblem():
             # for _, i in enumerate(elite_ind):
             #     offspring.remove(i)
             # offspring = elite_ind + \
-            #     algorithms.varAnd(offspring, self.toolbox, self.CXPB, self.MUTPB)
+            # algorithms.varOr(offspring, self.toolbox,
+            #  self.NINDIVIDUALS-self.n_elitist, self.CXPB,
+            #  self.MUTPB)
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)

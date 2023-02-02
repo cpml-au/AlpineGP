@@ -121,10 +121,19 @@ def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
         result += current_result
 
     result *= 1/(num_sources*num_samples_per_source)
-    length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
-    terminal_penalty = int("u0" not in str(individual) or "u1" not in str(individual))
-    result += length_penalty
-    result += 100*terminal_penalty
+    # length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
+
+    indstr = str(individual)
+    nMulFloat = indstr.count("MulFloat")
+    nAddP0 = indstr.count("AddP0")
+    nMulP0 = indstr.count("MulP0")
+    nMulP1 = indstr.count("MulP1")
+    nCob0 = indstr.count("CoboundaryP0")
+    nConst = indstr.count("1/2")
+    result += 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
+    # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
+    # result += length_penalty
+    # result += 100*terminal_penalty
 
     return result,
 
