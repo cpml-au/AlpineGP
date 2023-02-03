@@ -136,19 +136,27 @@ def eval_fitness(individual, X, y, bvalues):
     # Penatly terms on model complexity
     indstr = str(individual)
     nMulFloat = indstr.count("MulF")
+    nAdd = indstr.count("Add")
     nAddP0 = indstr.count("AddP0")
+    nAddP1 = indstr.count("AddP1")
+    ndelP1 = indstr.count("delP1")
+    ndelP2 = indstr.count("delP2")
     nMulP0 = indstr.count("MulP0")
     nMulP1 = indstr.count("MulP1")
     nCob0 = indstr.count("dP0")
     nConst = indstr.count("1/2")
+    nInn0 = indstr.count("Inn0")
+    nInn1 = indstr.count("Inn1")
 
     # Total objective value
-    objval = total_err + 0.001*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
+    objval = total_err + 0.001*max((nAddP0, nMulFloat, nMulP0, nMulP1,
+                                   nCob0, nConst, nAdd, nAddP1, ndelP1, ndelP2, nInn0, nInn1))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
 
     return objval,
+
 
 # FIXME: maybe pass fitness function among parameters
 GPproblem = gps.GPSymbRegProblem(pset,

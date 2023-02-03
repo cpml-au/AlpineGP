@@ -19,11 +19,12 @@ def generate_complex(filename):
         (SimplicialComplex): resulting simplicial complex.
         (np.array): np.array containing the positions of the boundary nodes.
     """
-    full_path = os.path.join(cwd, filename)
-    _, _, S_2, node_coords = util.read_mesh(full_path)
+    # full_path = os.path.join(cwd, filename)
+    # _, _, S_2, node_coords = util.read_mesh(full_path)
+    _, _, S_2, node_coords = util.generate_mesh(0.08)
 
     triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
-    S = simplex.SimplicialComplex(S_2, node_coords)
+    S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
     S.get_circumcenters()
     S.get_primal_volumes()
     S.get_dual_volumes()

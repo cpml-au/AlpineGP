@@ -36,6 +36,8 @@ pset.addPrimitive(C.coboundary, [C.CochainP0], C.CochainP1, name="dP0")
 pset.addPrimitive(C.coboundary, [C.CochainP1], C.CochainP2, name="dP1")
 pset.addPrimitive(C.coboundary, [C.CochainD0], C.CochainD1, name="dD0")
 pset.addPrimitive(C.coboundary, [C.CochainD1], C.CochainD2, name="dD1")
+pset.addPrimitive(C.codifferential, [C.CochainP1], C.CochainP0, name="delP1")
+pset.addPrimitive(C.codifferential, [C.CochainP2], C.CochainP1, name="delP2")
 
 # hodge star
 pset.addPrimitive(C.star, [C.CochainP0], C.CochainD2, name="St0")
