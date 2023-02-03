@@ -10,7 +10,7 @@ gp:
   final_training: False
   select:
     tournsize: 2
-    stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
+    stochastic_tournament: {'enabled': True, 'prob': [0.7, 0.3]}
   mutate:
     fun: gp.mutUniform
     # fun: gp.mutNodeReplacement

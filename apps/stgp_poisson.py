@@ -135,11 +135,11 @@ def eval_fitness(individual, X, y, bvalues):
 
     # Penatly terms on model complexity
     indstr = str(individual)
-    nMulFloat = indstr.count("MulFloat")
+    nMulFloat = indstr.count("MulF")
     nAddP0 = indstr.count("AddP0")
     nMulP0 = indstr.count("MulP0")
     nMulP1 = indstr.count("MulP1")
-    nCob0 = indstr.count("CoboundaryP0")
+    nCob0 = indstr.count("dP0")
     nConst = indstr.count("1/2")
 
     # Total objective value
@@ -150,7 +150,7 @@ def eval_fitness(individual, X, y, bvalues):
 
     return objval,
 
-
+# FIXME: maybe pass fitness function among parameters
 GPproblem = gps.GPSymbRegProblem(pset,
                                  NINDIVIDUALS,
                                  NGEN,

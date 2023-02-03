@@ -5,7 +5,7 @@ import numpy as np
 from mpire.utils import make_single_arguments
 
 
-def set_population(creator_package, n):
+def generate_population(creator_package, n):
     # FIXME: ADD DOCUMENTATION
     pop = []
     terminal_and_length_check = False
@@ -130,7 +130,7 @@ class GPSymbRegProblem():
         self.toolbox.register("individual", tools.initIterate,
                               self.createIndividual, self.toolbox.expr)
         creator_package = (self.createIndividual, self.toolbox.expr)
-        self.toolbox.register("population", set_population, creator_package)
+        self.toolbox.register("population", generate_population, creator_package)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator
