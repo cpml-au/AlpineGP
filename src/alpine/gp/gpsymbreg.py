@@ -132,8 +132,7 @@ class GPSymbRegProblem():
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator
-        self.toolbox.register("select", self.selElitistAndTournament)
-        # self.toolbox.register("select", self.selElitistAndRoulette)
+        self.toolbox.register("select", self.select_with_elitism)
 
     def __overfit_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
@@ -177,7 +176,7 @@ class GPSymbRegProblem():
             # Print statistics for the current population
             print(self.logbook.stream, flush=True)
 
-    def selElitistAndTournament(self, individuals):
+    def select_with_elitism(self, individuals):
         """Performs tournament selection with elitism.
 
             Args:
@@ -188,11 +187,13 @@ class GPSymbRegProblem():
         """
         n_tournament = self.NINDIVIDUALS - self.n_elitist
 
-        if self.parsimony_pressure['enabled']:
-            return tools.selBest(individuals, self.n_elitist) + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
+        bestind = tools.selBest(individuals, self.n_elitist)
 
-        # return tools.selBest(individuals, self.n_elitist) + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
-        return tools.selBest(individuals, self.n_elitist) + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize)
+        if self.parsimony_pressure['enabled']:
+            return bestind + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
+
+        return bestind + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
+        # return tools.selBest(individuals, self.n_elitist) + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize)
 
     def selStochasticTournament(self, individuals, k, tournsize, fit_attr="fitness"):
         """Select the best individual among *tournsize* randomly chosen
@@ -206,6 +207,7 @@ class GPSymbRegProblem():
         This function uses the :func:`~random.choice` function from the python base
         :mod:`random` module.
         """
+        # FIXME: only works with tournsize = 3
         chosen = []
         for i in range(k):
             aspirants = tools.selection.selRandom(individuals, tournsize)
@@ -213,19 +215,6 @@ class GPSymbRegProblem():
             chosen_index = int(np.random.choice(range(3), 1, p=[0.7, 0.2, 0.1]))
             chosen.append(aspirants[chosen_index])
         return chosen
-
-    def selElitistAndRoulette(self, individuals):
-        """Performs roulette selection with elitism.
-
-            Args:
-                individuals: a list of individuals to select from.
-
-            Returns:
-                population after selection.
-        """
-        n_tournament = self.NINDIVIDUALS - self.n_elitist
-
-        return tools.selBest(individuals, self.n_elitist) + tools.selRoulette(individuals, n_tournament)
 
     def run(self,
             plot_history=False,
@@ -289,21 +278,17 @@ class GPSymbRegProblem():
                     self.toolbox.select(self.pop)))
 
             # Apply crossover and mutation to the offspring, except elite individuals
-            offspring = tools.selBest(offspring, self.n_elitist) + algorithms.varOr(
-                offspring, self.toolbox, self.NINDIVIDUALS - self.n_elitist, self.CXPB, self.MUTPB)
-            # elite_ind = tools.selBest(offspring, self.n_elitist)
-            # for _, i in enumerate(elite_ind):
-            #     offspring.remove(i)
-            # offspring = elite_ind + \
-            # algorithms.varOr(offspring, self.toolbox,
-            #  self.NINDIVIDUALS-self.n_elitist, self.CXPB,
-            #  self.MUTPB)
+            elite_ind = tools.selBest(offspring, self.n_elitist)
+            offspring = elite_ind + \
+                algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
+                                 self.n_elitist, self.CXPB, self.MUTPB)
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = self.toolbox.map(
-                self.toolbox.evaluate, make_single_arguments(invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
+            fitnesses = self.toolbox.map(self.toolbox.evaluate, make_single_arguments(
+                invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
+
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
@@ -366,8 +351,6 @@ class GPSymbRegProblem():
                     self.best = best
                 elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
                     m += 1
-
-                # print("best individual: ", str(best))
 
                 self.last_improvement = training_fit
                 print(f"The best of this generation is: {best}")
