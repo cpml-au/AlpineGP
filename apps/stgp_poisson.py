@@ -71,17 +71,17 @@ u_0_vec = 0.01*np.random.rand(num_nodes)
 u_0 = C.CochainP0(S, u_0_vec, type="jax")
 
 
-class ObjFunctional:
+class ObjFunction:
     def __init__(self) -> None:
         pass
 
-    def setEnergyFunc(self, func, individual):
+    def set_energy_func(self, func, individual):
         """Set the energy function to be used for the computation of the objective
         function."""
         self.energy_func = func
         self.individual = individual
 
-    def evalObjFunc(self, vec_x, vec_y, vec_bvalues):
+    def total_energy(self, vec_x, vec_y, vec_bvalues):
         penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
         c = C.CochainP0(S, vec_x, "jax")
         fk = C.CochainP0(S, vec_y, "jax")
@@ -89,40 +89,51 @@ class ObjFunctional:
         return energy
 
 
-def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
+def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
+    """Evaluate total MSE over datasets."""
+
     # transform the individual expression into a callable function
     energy_func = GPproblem.toolbox.compile(expr=individual)
 
     # create objective function and set its energy function
-    obj = ObjFunctional()
-    obj.setEnergyFunc(energy_func, individual)
+    obj = ObjFunction()
+    obj.set_energy_func(energy_func, individual)
 
     # compute/compile jacobian of the objective wrt its first argument (vec_x)
-    jac = jit(grad(obj.evalObjFunc))
+    jac = jit(grad(obj.total_energy))
 
-    result = 0
+    total_err = 0.
 
     # TODO: parallelize using vmap once we can use jaxopt
     for i, vec_y in enumerate(y):
         # extract current bvalues
-        vec_bvalues = current_bvalues[i, :]
+        vec_bvalues = bvalues[i, :]
 
         # minimize the objective
-        x = minimize(fun=obj.evalObjFunc, x0=u_0.coeffs,
+        x = minimize(fun=obj.total_energy, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
         if return_best_sol:
             return x
 
-        current_result = np.linalg.norm(x-X[i, :])**2
+        current_err = np.linalg.norm(x-X[i, :])**2
 
-        if current_result > 100 or math.isnan(current_result):
-            current_result = 100
+        if current_err > 100 or math.isnan(current_err):
+            current_err = 100
 
-        result += current_result
+        total_err += current_err
 
-    result *= 1/(num_sources*num_samples_per_source)
+    total_err *= 1/(num_sources*num_samples_per_source)
+
+    return total_err
+
+
+def eval_fitness(individual, X, y, bvalues):
+    objval = 0.
+
+    total_err = eval_MSE(individual, X, y, bvalues)
     # length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
 
+    # Penatly terms on model complexity
     indstr = str(individual)
     nMulFloat = indstr.count("MulFloat")
     nAddP0 = indstr.count("AddP0")
@@ -130,12 +141,14 @@ def evalPoissonObj(individual, X, y, current_bvalues, return_best_sol=False):
     nMulP1 = indstr.count("MulP1")
     nCob0 = indstr.count("CoboundaryP0")
     nConst = indstr.count("1/2")
-    result += 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
-    # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
-    # result += length_penalty
-    # result += 100*terminal_penalty
 
-    return result,
+    # Total objective value
+    objval = total_err + 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
+    # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
+    # objval += length_penalty
+    # objval += 100*terminal_penalty
+
+    return objval,
 
 
 GPproblem = gps.GPSymbRegProblem(pset,
@@ -163,10 +176,11 @@ GPproblem.toolbox.decorate(
 
 
 def plotSol(ind):
-    u = evalPoissonObj(ind, X=X_train, y=y_train,
-                       current_bvalues=bvalues_train, return_best_sol=True)
+    u = eval_MSE(ind, X=X_train, y=y_train,
+                 bvalues=bvalues_train, return_best_sol=True)
     plt.figure(10)
     fig = plt.gcf()
+    fig.clear()
     plt.tricontourf(triang, u, cmap='RdBu', levels=20)
     plt.triplot(triang, 'ko-')
     plt.colorbar()
@@ -177,8 +191,9 @@ def plotSol(ind):
 # copy GPproblem (needed to have a separate object shared among the processed
 # to be modified in the last run)
 FinalGP = GPproblem
-FinalGP.toolbox.register("evaluate", evalPoissonObj, X=np.vstack((X_train, X_val)),
-                         y=np.vstack((y_train, y_val)), current_bvalues=np.vstack((bvalues_train, bvalues_val)))
+# Register function to evaluate fitness on training + validation combined
+FinalGP.toolbox.register("evaluate", eval_fitness, X=np.vstack((X_train, X_val)),
+                         y=np.vstack((y_train, y_val)), bvalues=np.vstack((bvalues_train, bvalues_val)))
 
 
 def stgp_poisson(config=None):
@@ -221,18 +236,18 @@ def stgp_poisson(config=None):
 
     start = time.perf_counter()
 
-    # add functions for fitness evaluation on training and validation sets to the
-    # toolbox
+    # add functions for fitness evaluation (value of the objective function) on training
+    # set and MSE evaluation on validation set
     GPproblem.toolbox.register("evaluate_train",
-                               evalPoissonObj,
+                               eval_fitness,
                                X=X_train,
                                y=y_train,
-                               current_bvalues=bvalues_train)
+                               bvalues=bvalues_train)
     GPproblem.toolbox.register("evaluate_val",
-                               evalPoissonObj,
+                               eval_MSE,
                                X=X_val,
                                y=y_val,
-                               current_bvalues=bvalues_val)
+                               bvalues=bvalues_val)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
@@ -251,8 +266,8 @@ def stgp_poisson(config=None):
     print(f"The best individual is {str(best)}", flush=True)
 
     # evaluate score on the training and validation set
-    print(f"The best score on the training set is {GPproblem.min_history[-1]}")
-    print(f"The best score on the validation set is {GPproblem.min_valerr}")
+    print(f"The best fitness on the training set is {GPproblem.min_history[-1]}")
+    print(f"The best MSE on the validation set is {GPproblem.min_valerr}")
 
     # FIXME: do I need it?
     best_individuals.append(best)
@@ -280,10 +295,10 @@ def stgp_poisson(config=None):
         print(f"The best individual is {str(best)}", flush=True)
 
         score_train = FinalGP.min_history[-1]
-        print(f"Best score on the training set = {score_train}")
+        print(f"Best fitness on the training set = {score_train}")
 
-    score_test = evalPoissonObj(best, X_test, y_test, bvalues_test)[0]
-    print(f"Best score on the test set = {score_test}")
+    score_test = eval_MSE(best, X_test, y_test, bvalues_test)
+    print(f"The best MSE on the test set is {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 

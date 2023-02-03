@@ -148,7 +148,7 @@ class GPSymbRegProblem():
 
     def __compute_valid_stats(self, overfit_measure=False):
         best = tools.selBest(self.pop, k=1)
-        valid_err = self.toolbox.evaluate_val(best[0])[0]
+        valid_err = self.toolbox.evaluate_val(best[0])
         overfit = 0
         if overfit_measure:
             training_fit = best[0].fitness.values[0]
@@ -261,7 +261,7 @@ class GPSymbRegProblem():
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)[0]
             self.tbtp = best.fitness.values[0]
-            self.bvp = self.toolbox.evaluate_val(best)[0]
+            self.bvp = self.toolbox.evaluate_val(best)
             self.best = best
             self.last_improvement = self.tbtp
             # initialize overfit index m
@@ -337,7 +337,7 @@ class GPSymbRegProblem():
                 plt.pause(0.01)
 
             if plot_best and (plot_best_func
-                              is not None) and cgen % plot_freq == 0:
+                              is not None) and (cgen % plot_freq == 0 or cgen == 1):
                 best = tools.selBest(self.pop, k=1)
                 plot_best_func(best[0])
 

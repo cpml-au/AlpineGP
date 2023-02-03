@@ -1,7 +1,7 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 200
-  NGEN: 50
+  NINDIVIDUALS: 10
+  NGEN: 10
   CXPB: 0.5
   MUTPB: 0.2
   frac_elitist: 0.02
@@ -24,5 +24,5 @@ plot:
   plot_best: False
 
 mp:
-  n_splits: 20
-  n_jobs: 4
+  n_splits: 2
+  n_jobs: 2
