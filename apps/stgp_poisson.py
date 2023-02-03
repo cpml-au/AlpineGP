@@ -143,7 +143,7 @@ def eval_fitness(individual, X, y, bvalues):
     nConst = indstr.count("1/2")
 
     # Total objective value
-    objval = total_err + 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
+    objval = total_err + 0.001*max((nAddP0, nMulFloat, nMulP0, nMulP1, nCob0, nConst))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
@@ -156,6 +156,8 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  NGEN,
                                  CXPB,
                                  MUTPB,
+                                 stochastic_tournament={
+                                     'enabled': True, 'prob': [0.7, 0.3]},
                                  frac_elitist=frac_elitist)
 
 # Register fitness function, selection and mutate operators
@@ -217,6 +219,10 @@ def stgp_poisson(config=None):
         early_stopping = config["gp"]["early_stopping"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         FinalGP.parsimony_pressure = config["gp"]["parsimony_pressure"]
+        GPproblem.tournsize = config["gp"]["select"]["tournsize"]
+        FinalGP.tournsize = config["gp"]["select"]["tournsize"]
+        GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
+        FinalGP.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
         final_training = config["gp"]["final_training"]
         mutate_fun = config["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config["gp"]["mutate"]["kargs"])

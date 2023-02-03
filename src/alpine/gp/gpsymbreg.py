@@ -38,6 +38,7 @@ class GPSymbRegProblem():
                                      'fitness_first': True,
                                      'parsimony_size': 1.5},
                  tournsize=3,
+                 stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  min_=1,
                  max_=2,
                  individualCreator=None,
@@ -62,6 +63,7 @@ class GPSymbRegProblem():
 
         self.parsimony_pressure = parsimony_pressure
         self.tournsize = tournsize
+        self.stochastic_tournament = stochastic_tournament
 
         # Elitism settings
         self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
@@ -192,10 +194,13 @@ class GPSymbRegProblem():
         if self.parsimony_pressure['enabled']:
             return bestind + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
 
-        return bestind + tools.selTournament(individuals, n_tournament, tournsize=self.tournsize)
-        # return tools.selBest(individuals, self.n_elitist) + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize)
+        if self.stochastic_tournament['enabled']:
+            return bestind + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize, prob=self.stochastic_tournament['prob'])
+        else:
+            return bestind + tools.selTournament(individuals, n_tournament,
+                                                 tournsize=self.tournsize)
 
-    def selStochasticTournament(self, individuals, k, tournsize, fit_attr="fitness"):
+    def selStochasticTournament(self, individuals, k, tournsize, prob, fit_attr="fitness"):
         """Select the best individual among *tournsize* randomly chosen
         individuals, *k* times. The list returned contains
         references to the input *individuals*.
@@ -207,12 +212,11 @@ class GPSymbRegProblem():
         This function uses the :func:`~random.choice` function from the python base
         :mod:`random` module.
         """
-        # FIXME: only works with tournsize = 3
         chosen = []
         for i in range(k):
             aspirants = tools.selection.selRandom(individuals, tournsize)
             aspirants.sort(key=attrgetter(fit_attr), reverse=True)
-            chosen_index = int(np.random.choice(range(3), 1, p=[0.7, 0.2, 0.1]))
+            chosen_index = int(np.random.choice(range(tournsize), 1, p=prob))
             chosen.append(aspirants[chosen_index])
         return chosen
 
