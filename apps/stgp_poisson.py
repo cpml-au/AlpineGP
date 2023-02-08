@@ -137,6 +137,7 @@ def eval_fitness(individual, X, y, bvalues):
     indstr = str(individual)
     nMulFloat = indstr.count("MulF")
     nAdd = indstr.count("Add")
+    nSub = indstr.count("Sub")
     nAddP0 = indstr.count("AddP0")
     nAddP1 = indstr.count("AddP1")
     ndelP1 = indstr.count("delP1")
@@ -150,7 +151,7 @@ def eval_fitness(individual, X, y, bvalues):
 
     # Total objective value
     objval = total_err + 0.001*max((nAddP0, nMulFloat, nMulP0, nMulP1,
-                                   nCob0, nConst, nAdd, nAddP1, ndelP1, ndelP2, nInn0, nInn1))
+                                   nCob0, nConst, nAdd, nSub, nAddP1, ndelP1, ndelP2, nInn0, nInn1))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
@@ -166,6 +167,7 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  MUTPB,
                                  stochastic_tournament={
                                      'enabled': True, 'prob': [0.7, 0.3]},
+                                 tournsize=2,
                                  frac_elitist=frac_elitist)
 
 # Register fitness function, selection and mutate operators
