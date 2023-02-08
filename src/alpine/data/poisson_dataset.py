@@ -36,47 +36,52 @@ def generate_complex(filename):
     return S, bnodes, triang
 
 
-def generate_dataset(S, mult, diff, noise):
-    """Generate a dataset for the Poisson problem.
+def generate_dataset(S, num_samples_per_source, num_sources, noise):
+    """Generate a dataset for the Poisson problem Delta u + f = 0, i.e. collection of
+    pairs source term - solution vectors.
 
     Args:
         S (SimplicialComplex): simplicial complex where the functions of the dataset
         are defined.
-        mult (int): the multiplicity of every class (for now 3) of functions of the
-        dataset.
-        diff (int): integer (from 1 to 3) that expresses the number of classes of
+        num_samples_per_source (int): the multiplicity of every class (for now 3) of
+        functions of the dataset.
+        num_sources (int): number of types (1-3) of functions used to represent the
+        source term.
         different functions in the dataset.
-        noise (np.array): noise to perturb data
+        noise (np.array): noise to perturb the solution vector.
 
     Returns:
-        (np.array): np.array of the dataset samples.
-        (np.array): np.array of the labels.
+        np.array: np.array of the dataset samples.
+        np.array: np.array of the labels.
     """
     node_coords = S.node_coord
     num_nodes = S.num_nodes
-    data_X = np.empty((diff*mult, num_nodes))
-    data_y = np.empty((diff*mult, num_nodes))
-    for i in range(mult):
-        if diff >= 1:
+    # source term data
+    data_X = np.empty((num_sources*num_samples_per_source, num_nodes))
+    # solution data
+    data_y = np.empty((num_sources*num_samples_per_source, num_nodes))
+
+    for i in range(num_samples_per_source):
+        if num_sources >= 1:
             # ith quadratic function
-            q_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
-            rhs_qi = (4/(i+1)**2) * np.ones(num_nodes)
-            data_X[diff*i, :] = q_i + noise
-            data_y[diff*i, :] = rhs_qi
+            u_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
+            f_i = -(4/(i+1)**2) * np.ones(num_nodes)
+            data_X[num_sources*i, :] = u_i + noise
+            data_y[num_sources*i, :] = f_i
 
-        if diff >= 2:
+        if num_sources >= 2:
             # ith exponential function
-            trig_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
-            rhs_trigi = -i**2 * trig_i
-            data_X[diff*i+1, :] = trig_i + noise
-            data_y[diff*i+1, :] = rhs_trigi
+            u_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
+            f_i = i**2 * u_i
+            data_X[num_sources*i+1, :] = u_i + noise
+            data_y[num_sources*i+1, :] = f_i
 
-        if diff >= 3:
+        if num_sources >= 3:
             # ith power function
-            p_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
-            rhs_pi = (i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
-            data_X[diff*i+2, :] = p_i + noise
-            data_y[diff*i+2, :] = rhs_pi
+            u_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
+            f_i = -(i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
+            data_X[num_sources*i+2, :] = u_i + noise
+            data_y[num_sources*i+2, :] = f_i
 
     return data_X, data_y
 
