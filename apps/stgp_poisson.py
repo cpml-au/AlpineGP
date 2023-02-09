@@ -140,6 +140,8 @@ def eval_fitness(individual, X, y, bvalues):
     nSub = indstr.count("Sub")
     nAddP0 = indstr.count("AddP0")
     nAddP1 = indstr.count("AddP1")
+    nSubP0 = indstr.count("SubP0")
+    nSubP1 = indstr.count("SubP1")
     ndelP1 = indstr.count("delP1")
     ndelP2 = indstr.count("delP2")
     nMulP0 = indstr.count("MulP0")
@@ -150,14 +152,13 @@ def eval_fitness(individual, X, y, bvalues):
     nInn1 = indstr.count("Inn1")
 
     # Total objective value
-    objval = total_err + 0.001*max((nAddP0, nMulFloat, nMulP0, nMulP1,
-                                   nCob0, nConst, nAdd, nSub, nAddP1, ndelP1, ndelP2, nInn0, nInn1))
+    objval = total_err + 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1,
+                                 nCob0, nConst, nAdd, nSub, nAddP1, nSubP0, nSubP1, ndelP1, ndelP2, nInn0, nInn1))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
 
     return objval,
-
 
 # FIXME: maybe pass fitness function among parameters
 GPproblem = gps.GPSymbRegProblem(pset,

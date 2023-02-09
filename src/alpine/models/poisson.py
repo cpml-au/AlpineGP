@@ -25,6 +25,8 @@ pset.addPrimitive(protectedDiv, [float, float], float, name="Div")
 # cochain operations
 pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")
 pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1, name="AddP1")
+pset.addPrimitive(C.sub, [C.CochainP0, C.CochainP0], C.CochainP0, name="SubP0")
+# pset.addPrimitive(C.sub, [C.CochainP1, C.CochainP1], C.CochainP1, name="SubP1")
 
 pset.addPrimitive(C.coboundary, [C.CochainP0], C.CochainP1, name="dP0")
 pset.addPrimitive(C.coboundary, [C.CochainP1], C.CochainP2, name="dP1")
