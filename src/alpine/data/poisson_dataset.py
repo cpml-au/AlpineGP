@@ -21,7 +21,7 @@ def generate_complex(filename):
     """
     # full_path = os.path.join(cwd, filename)
     # _, _, S_2, node_coords = util.read_mesh(full_path)
-    _, _, S_2, node_coords = util.generate_mesh(0.08)
+    _, _, S_2, node_coords = util.generate_square_mesh(0.08)
 
     triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
     S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
