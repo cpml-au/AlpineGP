@@ -129,8 +129,10 @@ class GPSymbRegProblem():
                               max_=max_)
         self.toolbox.register("individual", tools.initIterate,
                               self.createIndividual, self.toolbox.expr)
-        creator_package = (self.createIndividual, self.toolbox.expr)
-        self.toolbox.register("population", generate_population, creator_package)
+        # creator_package = (self.createIndividual, self.toolbox.expr)
+        # self.toolbox.register("population", generate_population, creator_package)
+        self.toolbox.register("population", tools.initRepeat,
+                              list, self.toolbox.individual)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator

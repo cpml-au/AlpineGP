@@ -25,8 +25,11 @@ pset.addPrimitive(protectedDiv, [float, float], float, name="Div")
 # cochain operations
 pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")
 pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1, name="AddP1")
+pset.addPrimitive(C.add, [C.CochainP2, C.CochainP2], C.CochainP2, name="AddP2")
 pset.addPrimitive(C.sub, [C.CochainP0, C.CochainP0], C.CochainP0, name="SubP0")
 pset.addPrimitive(C.sub, [C.CochainP1, C.CochainP1], C.CochainP1, name="SubP1")
+pset.addPrimitive(C.sub, [C.CochainP2, C.CochainP2], C.CochainP2, name="SubP1")
+
 
 pset.addPrimitive(C.coboundary, [C.CochainP0], C.CochainP1, name="dP0")
 pset.addPrimitive(C.coboundary, [C.CochainP1], C.CochainP2, name="dP1")
@@ -38,6 +41,9 @@ pset.addPrimitive(C.codifferential, [C.CochainP2], C.CochainP1, name="delP2")
 pset.addPrimitive(C.star, [C.CochainP0], C.CochainD2, name="St0")
 pset.addPrimitive(C.star, [C.CochainP1], C.CochainD1, name="St1")
 pset.addPrimitive(C.star, [C.CochainP2], C.CochainD0, name="St2")
+pset.addPrimitive(C.star, [C.CochainD0], C.CochainP2, name="InvSt0")
+pset.addPrimitive(C.star, [C.CochainD1], C.CochainP1, name="InvSt1")
+pset.addPrimitive(C.star, [C.CochainD2], C.CochainP0, name="InvSt2")
 
 pset.addPrimitive(C.scalar_mul, [C.CochainP0, float], C.CochainP0, "MulP0")
 pset.addPrimitive(C.scalar_mul, [C.CochainP1, float], C.CochainP1, "MulP1")
