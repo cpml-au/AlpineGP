@@ -138,27 +138,49 @@ def eval_fitness(individual, X, y, bvalues):
     nMulFloat = indstr.count("MulF")
     nAdd = indstr.count("Add")
     nSub = indstr.count("Sub")
+    nDiv = indstr.count("Div")
     nAddP0 = indstr.count("AddP0")
     nAddP1 = indstr.count("AddP1")
+    nAddP2 = indstr.count("AddP2")
     nSubP0 = indstr.count("SubP0")
     nSubP1 = indstr.count("SubP1")
+    nSubP2 = indstr.count("SubP2")
     ndelP1 = indstr.count("delP1")
     ndelP2 = indstr.count("delP2")
     nMulP0 = indstr.count("MulP0")
     nMulP1 = indstr.count("MulP1")
+    nMulP2 = indstr.count("MulP2")
+    nMulD0 = indstr.count("MulD0")
+    nMulD1 = indstr.count("MulD1")
+    nMulD2 = indstr.count("MulD2")
     nCob0 = indstr.count("dP0")
+    nCob1 = indstr.count("dP1")
+    nCob0D = indstr.count("dD0")
+    nCob1D = indstr.count("dD1")
+    nStar0 = indstr.count("St0")
+    nStar1 = indstr.count("St1")
+    nStar2 = indstr.count("St2")
+    nInvStar0 = indstr.count("InvSt0")
+    nInvStar1 = indstr.count("InvSt1")
+    nInvStar2 = indstr.count("InvSt2")
     nConst = indstr.count("1/2")
     nInn0 = indstr.count("Inn0")
     nInn1 = indstr.count("Inn1")
+    nInn2 = indstr.count("Inn2")
 
     # Total objective value
     objval = total_err + 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1,
-                                 nCob0, nConst, nAdd, nSub, nAddP1, nSubP0, nSubP1, ndelP1, ndelP2, nInn0, nInn1))
+                                 nCob0, nConst, nAdd, nSub, nAddP1, nSubP0, nSubP1,
+                                 ndelP1, ndelP2, nInn0, nInn1, nDiv, nAddP2, nSubP2,
+                                 nMulP2, nMulD0, nMulD1, nMulD2, nCob1, nCob0D, nCob1D,
+                                 nStar0, nStar1, nStar2, nInvStar0, nInvStar1,
+                                 nInvStar2, nInn2))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
 
     return objval,
+
 
 # FIXME: maybe pass fitness function among parameters
 GPproblem = gps.GPSymbRegProblem(pset,
