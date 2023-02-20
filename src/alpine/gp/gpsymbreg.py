@@ -106,7 +106,7 @@ class GPSymbRegProblem():
         # Headers of fields to be printed during log
         if overfit_measure:
             self.logbook.header = "gen", "evals", "fitness", "size", "valid"
-            self.logbook.chapters["valid"].header = "overfit", "err_fit", "err_MSE"
+            self.logbook.chapters["valid"].header = "overfit", "valid_fit", "valid_err"
         else:
             self.logbook.header = "gen", "evals", "fitness", "size", "valerr"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
@@ -174,8 +174,8 @@ class GPSymbRegProblem():
         # Record the statistics in the logbook
         if overfit_measure:
             record["valid"] = {"overfit": overfit,
-                               "err_fit": valid_fit,
-                               "err_MSE": valid_err}
+                               "valid_fit": valid_fit,
+                               "valid_err": valid_err}
             self.logbook.record(gen=gen, evals=evals, **record)
         else:
             self.logbook.record(gen=gen, evals=evals, valerr=valid_err, **record)
@@ -329,7 +329,8 @@ class GPSymbRegProblem():
             # Add records of best fitness and validation error to the history
             self.min_history = self.logbook.chapters["fitness"].select("min")
             if early_stopping['enabled']:
-                self.min_valerr = min(self.logbook.chapters["valid"].select("err_fit"))
+                self.min_valerr = min(
+                    self.logbook.chapters["valid"].select("valid_fit"))
             else:
                 self.min_valerr = min(self.logbook.select("valerr"))
 
