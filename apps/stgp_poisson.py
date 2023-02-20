@@ -265,6 +265,7 @@ def stgp_poisson(config=None):
         mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
         expr_mut_fun = config["gp"]["mutate"]["expr_mut"]
         expr_mut_kargs = eval(config["gp"]["mutate"]["expr_mut_kargs"])
+        noise_param = config["data"]["noise_param"]
         GPproblem.toolbox.register("mutate",
                                    eval(mutate_fun), **mutate_kargs)
         FinalGP.toolbox.register("mutate",
@@ -278,6 +279,19 @@ def stgp_poisson(config=None):
             "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
     start = time.perf_counter()
+
+    # load dataset
+    noise = noise_param*np.random.rand(num_nodes)
+    data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
+    X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
+
+    X_train, X_val, X_test = X
+    y_train, y_val,  y_test = y
+    # extract boundary values for the test set
+    bvalues_test = X_test[:, bnodes]
+    # extract bvalues_train
+    bvalues_train = X_train[:, bnodes]
+    bvalues_val = X_val[:, bnodes]
 
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
