@@ -29,3 +29,4 @@ plot:
 mp:
   n_splits: 20
   n_jobs: 4
+  start_method: "fork"

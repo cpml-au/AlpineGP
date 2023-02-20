@@ -228,7 +228,8 @@ def plotSol(ind):
 FinalGP = GPproblem
 # Register function to evaluate fitness on training + validation combined
 FinalGP.toolbox.register("evaluate", eval_fitness, X=np.vstack((X_train, X_val)),
-                         y=np.vstack((y_train, y_val)), bvalues=np.vstack((bvalues_train, bvalues_val)))
+                         y=np.vstack((y_train, y_val)), bvalues=np.vstack
+                         ((bvalues_train, bvalues_val)))
 
 
 def stgp_poisson(config=None):
@@ -243,18 +244,21 @@ def stgp_poisson(config=None):
     # multiprocessing parameters
     n_jobs = 4
     n_splits = 20
+    start_method = "fork"
 
     if config is not None:
         GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
         GPproblem.NGEN = config["gp"]["NGEN"]
         n_jobs = config["mp"]["n_jobs"]
         n_splits = config["mp"]["n_splits"]
+        start_method = config["mp"]["start_method"]
         early_stopping = config["gp"]["early_stopping"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         FinalGP.parsimony_pressure = config["gp"]["parsimony_pressure"]
         GPproblem.tournsize = config["gp"]["select"]["tournsize"]
         FinalGP.tournsize = config["gp"]["select"]["tournsize"]
-        GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
+        GPproblem.stochastic_tournament = config["gp"]["select"]
+        ["stochastic_tournament"]
         FinalGP.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
         final_training = config["gp"]["final_training"]
         mutate_fun = config["gp"]["mutate"]["fun"]
@@ -282,7 +286,12 @@ def stgp_poisson(config=None):
                                X=X_train,
                                y=y_train,
                                bvalues=bvalues_train)
-    GPproblem.toolbox.register("evaluate_val",
+    GPproblem.toolbox.register("evaluate_val_fit",
+                               eval_fitness,
+                               X=X_val,
+                               y=y_val,
+                               bvalues=bvalues_val)
+    GPproblem.toolbox.register("evaluate_val_MSE",
                                eval_MSE,
                                X=X_val,
                                y=y_val,
@@ -290,7 +299,7 @@ def stgp_poisson(config=None):
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
-    pool = mpire.WorkerPool(n_jobs=n_jobs)
+    pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
                   print_log=True,

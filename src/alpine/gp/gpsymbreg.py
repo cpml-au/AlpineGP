@@ -106,7 +106,7 @@ class GPSymbRegProblem():
         # Headers of fields to be printed during log
         if overfit_measure:
             self.logbook.header = "gen", "evals", "fitness", "size", "valid"
-            self.logbook.chapters["valid"].header = "overfit", "err"
+            self.logbook.chapters["valid"].header = "overfit", "err_fit", "err_MSE"
         else:
             self.logbook.header = "gen", "evals", "fitness", "size", "valerr"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
@@ -152,29 +152,33 @@ class GPSymbRegProblem():
 
     def __compute_valid_stats(self, overfit_measure=False):
         best = tools.selBest(self.pop, k=1)
-        valid_err = self.toolbox.evaluate_val(best[0])
+        valid_err_fit = self.toolbox.evaluate_val_fit(best[0])[0]
+        valid_err_MSE = self.toolbox.evaluate_val_MSE(best[0])
         overfit = 0
         if overfit_measure:
             training_fit = best[0].fitness.values[0]
-            overfit = self.__overfit_measure(training_fit, valid_err)
-        return overfit, valid_err
+            overfit = self.__overfit_measure(training_fit, valid_err_fit)
+        return overfit, valid_err_fit, valid_err_MSE
 
-    def compute_statistics(self, pop, gen, evals, overfit_measure=False, print_log=False):
+    def compute_statistics(self, pop, gen, evals, overfit_measure=False,
+                           print_log=False):
         """Computes and prints statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
 
         # Compute satistics related to the validation set
-        overfit, valid_err = self.__compute_valid_stats(overfit_measure)
+        overfit, valid_err_fit, valid_err_MSE = self.__compute_valid_stats(
+            overfit_measure)
 
         # Record the statistics in the logbook
         if overfit_measure:
             record["valid"] = {"overfit": overfit,
-                               "err": valid_err}
+                               "err_fit": valid_err_fit,
+                               "err_MSE": valid_err_MSE}
             self.logbook.record(gen=gen, evals=evals, **record)
         else:
-            self.logbook.record(gen=gen, evals=evals, valerr=valid_err, **record)
+            self.logbook.record(gen=gen, evals=evals, valerr=valid_err_MSE, **record)
 
         if print_log:
             # Print statistics for the current population
@@ -194,15 +198,26 @@ class GPSymbRegProblem():
         bestind = tools.selBest(individuals, self.n_elitist)
 
         if self.parsimony_pressure['enabled']:
-            return bestind + tools.selDoubleTournament(individuals, n_tournament, fitness_size=n_tournament, fitness_first=self.parsimony_pressure['fitness_first'], parsimony_size=self.parsimony_pressure['parsimony_size'])
+            return bestind + tools.selDoubleTournament(individuals, n_tournament,
+                                                       fitness_size=n_tournament,
+                                                       fitness_first=self.
+                                                       parsimony_pressure
+                                                       ['fitness_first'],
+                                                       parsimony_size=self.
+                                                       parsimony_pressure
+                                                       ['parsimony_size'])
 
         if self.stochastic_tournament['enabled']:
-            return bestind + self.selStochasticTournament(individuals, n_tournament, tournsize=self.tournsize, prob=self.stochastic_tournament['prob'])
+            return bestind + self.selStochasticTournament(individuals, n_tournament,
+                                                          tournsize=self.tournsize,
+                                                          prob=self.
+                                                          stochastic_tournament['prob'])
         else:
             return bestind + tools.selTournament(individuals, n_tournament,
                                                  tournsize=self.tournsize)
 
-    def selStochasticTournament(self, individuals, k, tournsize, prob, fit_attr="fitness"):
+    def selStochasticTournament(self, individuals, k, tournsize, prob,
+                                fit_attr="fitness"):
         """Select the best individual among *tournsize* randomly chosen
         individuals, *k* times. The list returned contains
         references to the input *individuals*.
@@ -215,7 +230,7 @@ class GPSymbRegProblem():
         :mod:`random` module.
         """
         chosen = []
-        for i in range(k):
+        for _ in range(k):
             aspirants = tools.selection.selRandom(individuals, tournsize)
             aspirants.sort(key=attrgetter(fit_attr), reverse=True)
             chosen_index = int(np.random.choice(range(tournsize), 1, p=prob))
@@ -267,7 +282,7 @@ class GPSymbRegProblem():
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)[0]
             self.tbtp = best.fitness.values[0]
-            self.bvp = self.toolbox.evaluate_val(best)
+            self.bvp = self.toolbox.evaluate_val_fit(best)[0]
             self.best = best
             self.last_improvement = self.tbtp
             # initialize overfit index m
@@ -314,7 +329,7 @@ class GPSymbRegProblem():
             # Add records of best fitness and validation error to the history
             self.min_history = self.logbook.chapters["fitness"].select("min")
             if early_stopping['enabled']:
-                self.min_valerr = min(self.logbook.chapters["valid"].select("err"))
+                self.min_valerr = min(self.logbook.chapters["valid"].select("err_fit"))
             else:
                 self.min_valerr = min(self.logbook.select("valerr"))
 
@@ -355,7 +370,8 @@ class GPSymbRegProblem():
                     m = 0
                     self.last_gen_no_overfit = cgen
                     self.best = best
-                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement - training_fit) >= 1e-1:
+                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement -
+                                                       training_fit) >= 1e-1:
                     m += 1
 
                 self.last_improvement = training_fit
