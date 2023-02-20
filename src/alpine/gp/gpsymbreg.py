@@ -152,13 +152,13 @@ class GPSymbRegProblem():
 
     def __compute_valid_stats(self, overfit_measure=False):
         best = tools.selBest(self.pop, k=1)
-        valid_err_fit = self.toolbox.evaluate_val_fit(best[0])[0]
-        valid_err_MSE = self.toolbox.evaluate_val_MSE(best[0])
+        valid_fit = self.toolbox.evaluate_val_fit(best[0])[0]
+        valid_err = self.toolbox.evaluate_val_MSE(best[0])
         overfit = 0
         if overfit_measure:
             training_fit = best[0].fitness.values[0]
-            overfit = self.__overfit_measure(training_fit, valid_err_fit)
-        return overfit, valid_err_fit, valid_err_MSE
+            overfit = self.__overfit_measure(training_fit, valid_fit)
+        return overfit, valid_fit, valid_err
 
     def compute_statistics(self, pop, gen, evals, overfit_measure=False,
                            print_log=False):
@@ -168,17 +168,17 @@ class GPSymbRegProblem():
         record = self.mstats.compile(pop)
 
         # Compute satistics related to the validation set
-        overfit, valid_err_fit, valid_err_MSE = self.__compute_valid_stats(
+        overfit, valid_fit, valid_err = self.__compute_valid_stats(
             overfit_measure)
 
         # Record the statistics in the logbook
         if overfit_measure:
             record["valid"] = {"overfit": overfit,
-                               "err_fit": valid_err_fit,
-                               "err_MSE": valid_err_MSE}
+                               "err_fit": valid_fit,
+                               "err_MSE": valid_err}
             self.logbook.record(gen=gen, evals=evals, **record)
         else:
-            self.logbook.record(gen=gen, evals=evals, valerr=valid_err_MSE, **record)
+            self.logbook.record(gen=gen, evals=evals, valerr=valid_err, **record)
 
         if print_log:
             # Print statistics for the current population
