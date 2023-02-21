@@ -1,7 +1,8 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import jax.config as config
-from deap import gp, tools
+from deap import gp
+import dctkit
 from dctkit.dec import cochain as C
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
@@ -20,8 +21,7 @@ import sys
 import yaml
 
 # choose whether to use GPU or CPU and precision
-config.update("jax_platform_name", "cpu")
-config.update("jax_enable_x64", True)
+dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64)
 
 # suppress warnings
 warnings.filterwarnings('ignore')
@@ -193,6 +193,7 @@ GPproblem = gps.GPSymbRegProblem(pset,
                                  tournsize=2,
                                  frac_elitist=frac_elitist)
 
+
 # Register fitness function, selection and mutate operators
 GPproblem.toolbox.register("mate", gp.cxOnePoint)
 GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
@@ -223,23 +224,12 @@ def plotSol(ind):
     plt.pause(0.05)
 
 
-# copy GPproblem (needed to have a separate object shared among the processed
-# to be modified in the last run)
-FinalGP = GPproblem
-# Register function to evaluate fitness on training + validation combined
-FinalGP.toolbox.register("evaluate", eval_fitness, X=np.vstack((X_train, X_val)),
-                         y=np.vstack((y_train, y_val)), bvalues=np.vstack
-                         ((bvalues_train, bvalues_val)))
-
-
 def stgp_poisson(config=None):
-    # initialize list of best individuals
-    best_individuals = []
 
     early_stopping = {'enabled': True, 'max_overfit': 3}
-    final_training = True
 
     plot_best = True
+    plot_best_genealogy = False
 
     # multiprocessing parameters
     n_jobs = 4
@@ -254,25 +244,18 @@ def stgp_poisson(config=None):
         start_method = config["mp"]["start_method"]
         early_stopping = config["gp"]["early_stopping"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
-        FinalGP.parsimony_pressure = config["gp"]["parsimony_pressure"]
         GPproblem.tournsize = config["gp"]["select"]["tournsize"]
-        FinalGP.tournsize = config["gp"]["select"]["tournsize"]
-        GPproblem.stochastic_tournament = config["gp"]["select"]
-        ["stochastic_tournament"]
-        FinalGP.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
-        final_training = config["gp"]["final_training"]
+        GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
         mutate_fun = config["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
         expr_mut_fun = config["gp"]["mutate"]["expr_mut"]
         expr_mut_kargs = eval(config["gp"]["mutate"]["expr_mut_kargs"])
-        noise_param = config["data"]["noise_param"]
+        noise_param = config["dataset"]["noise_param"]
         GPproblem.toolbox.register("mutate",
                                    eval(mutate_fun), **mutate_kargs)
-        FinalGP.toolbox.register("mutate",
-                                 eval(mutate_fun), **mutate_kargs)
         GPproblem.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-        FinalGP.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
         plot_best = config["plot"]["plot_best"]
+        plot_best_genealogy = config["plot"]["plot_best_genealogy"]
         GPproblem.toolbox.decorate(
             "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
         GPproblem.toolbox.decorate(
@@ -319,6 +302,7 @@ def stgp_poisson(config=None):
                   print_log=True,
                   plot_best=plot_best,
                   plot_best_func=plotSol,
+                  plot_best_genealogy=plot_best_genealogy,
                   seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping)
@@ -328,36 +312,10 @@ def stgp_poisson(config=None):
     print(f"The best individual is {str(best)}", flush=True)
 
     # evaluate score on the training and validation set
-    print(f"The best fitness on the training set is {GPproblem.min_history[-1]}")
+    print(f"The best fitness on the training set is {GPproblem.min_fit_history[-1]}")
     print(f"The best MSE on the validation set is {GPproblem.min_valerr}")
 
-    # FIXME: do I need it?
-    best_individuals.append(best)
-    # best_train_scores.append(score_train)
-    # best_val_scores.append(score_train)
-
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
-
-    if final_training:
-        print("> FINAL TRAINING STARTED", flush=True)
-
-        # update FinalGP.NGEN according to early stopping
-        FinalGP.NGEN = GPproblem.NGEN
-
-        # now we retrain the best model on the entire training set
-        FinalGP.toolbox.register("map", pool.map)
-        FinalGP.run(plot_history=True,
-                    print_log=True,
-                    plot_best=plot_best,
-                    n_splits=n_splits,
-                    seed=best_individuals)
-
-        pool.terminate()
-        best = tools.selBest(FinalGP.pop, k=1)[0]
-        print(f"The best individual is {str(best)}", flush=True)
-
-        score_train = FinalGP.min_history[-1]
-        print(f"Best fitness on the training set = {score_train}")
 
     score_test = eval_MSE(best, X_test, y_test, bvalues_test)
     print(f"The best MSE on the test set is {score_test}")
@@ -369,7 +327,6 @@ def stgp_poisson(config=None):
     graph = nx.Graph()
     graph.add_nodes_from(nodes)
     graph.add_edges_from(edges)
-    # pos = graphviz_layout(graph, prog='dot')
     pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
 
     plt.figure(figsize=(7, 7))

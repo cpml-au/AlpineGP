@@ -5,27 +5,6 @@ import numpy as np
 from mpire.utils import make_single_arguments
 
 
-def generate_population(creator_package, n):
-    # FIXME: ADD DOCUMENTATION
-    pop = []
-    terminal_and_length_check = False
-    createIndiv, expr = creator_package
-    for _ in range(n):
-        while not terminal_and_length_check:
-            individual = tools.initIterate(createIndiv, expr)
-            length = len(individual)
-            # check that the individual has both terminals
-            # if ("u0" in str(individual)) and ("u1" in str(individual)):
-            # check that the individual has the right length
-            if length <= 15:
-                terminal_and_length_check = True
-        pop.append(individual)
-        # redefine terminal_and_length_check to enter again in the while
-        terminal_and_length_check = False
-        # print(i)
-    return pop
-
-
 class GPSymbRegProblem():
     def __init__(self,
                  pset,
@@ -52,7 +31,7 @@ class GPSymbRegProblem():
         self.pset = pset
         self.NINDIVIDUALS = NINDIVIDUALS
         self.NGEN = NGEN
-        self.min_history = []
+        self.min_fit_history = []
         self.CXPB = CXPB
         self.MUTPB = MUTPB
         self.pop = None
@@ -243,6 +222,7 @@ class GPSymbRegProblem():
             plot_best=False,
             plot_best_func=None,
             plot_freq=5,
+            plot_best_genealogy=False,
             seed=None,
             n_splits=10,
             early_stopping={'enabled': False, 'max_overfit': 0}):
@@ -251,14 +231,18 @@ class GPSymbRegProblem():
             Args:
                 seed: list of individuals to seed in the initial population.
         """
+        if plot_best_genealogy:
+            # Decorators for history
+            self.toolbox.decorate("mate", self.history.decorator)
+            self.toolbox.decorate("mutate", self.history.decorator)
 
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
 
-        # Populate the history and the Hall Of Fame
-        # self.history.update(self.pop)
-        # self.halloffame.update(self.pop)
+        if plot_best_genealogy:
+            # Populate the history and the Hall Of Fame
+            self.history.update(self.pop)
 
         # Initialize logbook for statistics
         self.__init_logbook(overfit_measure=early_stopping['enabled'])
@@ -269,9 +253,9 @@ class GPSymbRegProblem():
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
-        # Evaluate the entire population
+        # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population...", flush=True)
-        fitnesses = list(self.toolbox.map(self.toolbox.evaluate, make_single_arguments(
+        fitnesses = list(self.toolbox.map(self.toolbox.evaluate_train, make_single_arguments(
             self.pop), iterable_len=self.NINDIVIDUALS, n_splits=n_splits))
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
@@ -282,6 +266,7 @@ class GPSymbRegProblem():
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)[0]
             self.tbtp = best.fitness.values[0]
+            # Evaluate fitness on the validation set
             self.bvp = self.toolbox.evaluate_val_fit(best)[0]
             self.best = best
             self.last_improvement = self.tbtp
@@ -307,7 +292,7 @@ class GPSymbRegProblem():
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = self.toolbox.map(self.toolbox.evaluate, make_single_arguments(
+            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, make_single_arguments(
                 invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
 
             for ind, fit in zip(invalid_ind, fitnesses):
@@ -316,8 +301,8 @@ class GPSymbRegProblem():
             # The population is entirely replaced by the offspring
             self.pop[:] = offspring
 
-            # Update Hall Of Fame
-            # self.halloffame.update(self.pop)
+            # Select the best individual in the current population
+            best = tools.selBest(self.pop, k=1)[0]
 
             # Compute population statistics
             self.compute_statistics(self.pop,
@@ -326,8 +311,8 @@ class GPSymbRegProblem():
                                     overfit_measure=early_stopping['enabled'],
                                     print_log=print_log)
 
-            # Add records of best fitness and validation error to the history
-            self.min_history = self.logbook.chapters["fitness"].select("min")
+            # Update history of best fitness and best validation error
+            self.min_fit_history = self.logbook.chapters["fitness"].select("min")
             if early_stopping['enabled']:
                 self.min_valerr = min(
                     self.logbook.chapters["valid"].select("valid_fit"))
@@ -346,8 +331,8 @@ class GPSymbRegProblem():
                 fig = plt.gcf()
 
                 # Array of generations starts from 1
-                x = range(1, len(self.min_history) + 1)
-                plt.plot(x, self.min_history, 'b')
+                x = range(1, len(self.min_fit_history) + 1)
+                plt.plot(x, self.min_fit_history, 'b')
                 # Plotting mean results often in very large numbers
                 # plt.plot(self.mean_history, 'r')
                 # plt.yscale('log')
@@ -364,8 +349,8 @@ class GPSymbRegProblem():
                 plot_best_func(best[0])
 
             if early_stopping['enabled']:
-                best = tools.selBest(self.pop, k=1)[0]
                 training_fit = best.fitness.values[0]
+                # Retrieve last overtfit value
                 overfit = self.logbook.chapters["valid"].select("overfit")[-1]
                 if overfit == 0:
                     m = 0
@@ -387,3 +372,24 @@ class GPSymbRegProblem():
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
+
+        if plot_best_genealogy:
+            # Get genealogy of best individual
+            import networkx
+            gen_best = self.history.getGenealogy(best)
+            graph = networkx.DiGraph(gen_best)
+            graph = graph.reverse()
+            pos = networkx.nx_agraph.graphviz_layout(
+                graph, prog="dot", args="-Gsplines=True")
+            # Retrieve individual strings for graph node labels
+            labels = gen_best.copy()
+            for key in labels.keys():
+                labels[key] = str(self.history.genealogy_history[key])
+            plt.figure()
+            networkx.draw_networkx(graph, pos=pos)
+            label_options = {"ec": "k", "fc": "lightblue", "alpha": 1.0}
+            networkx.draw_networkx_labels(
+                graph, pos=pos, labels=labels, font_size=10, bbox=label_options)
+
+            # Save genealogy to file
+            # networkx.nx_agraph.write_dot(graph, "genealogy.dot")

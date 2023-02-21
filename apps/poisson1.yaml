@@ -1,7 +1,7 @@
 # template for Poisson parameters file
 gp:
   NINDIVIDUALS: 200
-  NGEN: 50
+  NGEN: 5
   CXPB: 0.5
   MUTPB: 0.2
   frac_elitist: 0.02
@@ -10,7 +10,7 @@ gp:
   final_training: False
   select:
     tournsize: 2
-    stochastic_tournament: {'enabled': True, 'prob': [0.7, 0.3]}
+    stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
   mutate:
     fun: gp.mutUniform
     # fun: gp.mutNodeReplacement
@@ -25,11 +25,12 @@ gp:
 
 plot:
   plot_best: False
+  plot_best_genealogy: True
 
 mp:
   n_splits: 20
   n_jobs: 4
   start_method: "fork"
 
-data:
+dataset:
   noise_param: 0.
