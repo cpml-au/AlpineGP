@@ -337,8 +337,7 @@ def stgp_poisson(config=None):
                                eval_MSE,
                                X=X_val,
                                y=y_val,
-                               bvalues=bvalues_val,
-                               reg_param=reg_param)
+                               bvalues=bvalues_val)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
