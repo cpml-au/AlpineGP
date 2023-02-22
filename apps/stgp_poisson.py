@@ -127,7 +127,7 @@ def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
     return total_err
 
 
-def eval_fitness(individual, X, y, bvalues):
+def eval_fitness(individual, X, y, bvalues, reg_param):
     objval = 0.
 
     total_err = eval_MSE(individual, X, y, bvalues)
@@ -167,14 +167,55 @@ def eval_fitness(individual, X, y, bvalues):
     nInn0 = indstr.count("Inn0")
     nInn1 = indstr.count("Inn1")
     nInn2 = indstr.count("Inn2")
+    nsinF = indstr.count("SinF")
+    ncosF = indstr.count("CosF")
+    nexpF = indstr.count("ExpF")
+    nlogF = indstr.count("LogF")
+    nsqrtF = indstr.count("SqrtF")
+    nSinP0 = indstr.count("SinP0")
+    nSinP1 = indstr.count("SinP1")
+    nSinP2 = indstr.count("SinP2")
+    nSinD0 = indstr.count("SinD0")
+    nSinD1 = indstr.count("SinD1")
+    nSinD2 = indstr.count("SinD2")
+    nCosP0 = indstr.count("CosP0")
+    nCosP1 = indstr.count("CosP1")
+    nCosP2 = indstr.count("CosP2")
+    nCosD0 = indstr.count("CosD0")
+    nCosD1 = indstr.count("CosD1")
+    nCosD2 = indstr.count("CosD2")
+    nExpP0 = indstr.count("ExpP0")
+    nExpP1 = indstr.count("ExpP1")
+    nExpP2 = indstr.count("ExpP2")
+    nExpD0 = indstr.count("ExpD0")
+    nExpD1 = indstr.count("ExpD1")
+    nExpD2 = indstr.count("ExpD2")
+    nLogP0 = indstr.count("LogP0")
+    nLogP1 = indstr.count("LogP1")
+    nLogP2 = indstr.count("LogP2")
+    nLogD0 = indstr.count("LogD0")
+    nLogD1 = indstr.count("LogD1")
+    nLogD2 = indstr.count("LogD2")
+    nSqrtP0 = indstr.count("SqrtP0")
+    nSqrtP1 = indstr.count("SqrtP1")
+    nSqrtP2 = indstr.count("SqrtP2")
+    nSqrtD0 = indstr.count("SqrtD0")
+    nSqrtD1 = indstr.count("SqrtD1")
+    nSqrtD2 = indstr.count("SqrtD2")
 
     # Total objective value
-    objval = total_err + 0.1*max((nAddP0, nMulFloat, nMulP0, nMulP1,
-                                 nCob0, nConst, nAdd, nSub, nAddP1, nSubP0, nSubP1,
-                                 ndelP1, ndelP2, nInn0, nInn1, nDiv, nAddP2, nSubP2,
-                                 nMulP2, nMulD0, nMulD1, nMulD2, nCob1, nCob0D, nCob1D,
-                                 nStar0, nStar1, nStar2, nInvStar0, nInvStar1,
-                                 nInvStar2, nInn2))
+    objval = total_err + reg_param*max((nAddP0, nMulFloat, nMulP0, nMulP1,
+                                        nCob0, nConst, nAdd, nSub, nAddP1, nSubP0,
+                                        nSubP1, ndelP1, ndelP2, nInn0, nInn1, nDiv,
+                                        nAddP2, nSubP2, nMulP2, nMulD0, nMulD1, nMulD2,
+                                        nCob1, nCob0D, nCob1D, nStar0, nStar1, nStar2,
+                                        nInvStar0, nInvStar1, nInvStar2, nInn2, nsinF,
+                                        ncosF, nexpF, nlogF, nsqrtF, nSinP0, nSinP1,
+                                        nSinP2, nSinD0, nSinD1, nSinD2, nCosP0, nCosP1,
+                                        nCosP2, nCosD0, nCosD1, nCosD2, nExpP0, nExpP1,
+                                        nExpP2, nExpD0, nExpD1, nExpD2, nLogP0, nLogP1,
+                                        nLogP2, nLogD0, nLogD1, nLogD2, nSqrtP0,
+                                        nSqrtP1, nSqrtP2, nSqrtD0, nSqrtD1, nSqrtD2))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
@@ -235,6 +276,7 @@ def stgp_poisson(config=None):
     n_jobs = 4
     n_splits = 20
     start_method = "fork"
+    reg_param = 0.1
 
     if config is not None:
         GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
@@ -243,6 +285,7 @@ def stgp_poisson(config=None):
         n_splits = config["mp"]["n_splits"]
         start_method = config["mp"]["start_method"]
         early_stopping = config["gp"]["early_stopping"]
+        reg_param = config["gp"]["reg_param"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         GPproblem.tournsize = config["gp"]["select"]["tournsize"]
         GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
@@ -282,17 +325,20 @@ def stgp_poisson(config=None):
                                eval_fitness,
                                X=X_train,
                                y=y_train,
-                               bvalues=bvalues_train)
+                               bvalues=bvalues_train,
+                               reg_param=reg_param)
     GPproblem.toolbox.register("evaluate_val_fit",
                                eval_fitness,
                                X=X_val,
                                y=y_val,
-                               bvalues=bvalues_val)
+                               bvalues=bvalues_val,
+                               reg_param=reg_param)
     GPproblem.toolbox.register("evaluate_val_MSE",
                                eval_MSE,
                                X=X_val,
                                y=y_val,
-                               bvalues=bvalues_val)
+                               bvalues=bvalues_val,
+                               reg_param=reg_param)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     # train the model in the training set
