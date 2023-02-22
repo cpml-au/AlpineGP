@@ -8,7 +8,7 @@ gp:
   early_stopping: {'enabled': True, 'max_overfit': 3}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
   final_training: False
-  reg_param: 0.1
+  reg_param: 0.2
   select:
     tournsize: 2
     stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
