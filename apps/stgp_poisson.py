@@ -1,9 +1,9 @@
+from dctkit.dec import cochain as C
 import networkx as nx
 import matplotlib.pyplot as plt
 import jax.config as config
 from deap import gp
 import dctkit
-from dctkit.dec import cochain as C
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
@@ -20,8 +20,10 @@ import time
 import sys
 import yaml
 
-# choose whether to use GPU or CPU and precision
-dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64)
+# choose precision and whether to use GPU or CPU
+dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64,
+              dctkit.Backend.jax, dctkit.Platform.cpu)
+
 
 # suppress warnings
 warnings.filterwarnings('ignore')
@@ -45,7 +47,7 @@ num_samples_per_source = 4
 # whether to use validation dataset
 use_validation = True
 
-# noise factor
+# noise
 noise = 0.*np.random.rand(num_nodes)
 
 data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
@@ -68,7 +70,7 @@ gamma = 1000.
 
 # initial guess for the solution
 u_0_vec = 0.01*np.random.rand(num_nodes)
-u_0 = C.CochainP0(S, u_0_vec, type="jax")
+u_0 = C.CochainP0(S, u_0_vec)
 
 
 class ObjFunction:
@@ -83,8 +85,8 @@ class ObjFunction:
 
     def total_energy(self, vec_x, vec_y, vec_bvalues):
         penalty = 0.5*gamma*jnp.sum((vec_x[bnodes] - vec_bvalues)**2)
-        c = C.CochainP0(S, vec_x, "jax")
-        fk = C.CochainP0(S, vec_y, "jax")
+        c = C.CochainP0(S, vec_x)
+        fk = C.CochainP0(S, vec_y)
         energy = self.energy_func(c, fk) + penalty
         return energy
 
