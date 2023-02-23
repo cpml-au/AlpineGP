@@ -141,6 +141,14 @@ def eval_fitness(individual, X, y, bvalues, reg_param):
     nAdd = indstr.count("Add")
     nSub = indstr.count("Sub")
     nDiv = indstr.count("Div")
+    nExpF = indstr.count("ExpF")
+    nLogF = indstr.count("LogF")
+    nSinF = indstr.count("SinF")
+    nArcsinF = indstr.count("ArcsinF")
+    nArccosF = indstr.count("ArccosF")
+    nCosF = indstr.count("CosF")
+    nSquareF = indstr.count("SquareF")
+    nSqrtF = indstr.count("SqrtF")
     nAddP0 = indstr.count("AddP0")
     nAddP1 = indstr.count("AddP1")
     nAddP2 = indstr.count("AddP2")
@@ -180,12 +188,24 @@ def eval_fitness(individual, X, y, bvalues, reg_param):
     nSinD0 = indstr.count("SinD0")
     nSinD1 = indstr.count("SinD1")
     nSinD2 = indstr.count("SinD2")
+    nArcsinP0 = indstr.count("ArcsinP0")
+    nArcsinP1 = indstr.count("ArcsinP1")
+    nArcsinP2 = indstr.count("ArcsinP2")
+    nArcsinD0 = indstr.count("ArcsinD0")
+    nArcsinD1 = indstr.count("ArcsinD1")
+    nArcsinD2 = indstr.count("ArcsinD2")
     nCosP0 = indstr.count("CosP0")
     nCosP1 = indstr.count("CosP1")
     nCosP2 = indstr.count("CosP2")
     nCosD0 = indstr.count("CosD0")
     nCosD1 = indstr.count("CosD1")
     nCosD2 = indstr.count("CosD2")
+    nArccosP0 = indstr.count("ArccosP0")
+    nArccosP1 = indstr.count("ArccosP1")
+    nArccosP2 = indstr.count("ArccosP2")
+    nArccosD0 = indstr.count("ArccosD0")
+    nArccosD1 = indstr.count("ArccosD1")
+    nArccosD2 = indstr.count("ArccosD2")
     nExpP0 = indstr.count("ExpP0")
     nExpP1 = indstr.count("ExpP1")
     nExpP2 = indstr.count("ExpP2")
@@ -204,6 +224,12 @@ def eval_fitness(individual, X, y, bvalues, reg_param):
     nSqrtD0 = indstr.count("SqrtD0")
     nSqrtD1 = indstr.count("SqrtD1")
     nSqrtD2 = indstr.count("SqrtD2")
+    nSquareP0 = indstr.count("SquareP0")
+    nSquareP1 = indstr.count("SquareP1")
+    nSquareP2 = indstr.count("SquareP2")
+    nSquareD0 = indstr.count("SquareD0")
+    nSquareD1 = indstr.count("SquareD1")
+    nSquareD2 = indstr.count("SquareD2")
 
     # Total objective value
     objval = total_err + reg_param*max((nAddP0, nMulFloat, nMulP0, nMulP1,
@@ -217,7 +243,11 @@ def eval_fitness(individual, X, y, bvalues, reg_param):
                                         nCosP2, nCosD0, nCosD1, nCosD2, nExpP0, nExpP1,
                                         nExpP2, nExpD0, nExpD1, nExpD2, nLogP0, nLogP1,
                                         nLogP2, nLogD0, nLogD1, nLogD2, nSqrtP0,
-                                        nSqrtP1, nSqrtP2, nSqrtD0, nSqrtD1, nSqrtD2))
+                                        nSqrtP1, nSqrtP2, nSqrtD0, nSqrtD1, nSqrtD2, nArcsinP0,
+                                        nArcsinP1, nArcsinP2, nArcsinD0, nArcsinD1, nArcsinD2, nArccosP0,
+                                        nArccosP1, nArccosP2, nArccosD0, nArccosD1, nArccosD2, nSquareP0,
+                                        nSquareP1, nSquareP2, nSquareD0, nSquareD1, nSquareD2, nExpF, nLogF, nSinF,
+                                        nArcsinF, nArccosF, nCosF, nSquareF, nSqrtF))
     # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
     # objval += length_penalty
     # objval += 100*terminal_penalty
@@ -238,7 +268,7 @@ GPproblem = gps.GPSymbRegProblem(pset,
 
 
 # Register fitness function, selection and mutate operators
-GPproblem.toolbox.register("mate", gp.cxOnePoint)
+GPproblem.toolbox.register("mate", gp.cxOnePointLeafBiased, termpb=0.1)
 GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
 GPproblem.toolbox.register("mutate",
                            gp.mutUniform,
