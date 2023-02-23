@@ -1,14 +1,14 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 200
-  NGEN: 5
+  NINDIVIDUALS: 500
+  NGEN: 100
   CXPB: 0.5
   MUTPB: 0.2
-  frac_elitist: 0.02
+  frac_elitist: 0.002
   early_stopping: {'enabled': True, 'max_overfit': 3}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
   final_training: False
-  reg_param: 0.2
+  reg_param: 0.01
   select:
     tournsize: 2
     stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
@@ -34,4 +34,4 @@ mp:
   start_method: "fork"
 
 dataset:
-  noise_param: 0.
+  noise_param: 0.1
