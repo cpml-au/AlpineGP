@@ -5,6 +5,8 @@ gp:
   CXPB: 0.5
   MUTPB: 0.2
   frac_elitist: 0.002
+  min_: 1
+  max_: 4
   early_stopping: {'enabled': True, 'max_overfit': 3}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
   final_training: False
@@ -23,6 +25,11 @@ gp:
     expr_mut: gp.genHalfAndHalf
     # expr_mut: gp.genFull
     expr_mut_kargs: "{'min_': 0, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+    # fun: gp.cxOnePointLeafBiased
+    # kargs: "{term_pb = 0.1}"
 
 plot:
   plot_best: False
@@ -34,4 +41,6 @@ mp:
   start_method: "fork"
 
 dataset:
+  num_sources: 3
+  num_samples_per_source: 4
   noise_param: 0.1

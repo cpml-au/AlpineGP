@@ -268,7 +268,7 @@ GPproblem = gps.GPSymbRegProblem(pset,
 
 
 # Register fitness function, selection and mutate operators
-GPproblem.toolbox.register("mate", gp.cxOnePointLeafBiased, termpb=0.1)
+GPproblem.toolbox.register("mate", gp.cxOnePoint)
 GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
 GPproblem.toolbox.register("mutate",
                            gp.mutUniform,
@@ -318,17 +318,26 @@ def stgp_poisson(config=None):
         start_method = config["mp"]["start_method"]
         early_stopping = config["gp"]["early_stopping"]
         reg_param = config["gp"]["reg_param"]
+        min_ = config["gp"]["min_"]
+        max_ = config["gp"]["max_"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         GPproblem.tournsize = config["gp"]["select"]["tournsize"]
         GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
         mutate_fun = config["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
+        crossover_fun = config["gp"]["crossover"]["fun"]
+        crossover_kargs = eval(config["gp"]["crossover"]["kargs"])
         expr_mut_fun = config["gp"]["mutate"]["expr_mut"]
         expr_mut_kargs = eval(config["gp"]["mutate"]["expr_mut_kargs"])
+        num_sources = config["dataset"]["num_sources"]
+        num_samples_per_source = config["dataset"]["num_samples_per_source"]
         noise_param = config["dataset"]["noise_param"]
+        GPproblem.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
         GPproblem.toolbox.register("mutate",
                                    eval(mutate_fun), **mutate_kargs)
         GPproblem.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
+        GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
+                                   pset=pset, min_=min_, max_=max_)
         plot_best = config["plot"]["plot_best"]
         plot_best_genealogy = config["plot"]["plot_best_genealogy"]
         GPproblem.toolbox.decorate(
