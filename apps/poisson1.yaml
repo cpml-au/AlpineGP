@@ -6,11 +6,11 @@ gp:
   MUTPB: 0.2
   frac_elitist: 0.002
   min_: 1
-  max_: 4
-  early_stopping: {'enabled': True, 'max_overfit': 3}
+  max_: 5
+  early_stopping: {'enabled': True, 'max_overfit': 10}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
   final_training: False
-  reg_param: 0.01
+  penalty: {'method': "terminal", 'reg_param': 0.1}
   select:
     tournsize: 2
     stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
@@ -24,7 +24,7 @@ gp:
     # kargs: "{}"
     expr_mut: gp.genHalfAndHalf
     # expr_mut: gp.genFull
-    expr_mut_kargs: "{'min_': 0, 'max_': 3}"
+    expr_mut_kargs: "{'min_': 0, 'max_': 4}"
   crossover:
     fun: gp.cxOnePoint
     kargs: "{}"
@@ -36,8 +36,8 @@ plot:
   plot_best_genealogy: True
 
 mp:
-  n_splits: 20
-  n_jobs: 4
+  n_splits: 50
+  n_jobs: 6
   start_method: "fork"
 
 dataset:

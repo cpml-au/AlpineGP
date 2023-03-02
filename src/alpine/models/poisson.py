@@ -38,12 +38,12 @@ pset.addPrimitive(operator.mul, [float, float], float, name="MulF")
 pset.addPrimitive(protectedDiv, [float, float], float, name="Div")
 pset.addPrimitive(jnp.sin, [float], float, name="SinF")
 pset.addPrimitive(jnp.arcsin, [float], float, name="ArcsinF")
-#pset.addPrimitive(jnp.cos, [float], float, name="CosF")
-#pset.addPrimitive(jnp.arccos, [float], float, name="ArccosF")
+pset.addPrimitive(jnp.cos, [float], float, name="CosF")
+pset.addPrimitive(jnp.arccos, [float], float, name="ArccosF")
 pset.addPrimitive(jnp.exp, [float], float, name="ExpF")
 pset.addPrimitive(protectedLog, [float], float, name="LogF")
-#pset.addPrimitive(protectedSqrt, [float], float, name="SqrtF")
-#pset.addPrimitive(jnp.square, [float], float, name="SquareF")
+pset.addPrimitive(protectedSqrt, [float], float, name="SqrtF")
+pset.addPrimitive(jnp.square, [float], float, name="SquareF")
 
 
 # cochain operations
@@ -96,7 +96,6 @@ pset.addPrimitive(C.arcsin, [C.CochainD1], C.CochainD1, "ArcsinD1")
 pset.addPrimitive(C.arcsin, [C.CochainD2], C.CochainD2, "ArcsinD2")
 
 
-'''
 pset.addPrimitive(C.cos, [C.CochainP0], C.CochainP0, "CosP0")
 pset.addPrimitive(C.cos, [C.CochainP1], C.CochainP1, "CosP1")
 pset.addPrimitive(C.cos, [C.CochainP2], C.CochainP2, "CosP2")
@@ -110,7 +109,7 @@ pset.addPrimitive(C.arccos, [C.CochainP2], C.CochainP2, "ArccosP2")
 pset.addPrimitive(C.arccos, [C.CochainD0], C.CochainD0, "ArccosD0")
 pset.addPrimitive(C.arccos, [C.CochainD1], C.CochainD1, "ArccosD1")
 pset.addPrimitive(C.arccos, [C.CochainD2], C.CochainD2, "ArccosD2")
-'''
+
 pset.addPrimitive(C.exp, [C.CochainP0], C.CochainP0, "ExpP0")
 pset.addPrimitive(C.exp, [C.CochainP1], C.CochainP1, "ExpP1")
 pset.addPrimitive(C.exp, [C.CochainP2], C.CochainP2, "ExpP2")
@@ -124,7 +123,7 @@ pset.addPrimitive(C.log, [C.CochainP2], C.CochainP2, "LogP2")
 pset.addPrimitive(C.log, [C.CochainD0], C.CochainD0, "LogD0")
 pset.addPrimitive(C.log, [C.CochainD1], C.CochainD1, "LogD1")
 pset.addPrimitive(C.log, [C.CochainD2], C.CochainD2, "LogD2")
-'''
+
 pset.addPrimitive(C.sqrt, [C.CochainP0], C.CochainP0, "SqrtP0")
 pset.addPrimitive(C.sqrt, [C.CochainP1], C.CochainP1, "SqrtP1")
 pset.addPrimitive(C.sqrt, [C.CochainP2], C.CochainP2, "SqrtP2")
@@ -138,7 +137,7 @@ pset.addPrimitive(C.square, [C.CochainP2], C.CochainP2, "SquareP2")
 pset.addPrimitive(C.square, [C.CochainD0], C.CochainD0, "SquareD0")
 pset.addPrimitive(C.square, [C.CochainD1], C.CochainD1, "SquareD1")
 pset.addPrimitive(C.square, [C.CochainD2], C.CochainD2, "SquareD2")
-'''
+
 
 # add constant = 0.5
 pset.addTerminal(0.5, float, name="1/2")

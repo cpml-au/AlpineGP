@@ -129,129 +129,131 @@ def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
     return total_err
 
 
-def eval_fitness(individual, X, y, bvalues, reg_param):
+def eval_fitness(individual, X, y, bvalues, penalty):
     objval = 0.
 
     total_err = eval_MSE(individual, X, y, bvalues)
-    # length_penalty = min([np.abs(len(individual) - i) for i in range(1, 41)])
 
-    # Penatly terms on model complexity
-    indstr = str(individual)
-    nMulFloat = indstr.count("MulF")
-    nAdd = indstr.count("Add")
-    nSub = indstr.count("Sub")
-    nDiv = indstr.count("Div")
-    nExpF = indstr.count("ExpF")
-    nLogF = indstr.count("LogF")
-    nSinF = indstr.count("SinF")
-    nArcsinF = indstr.count("ArcsinF")
-    nArccosF = indstr.count("ArccosF")
-    nCosF = indstr.count("CosF")
-    nSquareF = indstr.count("SquareF")
-    nSqrtF = indstr.count("SqrtF")
-    nAddP0 = indstr.count("AddP0")
-    nAddP1 = indstr.count("AddP1")
-    nAddP2 = indstr.count("AddP2")
-    nSubP0 = indstr.count("SubP0")
-    nSubP1 = indstr.count("SubP1")
-    nSubP2 = indstr.count("SubP2")
-    ndelP1 = indstr.count("delP1")
-    ndelP2 = indstr.count("delP2")
-    nMulP0 = indstr.count("MulP0")
-    nMulP1 = indstr.count("MulP1")
-    nMulP2 = indstr.count("MulP2")
-    nMulD0 = indstr.count("MulD0")
-    nMulD1 = indstr.count("MulD1")
-    nMulD2 = indstr.count("MulD2")
-    nCob0 = indstr.count("dP0")
-    nCob1 = indstr.count("dP1")
-    nCob0D = indstr.count("dD0")
-    nCob1D = indstr.count("dD1")
-    nStar0 = indstr.count("St0")
-    nStar1 = indstr.count("St1")
-    nStar2 = indstr.count("St2")
-    nInvStar0 = indstr.count("InvSt0")
-    nInvStar1 = indstr.count("InvSt1")
-    nInvStar2 = indstr.count("InvSt2")
-    nConst = indstr.count("1/2")
-    nInn0 = indstr.count("Inn0")
-    nInn1 = indstr.count("Inn1")
-    nInn2 = indstr.count("Inn2")
-    nsinF = indstr.count("SinF")
-    ncosF = indstr.count("CosF")
-    nexpF = indstr.count("ExpF")
-    nlogF = indstr.count("LogF")
-    nsqrtF = indstr.count("SqrtF")
-    nSinP0 = indstr.count("SinP0")
-    nSinP1 = indstr.count("SinP1")
-    nSinP2 = indstr.count("SinP2")
-    nSinD0 = indstr.count("SinD0")
-    nSinD1 = indstr.count("SinD1")
-    nSinD2 = indstr.count("SinD2")
-    nArcsinP0 = indstr.count("ArcsinP0")
-    nArcsinP1 = indstr.count("ArcsinP1")
-    nArcsinP2 = indstr.count("ArcsinP2")
-    nArcsinD0 = indstr.count("ArcsinD0")
-    nArcsinD1 = indstr.count("ArcsinD1")
-    nArcsinD2 = indstr.count("ArcsinD2")
-    nCosP0 = indstr.count("CosP0")
-    nCosP1 = indstr.count("CosP1")
-    nCosP2 = indstr.count("CosP2")
-    nCosD0 = indstr.count("CosD0")
-    nCosD1 = indstr.count("CosD1")
-    nCosD2 = indstr.count("CosD2")
-    nArccosP0 = indstr.count("ArccosP0")
-    nArccosP1 = indstr.count("ArccosP1")
-    nArccosP2 = indstr.count("ArccosP2")
-    nArccosD0 = indstr.count("ArccosD0")
-    nArccosD1 = indstr.count("ArccosD1")
-    nArccosD2 = indstr.count("ArccosD2")
-    nExpP0 = indstr.count("ExpP0")
-    nExpP1 = indstr.count("ExpP1")
-    nExpP2 = indstr.count("ExpP2")
-    nExpD0 = indstr.count("ExpD0")
-    nExpD1 = indstr.count("ExpD1")
-    nExpD2 = indstr.count("ExpD2")
-    nLogP0 = indstr.count("LogP0")
-    nLogP1 = indstr.count("LogP1")
-    nLogP2 = indstr.count("LogP2")
-    nLogD0 = indstr.count("LogD0")
-    nLogD1 = indstr.count("LogD1")
-    nLogD2 = indstr.count("LogD2")
-    nSqrtP0 = indstr.count("SqrtP0")
-    nSqrtP1 = indstr.count("SqrtP1")
-    nSqrtP2 = indstr.count("SqrtP2")
-    nSqrtD0 = indstr.count("SqrtD0")
-    nSqrtD1 = indstr.count("SqrtD1")
-    nSqrtD2 = indstr.count("SqrtD2")
-    nSquareP0 = indstr.count("SquareP0")
-    nSquareP1 = indstr.count("SquareP1")
-    nSquareP2 = indstr.count("SquareP2")
-    nSquareD0 = indstr.count("SquareD0")
-    nSquareD1 = indstr.count("SquareD1")
-    nSquareD2 = indstr.count("SquareD2")
+    if penalty["method"] == "terminal":
+        # Penalty terms on model complexity
+        indstr = str(individual)
+        nMulFloat = indstr.count("MulF")
+        nAdd = indstr.count("Add")
+        nSub = indstr.count("Sub")
+        nDiv = indstr.count("Div")
+        nExpF = indstr.count("ExpF")
+        nLogF = indstr.count("LogF")
+        nSinF = indstr.count("SinF")
+        nArcsinF = indstr.count("ArcsinF")
+        nArccosF = indstr.count("ArccosF")
+        nCosF = indstr.count("CosF")
+        nSquareF = indstr.count("SquareF")
+        nSqrtF = indstr.count("SqrtF")
+        nAddP0 = indstr.count("AddP0")
+        nAddP1 = indstr.count("AddP1")
+        nAddP2 = indstr.count("AddP2")
+        nSubP0 = indstr.count("SubP0")
+        nSubP1 = indstr.count("SubP1")
+        nSubP2 = indstr.count("SubP2")
+        ndelP1 = indstr.count("delP1")
+        ndelP2 = indstr.count("delP2")
+        nMulP0 = indstr.count("MulP0")
+        nMulP1 = indstr.count("MulP1")
+        nMulP2 = indstr.count("MulP2")
+        nMulD0 = indstr.count("MulD0")
+        nMulD1 = indstr.count("MulD1")
+        nMulD2 = indstr.count("MulD2")
+        nCob0 = indstr.count("dP0")
+        nCob1 = indstr.count("dP1")
+        nCob0D = indstr.count("dD0")
+        nCob1D = indstr.count("dD1")
+        nStar0 = indstr.count("St0")
+        nStar1 = indstr.count("St1")
+        nStar2 = indstr.count("St2")
+        nInvStar0 = indstr.count("InvSt0")
+        nInvStar1 = indstr.count("InvSt1")
+        nInvStar2 = indstr.count("InvSt2")
+        nConst = indstr.count("1/2")
+        nInn0 = indstr.count("Inn0")
+        nInn1 = indstr.count("Inn1")
+        nInn2 = indstr.count("Inn2")
+        nsinF = indstr.count("SinF")
+        ncosF = indstr.count("CosF")
+        nexpF = indstr.count("ExpF")
+        nlogF = indstr.count("LogF")
+        nsqrtF = indstr.count("SqrtF")
+        nSinP0 = indstr.count("SinP0")
+        nSinP1 = indstr.count("SinP1")
+        nSinP2 = indstr.count("SinP2")
+        nSinD0 = indstr.count("SinD0")
+        nSinD1 = indstr.count("SinD1")
+        nSinD2 = indstr.count("SinD2")
+        nArcsinP0 = indstr.count("ArcsinP0")
+        nArcsinP1 = indstr.count("ArcsinP1")
+        nArcsinP2 = indstr.count("ArcsinP2")
+        nArcsinD0 = indstr.count("ArcsinD0")
+        nArcsinD1 = indstr.count("ArcsinD1")
+        nArcsinD2 = indstr.count("ArcsinD2")
+        nCosP0 = indstr.count("CosP0")
+        nCosP1 = indstr.count("CosP1")
+        nCosP2 = indstr.count("CosP2")
+        nCosD0 = indstr.count("CosD0")
+        nCosD1 = indstr.count("CosD1")
+        nCosD2 = indstr.count("CosD2")
+        nArccosP0 = indstr.count("ArccosP0")
+        nArccosP1 = indstr.count("ArccosP1")
+        nArccosP2 = indstr.count("ArccosP2")
+        nArccosD0 = indstr.count("ArccosD0")
+        nArccosD1 = indstr.count("ArccosD1")
+        nArccosD2 = indstr.count("ArccosD2")
+        nExpP0 = indstr.count("ExpP0")
+        nExpP1 = indstr.count("ExpP1")
+        nExpP2 = indstr.count("ExpP2")
+        nExpD0 = indstr.count("ExpD0")
+        nExpD1 = indstr.count("ExpD1")
+        nExpD2 = indstr.count("ExpD2")
+        nLogP0 = indstr.count("LogP0")
+        nLogP1 = indstr.count("LogP1")
+        nLogP2 = indstr.count("LogP2")
+        nLogD0 = indstr.count("LogD0")
+        nLogD1 = indstr.count("LogD1")
+        nLogD2 = indstr.count("LogD2")
+        nSqrtP0 = indstr.count("SqrtP0")
+        nSqrtP1 = indstr.count("SqrtP1")
+        nSqrtP2 = indstr.count("SqrtP2")
+        nSqrtD0 = indstr.count("SqrtD0")
+        nSqrtD1 = indstr.count("SqrtD1")
+        nSqrtD2 = indstr.count("SqrtD2")
+        nSquareP0 = indstr.count("SquareP0")
+        nSquareP1 = indstr.count("SquareP1")
+        nSquareP2 = indstr.count("SquareP2")
+        nSquareD0 = indstr.count("SquareD0")
+        nSquareD1 = indstr.count("SquareD1")
+        nSquareD2 = indstr.count("SquareD2")
 
-    # Total objective value
-    objval = total_err + reg_param*max((nAddP0, nMulFloat, nMulP0, nMulP1,
-                                        nCob0, nConst, nAdd, nSub, nAddP1, nSubP0,
-                                        nSubP1, ndelP1, ndelP2, nInn0, nInn1, nDiv,
-                                        nAddP2, nSubP2, nMulP2, nMulD0, nMulD1, nMulD2,
-                                        nCob1, nCob0D, nCob1D, nStar0, nStar1, nStar2,
-                                        nInvStar0, nInvStar1, nInvStar2, nInn2, nsinF,
-                                        ncosF, nexpF, nlogF, nsqrtF, nSinP0, nSinP1,
-                                        nSinP2, nSinD0, nSinD1, nSinD2, nCosP0, nCosP1,
-                                        nCosP2, nCosD0, nCosD1, nCosD2, nExpP0, nExpP1,
-                                        nExpP2, nExpD0, nExpD1, nExpD2, nLogP0, nLogP1,
-                                        nLogP2, nLogD0, nLogD1, nLogD2, nSqrtP0,
-                                        nSqrtP1, nSqrtP2, nSqrtD0, nSqrtD1, nSqrtD2, nArcsinP0,
-                                        nArcsinP1, nArcsinP2, nArcsinD0, nArcsinD1, nArcsinD2, nArccosP0,
-                                        nArccosP1, nArccosP2, nArccosD0, nArccosD1, nArccosD2, nSquareP0,
-                                        nSquareP1, nSquareP2, nSquareD0, nSquareD1, nSquareD2, nExpF, nLogF, nSinF,
-                                        nArcsinF, nArccosF, nCosF, nSquareF, nSqrtF))
-    # terminal_penalty = int("u" not in str(individual) or "fk" not in str(individual))
-    # objval += length_penalty
-    # objval += 100*terminal_penalty
-
+        # Total objective value
+        objval = total_err + penalty["reg_param"]*max((nAddP0, nMulFloat, nMulP0, nMulP1,
+                                                       nCob0, nConst, nAdd, nSub, nAddP1, nSubP0,
+                                                       nSubP1, ndelP1, ndelP2, nInn0, nInn1, nDiv,
+                                                       nAddP2, nSubP2, nMulP2, nMulD0, nMulD1, nMulD2,
+                                                       nCob1, nCob0D, nCob1D, nStar0, nStar1, nStar2,
+                                                       nInvStar0, nInvStar1, nInvStar2, nInn2, nsinF,
+                                                       ncosF, nexpF, nlogF, nsqrtF, nSinP0, nSinP1,
+                                                       nSinP2, nSinD0, nSinD1, nSinD2, nCosP0, nCosP1,
+                                                       nCosP2, nCosD0, nCosD1, nCosD2, nExpP0, nExpP1,
+                                                       nExpP2, nExpD0, nExpD1, nExpD2, nLogP0, nLogP1,
+                                                       nLogP2, nLogD0, nLogD1, nLogD2, nSqrtP0,
+                                                       nSqrtP1, nSqrtP2, nSqrtD0, nSqrtD1, nSqrtD2, nArcsinP0,
+                                                       nArcsinP1, nArcsinP2, nArcsinD0, nArcsinD1, nArcsinD2, nArccosP0,
+                                                       nArccosP1, nArccosP2, nArccosD0, nArccosD1, nArccosD2, nSquareP0,
+                                                       nSquareP1, nSquareP2, nSquareD0, nSquareD1, nSquareD2, nExpF, nLogF, nSinF,
+                                                       nArcsinF, nArccosF, nCosF, nSquareF, nSqrtF))
+    elif penalty["method"] == "length":
+        # penalty terms on length
+        objval = total_err + penalty["reg_param"]*len(individual)
+    else:
+        # no penalty
+        objval = total_err
     return objval,
 
 
@@ -308,7 +310,7 @@ def stgp_poisson(config=None):
     n_jobs = 4
     n_splits = 20
     start_method = "fork"
-    reg_param = 0.1
+    penalty = {'method': "terminal", 'reg_param': 0.1}
 
     if config is not None:
         GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
@@ -317,9 +319,9 @@ def stgp_poisson(config=None):
         n_splits = config["mp"]["n_splits"]
         start_method = config["mp"]["start_method"]
         early_stopping = config["gp"]["early_stopping"]
-        reg_param = config["gp"]["reg_param"]
         min_ = config["gp"]["min_"]
         max_ = config["gp"]["max_"]
+        penalty = config["gp"]["penalty"]
         GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
         GPproblem.tournsize = config["gp"]["select"]["tournsize"]
         GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
@@ -367,13 +369,13 @@ def stgp_poisson(config=None):
                                X=X_train,
                                y=y_train,
                                bvalues=bvalues_train,
-                               reg_param=reg_param)
+                               penalty=penalty)
     GPproblem.toolbox.register("evaluate_val_fit",
                                eval_fitness,
                                X=X_val,
                                y=y_val,
                                bvalues=bvalues_val,
-                               reg_param=reg_param)
+                               penalty=penalty)
     GPproblem.toolbox.register("evaluate_val_MSE",
                                eval_MSE,
                                X=X_val,
@@ -399,7 +401,7 @@ def stgp_poisson(config=None):
 
     # evaluate score on the training and validation set
     print(f"The best fitness on the training set is {GPproblem.min_fit_history[-1]}")
-    print(f"The best MSE on the validation set is {GPproblem.min_valerr}")
+    print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
