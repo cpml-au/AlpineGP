@@ -313,10 +313,13 @@ class GPSymbRegProblem():
 
             # Update history of best fitness and best validation error
             self.min_fit_history = self.logbook.chapters["fitness"].select("min")
+            self.val_fit_history = self.logbook.chapters["valid"].select("valid_fit")
             if early_stopping['enabled']:
-                self.min_valerr = min(
-                    self.logbook.chapters["valid"].select("valid_fit"))
+                self.val_fit_history = self.logbook.chapters["valid"].select(
+                    "valid_fit")
+                self.min_valerr = min(self.val_fit_history)
             else:
+                self.val_fit_history = self.logbook.select("valerr")
                 self.min_valerr = min(self.logbook.select("valerr"))
 
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
@@ -332,7 +335,8 @@ class GPSymbRegProblem():
 
                 # Array of generations starts from 1
                 x = range(1, len(self.min_fit_history) + 1)
-                plt.plot(x, self.min_fit_history, 'b')
+                plt.plot(x, self.min_fit_history, 'b', label="Training Fitness")
+                plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
                 # Plotting mean results often in very large numbers
                 # plt.plot(self.mean_history, 'r')
                 # plt.yscale('log')
