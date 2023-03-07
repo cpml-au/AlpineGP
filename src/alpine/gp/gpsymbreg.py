@@ -31,7 +31,7 @@ class GPSymbRegProblem():
         self.pset = pset
         self.NINDIVIDUALS = NINDIVIDUALS
         self.NGEN = NGEN
-        self.min_fit_history = []
+        self.train_fit_history = []
         self.CXPB = CXPB
         self.MUTPB = MUTPB
         self.pop = None
@@ -70,11 +70,8 @@ class GPSymbRegProblem():
 
         self.__init_logbook()
 
-        # Create history object to build the genealogy tree (NOT USED for now)
+        # Create history object to build the genealogy tree
         self.history = tools.History()
-
-        # Create Hall Of Fame object
-        # self.halloffame = tools.HallOfFame(maxsize=5)
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -312,7 +309,7 @@ class GPSymbRegProblem():
                                     print_log=print_log)
 
             # Update history of best fitness and best validation error
-            self.min_fit_history = self.logbook.chapters["fitness"].select("min")
+            self.train_fit_history = self.logbook.chapters["fitness"].select("min")
             self.val_fit_history = self.logbook.chapters["valid"].select("valid_fit")
             if early_stopping['enabled']:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
@@ -334,23 +331,21 @@ class GPSymbRegProblem():
                 fig = plt.gcf()
 
                 # Array of generations starts from 1
-                x = range(1, len(self.min_fit_history) + 1)
-                plt.plot(x, self.min_fit_history, 'b', label="Training Fitness")
+                x = range(1, len(self.train_fit_history) + 1)
+                plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
                 plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
-                # Plotting mean results often in very large numbers
-                # plt.plot(self.mean_history, 'r')
-                # plt.yscale('log')
+                # fig.legend(loc='upper right')
                 plt.xlabel("Generation #")
                 plt.ylabel("Best Fitness")
 
                 fig.canvas.draw()
-
-                plt.pause(0.01)
+                fig.canvas.flush_events()
+                plt.pause(0.1)
 
             if plot_best and (plot_best_func
                               is not None) and (cgen % plot_freq == 0 or cgen == 1):
-                best = tools.selBest(self.pop, k=1)
-                plot_best_func(best[0])
+                best = tools.selBest(self.pop, k=1)[0]
+                plot_best_func(best)
 
             if early_stopping['enabled']:
                 training_fit = best.fitness.values[0]

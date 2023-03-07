@@ -125,6 +125,8 @@ def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
 
     total_err = 0.
 
+    best_sols = []
+
     # TODO: parallelize using vmap once we can use jaxopt
     for i, vec_y in enumerate(y):
         # extract current bvalues
@@ -134,7 +136,7 @@ def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
         x = minimize(fun=obj.total_energy, x0=u_0.coeffs,
                      args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
         if return_best_sol:
-            return x
+            best_sols.append(x)
 
         current_err = np.linalg.norm(x-X[i, :])**2
 
@@ -143,24 +145,27 @@ def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
 
         total_err += current_err
 
+    if return_best_sol:
+        return best_sols
+
     total_err *= 1/(num_sources*num_samples_per_source)
 
     return total_err
 
 
-def eval_fitness(individual, X, y, bvalues, penalty):
+def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict, penalty: dict) -> (float, ):
     """Evaluate total fitness over the dataset.
 
     Args:
-        individual (gp.PrimitiveTree): individual to evaluate.
-        X (np.array): samples of the dataset.
-        y (np.array): targets of the dataset.
-        bvalues (np.array): np.array containing the boundary values of the dataset functions.
-        penalty (dict): dictionary containing the penalty method (regularization) and the 
+        individual: individual to evaluate.
+        X: samples of the dataset.
+        y: targets of the dataset.
+        bvalues: np.array containing the boundary values of the dataset functions.
+        penalty: dictionary containing the penalty method (regularization) and the
         penalty multiplier.
 
     Returns:
-        (float): total fitness over the dataset.
+        total fitness over the dataset.
     """
 
     objval = 0.
@@ -168,7 +173,7 @@ def eval_fitness(individual, X, y, bvalues, penalty):
     total_err = eval_MSE(individual, X, y, bvalues)
 
     if penalty["method"] == "terminal":
-        # Penalty terms on model complexity
+        # penalty terms on terminals
         indstr = str(individual)
         objval = total_err + penalty["reg_param"] * \
             max([indstr.count(string) for string in primitives_strings])
@@ -211,31 +216,34 @@ GPproblem.toolbox.decorate(
 
 
 def plotSol(ind):
-    u = eval_MSE(ind, X=X_train, y=y_train,
-                 bvalues=bvalues_train, return_best_sol=True)
-    plt.figure(10)
+    u = eval_MSE(ind, X=X_test, y=y_test,
+                 bvalues=bvalues_test, return_best_sol=True)
+    plt.figure(10, figsize=(8, 4))
     fig = plt.gcf()
-    fig.clear()
-    plt.tricontourf(triang, u, cmap='RdBu', levels=20)
-    plt.triplot(triang, 'ko-')
-    plt.colorbar()
+    _, axes = plt.subplots(2, 3, num=10)
+    for i in range(0, 3):
+        axes[0, i].tricontourf(triang, u[i], cmap='RdBu', levels=20)
+        pltobj = axes[1, i].tricontourf(triang, y_test[i], cmap='RdBu', levels=20)
+        axes[0, i].set_box_aspect(1)
+        axes[1, i].set_box_aspect(1)
+    plt.colorbar(pltobj, ax=axes)
     fig.canvas.draw()
-    plt.pause(0.05)
+    fig.canvas.flush_events()
+    plt.pause(0.1)
 
 
 def stgp_poisson(config=None):
 
+    # default parameters
     early_stopping = {'enabled': True, 'max_overfit': 3}
-
     plot_best = True
     plot_best_genealogy = False
-
-    # multiprocessing parameters
     n_jobs = 4
     n_splits = 20
     start_method = "fork"
     penalty = {'method': "terminal", 'reg_param': 0.1}
 
+    # set parameters from config file
     if config is not None:
         GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
         GPproblem.NGEN = config["gp"]["NGEN"]
@@ -307,7 +315,6 @@ def stgp_poisson(config=None):
                                bvalues=bvalues_val)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
-    # train the model in the training set
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
@@ -319,12 +326,10 @@ def stgp_poisson(config=None):
                   n_splits=n_splits,
                   early_stopping=early_stopping)
 
-    # Print best individual
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
 
-    # evaluate score on the training and validation set
-    print(f"The best fitness on the training set is {GPproblem.min_fit_history[-1]}")
+    print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
     print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
@@ -340,13 +345,23 @@ def stgp_poisson(config=None):
     graph.add_nodes_from(nodes)
     graph.add_edges_from(edges)
     pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-
     plt.figure(figsize=(7, 7))
     nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
     nx.draw_networkx_edges(graph, pos)
     nx.draw_networkx_labels(graph, pos, labels)
     plt.axis("off")
     plt.show()
+
+    # save data for plots to disk
+    np.save("train_fit_history.npy", GPproblem.train_fit_history)
+    np.save("val_fit_history.npy", GPproblem.val_fit_history)
+
+    best_sols = eval_MSE(best, X=X_test, y=y_test,
+                         bvalues=bvalues_test, return_best_sol=True)
+
+    for i, sol in enumerate(best_sols):
+        np.save("best_sol_test_" + str(i) + ".npy", sol)
+        np.save("true_sol_test_" + str(i) + ".npy", y_test[i])
 
 
 if __name__ == '__main__':

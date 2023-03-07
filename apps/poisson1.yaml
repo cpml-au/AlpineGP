@@ -1,7 +1,7 @@
 # template for Poisson parameters file
 gp:
   NINDIVIDUALS: 500
-  NGEN: 100
+  NGEN: 10
   CXPB: 0.5
   MUTPB: 0.2
   frac_elitist: 0.002
@@ -32,8 +32,8 @@ gp:
     # kargs: "{term_pb = 0.1}"
 
 plot:
-  plot_best: False
-  plot_best_genealogy: True
+  plot_best: True
+  plot_best_genealogy: False
 
 mp:
   n_splits: 50
