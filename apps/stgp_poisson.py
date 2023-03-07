@@ -2,6 +2,7 @@ from dctkit.dec import cochain as C
 import networkx as nx
 import matplotlib.pyplot as plt
 import jax.config as config
+import deap
 from deap import gp
 import dctkit
 from alpine.models.poisson import pset, get_primitives_strings
@@ -19,6 +20,10 @@ import mpire
 import time
 import sys
 import yaml
+
+seed = 42
+deap.rng.seed(seed)
+deap.np.random.seed(seed)
 
 # choose precision and whether to use GPU or CPU
 dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64,
