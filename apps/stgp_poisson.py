@@ -1,7 +1,6 @@
 from dctkit.dec import cochain as C
 import networkx as nx
 import matplotlib.pyplot as plt
-import jax.config as config
 import deap
 from deap import gp
 import dctkit
@@ -44,14 +43,6 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 # extract list of names of primitives
 primitives_strings = get_primitives_strings(pset, types)
 
-# set default GP parameters
-NINDIVIDUALS = 10
-NGEN = 20
-CXPB = 0.5
-MUTPB = 0.1
-frac_elitist = 0.1
-
-
 # number of different source term functions to use to generate the dataset
 num_sources = 3
 # number of cases for each source term function
@@ -59,30 +50,15 @@ num_samples_per_source = 4
 # whether to use validation dataset
 use_validation = True
 
-# noise
-noise = 0.*np.random.rand(num_nodes)
-
-data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
-X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
-
-if use_validation:
-    X_train, X_val, X_test = X
-    y_train, y_val,  y_test = y
-    # extract boundary values for the test set
-    bvalues_test = X_test[:, bnodes]
-else:
-    X_train = X
-    y_train = y
-
-# extract bvalues_train
-bvalues_train = X_train[:, bnodes]
-bvalues_val = X_val[:, bnodes]
-
+# penalty parameter for the Dirichlet bcs
 gamma = 1000.
 
 # initial guess for the solution
 u_0_vec = 0.01*np.random.rand(num_nodes)
 u_0 = C.CochainP0(S, u_0_vec)
+
+# Objective function for minimization problem associated to the evaluation of each
+# individual's fitness
 
 
 class ObjFunction:
@@ -103,19 +79,19 @@ class ObjFunction:
         return energy
 
 
-def eval_MSE(individual, X, y, bvalues, return_best_sol=False):
+def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict, return_best_sol=False) -> float:
     """Evaluate total MSE over the dataset.
 
     Args:
-        individual (gp.PrimitiveTree): individual to evaluate.
-        X (np.array): samples of the dataset.
-        y (np.array): targets of the dataset.
-        bvalues (np.array): np.array containing the boundary values of the dataset functions.
-        return_best_sol (bool): True if we want the best solution (in this case the function returns it),
-        otherwise it is False.
+        individual: individual to evaluate.
+        X: samples of the dataset.
+        y: targets of the dataset.
+        bvalues: array containing the boundary values of the dataset functions.
+        return_best_sol: True if we want the best solution (in this case the function
+        returns it).
 
     Returns:
-        (float): total MSE over the dataset.
+        total MSE over the dataset.
     """
 
     # transform the individual expression into a callable function
@@ -192,43 +168,20 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues
 
 
 # FIXME: maybe pass fitness function among parameters
-GPproblem = gps.GPSymbRegProblem(pset,
-                                 NINDIVIDUALS,
-                                 NGEN,
-                                 CXPB,
-                                 MUTPB,
-                                 stochastic_tournament={
-                                     'enabled': True, 'prob': [0.7, 0.3]},
-                                 tournsize=2,
-                                 frac_elitist=frac_elitist)
+GPproblem = gps.GPSymbRegProblem(pset)
 
-
-# Register fitness function, selection and mutate operators
-GPproblem.toolbox.register("mate", gp.cxOnePoint)
-GPproblem.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
-GPproblem.toolbox.register("mutate",
-                           gp.mutUniform,
-                           expr=GPproblem.toolbox.expr_mut,
-                           pset=pset)
-
-# Bloat control
-GPproblem.toolbox.decorate(
-    "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-GPproblem.toolbox.decorate(
-    "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
 # Plot best solution
 
 
-def plotSol(ind):
-    u = eval_MSE(ind, X=X_test, y=y_test,
-                 bvalues=bvalues_test, return_best_sol=True)
+def plotSol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict):
+    u = eval_MSE(ind, X=X, y=y, bvalues=bvalues, return_best_sol=True)
     plt.figure(10, figsize=(8, 4))
     fig = plt.gcf()
     _, axes = plt.subplots(2, 3, num=10)
     for i in range(0, 3):
         axes[0, i].tricontourf(triang, u[i], cmap='RdBu', levels=20)
-        pltobj = axes[1, i].tricontourf(triang, y_test[i], cmap='RdBu', levels=20)
+        pltobj = axes[1, i].tricontourf(triang, X[i], cmap='RdBu', levels=20)
         axes[0, i].set_box_aspect(1)
         axes[1, i].set_box_aspect(1)
     plt.colorbar(pltobj, ax=axes)
@@ -237,56 +190,55 @@ def plotSol(ind):
     plt.pause(0.1)
 
 
-def stgp_poisson(config=None):
-
-    # default parameters
-    early_stopping = {'enabled': True, 'max_overfit': 3}
-    plot_best = True
-    plot_best_genealogy = False
-    n_jobs = 4
-    n_splits = 20
-    start_method = "fork"
-    penalty = {'method': "terminal", 'reg_param': 0.1}
+def stgp_poisson(config_file):
 
     # set parameters from config file
-    if config is not None:
-        GPproblem.NINDIVIDUALS = config["gp"]["NINDIVIDUALS"]
-        GPproblem.NGEN = config["gp"]["NGEN"]
-        n_jobs = config["mp"]["n_jobs"]
-        n_splits = config["mp"]["n_splits"]
-        start_method = config["mp"]["start_method"]
-        early_stopping = config["gp"]["early_stopping"]
-        min_ = config["gp"]["min_"]
-        max_ = config["gp"]["max_"]
-        penalty = config["gp"]["penalty"]
-        GPproblem.parsimony_pressure = config["gp"]["parsimony_pressure"]
-        GPproblem.tournsize = config["gp"]["select"]["tournsize"]
-        GPproblem.stochastic_tournament = config["gp"]["select"]["stochastic_tournament"]
-        mutate_fun = config["gp"]["mutate"]["fun"]
-        mutate_kargs = eval(config["gp"]["mutate"]["kargs"])
-        crossover_fun = config["gp"]["crossover"]["fun"]
-        crossover_kargs = eval(config["gp"]["crossover"]["kargs"])
-        expr_mut_fun = config["gp"]["mutate"]["expr_mut"]
-        expr_mut_kargs = eval(config["gp"]["mutate"]["expr_mut_kargs"])
-        num_sources = config["dataset"]["num_sources"]
-        num_samples_per_source = config["dataset"]["num_samples_per_source"]
-        noise_param = config["dataset"]["noise_param"]
-        GPproblem.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
-        GPproblem.toolbox.register("mutate",
-                                   eval(mutate_fun), **mutate_kargs)
-        GPproblem.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-        GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
-                                   pset=pset, min_=min_, max_=max_)
-        plot_best = config["plot"]["plot_best"]
-        plot_best_genealogy = config["plot"]["plot_best_genealogy"]
-        GPproblem.toolbox.decorate(
-            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-        GPproblem.toolbox.decorate(
-            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+    GPproblem.NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
+    GPproblem.NGEN = config_file["gp"]["NGEN"]
+    GPproblem.CXPB = config_file["gp"]["CXPB"]
+    GPproblem.MUTPB = config_file["gp"]["MUTPB"]
+    GPproblem.n_elitist = int(config_file["gp"]["frac_elitist"]*GPproblem.NINDIVIDUALS)
+    min_ = config_file["gp"]["min_"]
+    max_ = config_file["gp"]["max_"]
+    early_stopping = config_file["gp"]["early_stopping"]
+    GPproblem.parsimony_pressure = config_file["gp"]["parsimony_pressure"]
+    penalty = config_file["gp"]["penalty"]
 
+    GPproblem.tournsize = config_file["gp"]["select"]["tournsize"]
+    GPproblem.stochastic_tournament = config_file["gp"]["select"]["stochastic_tournament"]
+
+    mutate_fun = config_file["gp"]["mutate"]["fun"]
+    mutate_kargs = eval(config_file["gp"]["mutate"]["kargs"])
+    expr_mut_fun = config_file["gp"]["mutate"]["expr_mut"]
+    expr_mut_kargs = eval(config_file["gp"]["mutate"]["expr_mut_kargs"])
+
+    crossover_fun = config_file["gp"]["crossover"]["fun"]
+    crossover_kargs = eval(config_file["gp"]["crossover"]["kargs"])
+    GPproblem.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
+    GPproblem.toolbox.register("mutate",
+                               eval(mutate_fun), **mutate_kargs)
+    GPproblem.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
+    GPproblem.toolbox.decorate(
+        "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+    GPproblem.toolbox.decorate(
+        "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+
+    plot_best = config_file["plot"]["plot_best"]
+    plot_best_genealogy = config_file["plot"]["plot_best_genealogy"]
+
+    n_jobs = config_file["mp"]["n_jobs"]
+    n_splits = config_file["mp"]["n_splits"]
+    start_method = config_file["mp"]["start_method"]
+
+    num_sources = config_file["dataset"]["num_sources"]
+    num_samples_per_source = config_file["dataset"]["num_samples_per_source"]
+    noise_param = config_file["dataset"]["noise_param"]
+
+    GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
+                               pset=pset, min_=min_, max_=max_)
     start = time.perf_counter()
 
-    # load dataset
+    # generate datasets
     noise = noise_param*np.random.rand(num_nodes)
     data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
     X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
@@ -318,6 +270,9 @@ def stgp_poisson(config=None):
                                X=X_val,
                                y=y_val,
                                bvalues=bvalues_val)
+    if plot_best:
+        GPproblem.toolbox.register("plot_best_func", plotSol,
+                                   X=X_val, y=y_val, bvalues=bvalues_test)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
@@ -371,11 +326,10 @@ def stgp_poisson(config=None):
 
 if __name__ == '__main__':
     n_args = len(sys.argv)
-    config = None
-    if n_args > 1:
-        param_file = sys.argv[1]
-        print("Parameters file: ", param_file)
-        with open(param_file) as file:
-            config = yaml.safe_load(file)
-            print(yaml.dump(config))
-    stgp_poisson(config)
+    assert n_args > 1, "Parameters filename needed."
+    param_file = sys.argv[1]
+    print("Parameters file: ", param_file)
+    with open(param_file) as file:
+        config_file = yaml.safe_load(file)
+        print(yaml.dump(config_file))
+    stgp_poisson(config_file)

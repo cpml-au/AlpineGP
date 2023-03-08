@@ -9,7 +9,6 @@ gp:
   max_: 5
   early_stopping: {'enabled': True, 'max_overfit': 10}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
-  final_training: False
   penalty: {'method': "terminal", 'reg_param': 0.1}
   select:
     tournsize: 2

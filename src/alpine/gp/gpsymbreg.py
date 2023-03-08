@@ -8,10 +8,10 @@ from mpire.utils import make_single_arguments
 class GPSymbRegProblem():
     def __init__(self,
                  pset,
-                 NINDIVIDUALS,
-                 NGEN,
-                 CXPB,
-                 MUTPB,
+                 NINDIVIDUALS=10,
+                 NGEN=1,
+                 CXPB=0.5,
+                 MUTPB=0.2,
                  frac_elitist=0.,
                  parsimony_pressure={'enabled': False,
                                      'fitness_first': True,
@@ -105,14 +105,20 @@ class GPSymbRegProblem():
                               max_=max_)
         self.toolbox.register("individual", tools.initIterate,
                               self.createIndividual, self.toolbox.expr)
-        # creator_package = (self.createIndividual, self.toolbox.expr)
-        # self.toolbox.register("population", generate_population, creator_package)
         self.toolbox.register("population", tools.initRepeat,
                               list, self.toolbox.individual)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator
         self.toolbox.register("select", self.select_with_elitism)
+
+        # Register mate and mutate operators
+        self.toolbox.register("mate", gp.cxOnePoint)
+        self.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
+        self.toolbox.register("mutate",
+                              gp.mutUniform,
+                              expr=self.toolbox.expr_mut,
+                              pset=pset)
 
     def __overfit_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
@@ -342,10 +348,9 @@ class GPSymbRegProblem():
                 fig.canvas.flush_events()
                 plt.pause(0.1)
 
-            if plot_best and (plot_best_func
-                              is not None) and (cgen % plot_freq == 0 or cgen == 1):
+            if plot_best and (self.toolbox.plot_best_func is not None) and (cgen % plot_freq == 0 or cgen == 1):
                 best = tools.selBest(self.pop, k=1)[0]
-                plot_best_func(best)
+                self.toolbox.plot_best_func(best)
 
             if early_stopping['enabled']:
                 training_fit = best.fitness.values[0]
