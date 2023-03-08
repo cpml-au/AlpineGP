@@ -232,10 +232,6 @@ def stgp_poisson(config_file):
     n_splits = config_file["mp"]["n_splits"]
     start_method = config_file["mp"]["start_method"]
 
-    num_sources = config_file["dataset"]["num_sources"]
-    num_samples_per_source = config_file["dataset"]["num_samples_per_source"]
-    noise_param = config_file["dataset"]["noise_param"]
-
     GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
                                pset=pset, min_=min_, max_=max_)
     start = time.perf_counter()
