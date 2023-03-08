@@ -38,8 +38,3 @@ mp:
   n_splits: 50
   n_jobs: 6
   start_method: "fork"
-
-dataset:
-  num_sources: 3
-  num_samples_per_source: 4
-  noise_param: 0.1
