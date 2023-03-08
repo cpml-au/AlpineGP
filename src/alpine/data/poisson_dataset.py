@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 from matplotlib import tri
 
 cwd = os.path.dirname(simplex.__file__)
+data_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def generate_complex(filename):
@@ -71,15 +72,15 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
 
         if num_sources >= 2:
             # ith exponential function
-            u_i = np.cos(i*node_coords[:, 0]) + np.sin(i*node_coords[:, 1])
-            f_i = i**2 * u_i
+            u_i = np.cos((i+1)*node_coords[:, 0]) + np.sin((i+1)*node_coords[:, 1])
+            f_i = (i+1)**2 * u_i
             data_X[num_sources*i+1, :] = u_i + noise
             data_y[num_sources*i+1, :] = f_i
 
         if num_sources >= 3:
             # ith power function
-            u_i = node_coords[:, 0]**(i+2) + node_coords[:, 1]**(i+2)
-            f_i = -(i+2)*(i+1)*(node_coords[:, 0]**(i) + node_coords[:, 1]**(i))
+            u_i = node_coords[:, 0]**(i+3) + node_coords[:, 1]**(i+3)
+            f_i = -(i+3)*(i+2)*(node_coords[:, 0]**(i+1) + node_coords[:, 1]**(i+1))
             data_X[num_sources*i+2, :] = u_i + noise
             data_y[num_sources*i+2, :] = f_i
 
@@ -107,14 +108,51 @@ def split_dataset(X, y, perc_val, perc_test, is_valid=False):
 
     # split the dataset in training and test set
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=perc_test, random_state=None)
+        X, y, test_size=perc_test, random_state=42)
 
     # split X_train in training and validation set
 
     X_t, X_valid, y_t, y_valid = train_test_split(
-        X_train, y_train, test_size=perc_val, random_state=None)
+        X_train, y_train, test_size=perc_val, random_state=42)
 
     X = (X_t, X_valid, X_test)
     y = (y_t, y_valid, y_test)
 
     return X, y
+
+
+def save_dataset(S, num_samples_per_source, num_sources, noise):
+    data_X, data_y = generate_dataset(S, num_samples_per_source, num_sources, noise)
+    X, y = split_dataset(data_X, data_y, 0.25, 0.25, True)
+    X_train, X_valid, X_test = X
+    y_train, y_valid, y_test = y
+    np.savetxt("X_train.csv", X_train, delimiter=",")
+    np.savetxt("X_valid.csv", X_valid, delimiter=",")
+    np.savetxt("X_test.csv", X_test, delimiter=",")
+    np.savetxt("y_train.csv", y_train, delimiter=",")
+    np.savetxt("y_valid.csv", y_valid, delimiter=",")
+    np.savetxt("y_test.csv", y_test, delimiter=",")
+
+
+def load_dataset():
+    X_train = np.loadtxt(os.path.join(data_path, "X_train.csv"),
+                         dtype=float, delimiter=",")
+    X_valid = np.loadtxt(os.path.join(data_path, "X_valid.csv"),
+                         dtype=float, delimiter=",")
+    X_test = np.loadtxt(os.path.join(data_path, "X_test.csv"),
+                        dtype=float, delimiter=",")
+    y_train = np.loadtxt(os.path.join(data_path, "y_train.csv"),
+                         dtype=float, delimiter=",")
+    y_valid = np.loadtxt(os.path.join(data_path, "y_valid.csv"),
+                         dtype=float, delimiter=",")
+    y_test = np.loadtxt(os.path.join(data_path, "y_test.csv"),
+                        dtype=float, delimiter=",")
+    return X_train, X_valid, X_test, y_train, y_valid, y_test
+
+
+if __name__ == '__main__':
+    # seet seed
+    np.random.seed(42)
+    S, bnodes, triang = generate_complex("test3.msh")
+    num_nodes = S.num_nodes
+    save_dataset(S, 4, 3, 0.1*np.random.rand(num_nodes))

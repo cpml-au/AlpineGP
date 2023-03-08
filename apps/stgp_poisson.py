@@ -20,6 +20,18 @@ import time
 import sys
 import yaml
 
+
+# generate mesh and dataset
+S, bnodes, triang = d.generate_complex("test3.msh")
+num_nodes = S.num_nodes
+X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
+
+# extract boundary values
+bvalues_train = X_train[:, bnodes]
+bvalues_val = X_val[:, bnodes]
+bvalues_test = X_test[:, bnodes]
+
+# set seed
 seed = 42
 deap.rng.seed(seed)
 deap.np.random.seed(seed)
@@ -32,9 +44,6 @@ dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64,
 # suppress warnings
 warnings.filterwarnings('ignore')
 
-# generate mesh and dataset
-S, bnodes, triang = d.generate_complex("test3.msh")
-num_nodes = S.num_nodes
 
 # list of types
 types = [C.CochainP0, C.CochainP1, C.CochainP2,
@@ -42,13 +51,6 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 
 # extract list of names of primitives
 primitives_strings = get_primitives_strings(pset, types)
-
-# number of different source term functions to use to generate the dataset
-num_sources = 3
-# number of cases for each source term function
-num_samples_per_source = 4
-# whether to use validation dataset
-use_validation = True
 
 # penalty parameter for the Dirichlet bcs
 gamma = 1000.
@@ -129,7 +131,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: di
     if return_best_sol:
         return best_sols
 
-    total_err *= 1/(num_sources*num_samples_per_source)
+    total_err *= 1/(X.shape[0])
 
     return total_err
 
@@ -237,19 +239,6 @@ def stgp_poisson(config_file):
     GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
                                pset=pset, min_=min_, max_=max_)
     start = time.perf_counter()
-
-    # generate datasets
-    noise = noise_param*np.random.rand(num_nodes)
-    data_X, data_y = d.generate_dataset(S, num_samples_per_source, num_sources, noise)
-    X, y = d.split_dataset(data_X, data_y, 0.25, 0.25, use_validation)
-
-    X_train, X_val, X_test = X
-    y_train, y_val,  y_test = y
-    # extract boundary values for the test set
-    bvalues_test = X_test[:, bnodes]
-    # extract bvalues_train
-    bvalues_train = X_train[:, bnodes]
-    bvalues_val = X_val[:, bnodes]
 
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
