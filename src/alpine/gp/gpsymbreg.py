@@ -223,7 +223,6 @@ class GPSymbRegProblem():
             plot_history=False,
             print_log=False,
             plot_best=False,
-            plot_best_func=None,
             plot_freq=5,
             plot_best_genealogy=False,
             seed=None,

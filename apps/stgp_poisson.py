@@ -20,7 +20,6 @@ import time
 import sys
 import yaml
 
-
 # generate mesh and dataset
 S, bnodes, triang = d.generate_complex("test3.msh")
 num_nodes = S.num_nodes
@@ -176,7 +175,7 @@ GPproblem = gps.GPSymbRegProblem(pset)
 # Plot best solution
 
 
-def plotSol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict):
+def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict):
     u = eval_MSE(ind, X=X, y=y, bvalues=bvalues, return_best_sol=True)
     plt.figure(10, figsize=(8, 4))
     fig = plt.gcf()
@@ -256,8 +255,8 @@ def stgp_poisson(config_file):
                                y=y_val,
                                bvalues=bvalues_val)
     if plot_best:
-        GPproblem.toolbox.register("plot_best_func", plotSol,
-                                   X=X_val, y=y_val, bvalues=bvalues_test)
+        GPproblem.toolbox.register("plot_best_func", plot_sol,
+                                   X=X_val, y=y_val, bvalues=bvalues_val)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
@@ -265,7 +264,6 @@ def stgp_poisson(config_file):
     GPproblem.run(plot_history=True,
                   print_log=True,
                   plot_best=plot_best,
-                  plot_best_func=plotSol,
                   plot_best_genealogy=plot_best_genealogy,
                   seed=None,
                   n_splits=n_splits,
