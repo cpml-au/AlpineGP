@@ -154,8 +154,8 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues
 
     total_err = eval_MSE(individual, X, y, bvalues)
 
-    if penalty["method"] == "terminal":
-        # penalty terms on terminals
+    if penalty["method"] == "primitive":
+        # penalty terms on primitives
         indstr = str(individual)
         objval = total_err + penalty["reg_param"] * \
             max([indstr.count(string) for string in primitives_strings])

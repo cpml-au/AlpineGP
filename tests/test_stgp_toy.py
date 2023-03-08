@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 
-from dctkit.gp import gp_fix
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
 from deap import base, algorithms, tools, gp, creator
@@ -15,11 +14,10 @@ import networkx as nx
 
 import multiprocessing
 
-
 cwd = os.path.dirname(simplex.__file__)
 
 
-def generate_mesh_poisson(filename):
+def generate_mesh(filename):
     full_path = os.path.join(cwd, filename)
     _, _, S_2, node_coords = util.read_mesh(full_path)
 
@@ -45,20 +43,23 @@ def generate_mesh_poisson(filename):
 
     dim_0 = S.num_nodes
     f_vec = jnp.array(4.*np.ones(dim_0))
-    f = C.CochainP0(S, f_vec, type="jax")
+    f = C.CochainP0(S, f_vec)
 
     u_0_vec = 0.01*np.random.rand(dim_0)
-    u_0 = C.CochainP0(S, u_0_vec, type="jax")
+    u_0 = C.CochainP0(S, u_0_vec)
 
     k = 1.0/2
     gamma = 100.
     return u_0, u_true, S, f, k, boundary_values, gamma
 
 
-u_0, u_true, S, f, k, boundary_values, gamma = generate_mesh_poisson("test1.msh")
+u_0, u_true, S, f, k, boundary_values, gamma = generate_mesh("test1.msh")
 # initialize dataset
 data_input = []
 data_output = []
+
+# set seed
+np.random.seed(42)
 
 # fill dataset
 for _ in range(100):
@@ -91,11 +92,11 @@ creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
 toolbox = base.Toolbox()
 
 # register how to create an individual
-toolbox.register("expr", gp_fix.genHalfAndHalf, pset=pset, min_=0, max_=1)
+toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=0, max_=1)
 
 toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-toolbox.register("compile", gp_fix.compile, pset=pset)
+toolbox.register("compile", gp.compile, pset=pset)
 
 # define evaluation function
 
@@ -118,11 +119,11 @@ toolbox.register("evaluate", evalToy)
 toolbox.register("select", tools.selTournament, tournsize=3)
 
 # register the mate method
-toolbox.register("mate", gp_fix.cxOnePoint)
+toolbox.register("mate", gp.cxOnePoint)
 
 # register the mutation method
-toolbox.register("expr_mut", gp_fix.genFull, min_=1, max_=2)
-toolbox.register("mutate", gp_fix.mutUniform, expr=toolbox.expr_mut, pset=pset)
+toolbox.register("expr_mut", gp.genFull, min_=1, max_=2)
+toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
 
 
 def test_stgp_toy_example():
