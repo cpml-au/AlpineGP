@@ -19,6 +19,10 @@ import mpire
 import time
 import sys
 import yaml
+import os
+
+apps_path = os.path.dirname(os.path.realpath(__file__))
+
 
 # generate mesh and dataset
 S, bnodes, triang = d.generate_complex("test3.msh")
@@ -304,7 +308,7 @@ def stgp_poisson(config_file):
 
     for i, sol in enumerate(best_sols):
         np.save("best_sol_test_" + str(i) + ".npy", sol)
-        np.save("true_sol_test_" + str(i) + ".npy", y_test[i])
+        np.save("true_sol_test_" + str(i) + ".npy", X_test[i])
 
 
 if __name__ == '__main__':
