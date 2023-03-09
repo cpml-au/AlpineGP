@@ -5,6 +5,8 @@ from dctkit.mesh import simplex, util
 import os
 from sklearn.model_selection import train_test_split
 from matplotlib import tri
+import matplotlib.pyplot as plt
+
 
 cwd = os.path.dirname(simplex.__file__)
 data_path = os.path.dirname(os.path.realpath(__file__))
@@ -57,6 +59,8 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
     """
     node_coords = S.node_coord
     num_nodes = S.num_nodes
+    x = node_coords[:, 0]
+    y = node_coords[:, 1]
     # source term data
     data_X = np.empty((num_sources*num_samples_per_source, num_nodes))
     # solution data
@@ -65,22 +69,25 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
     for i in range(num_samples_per_source):
         if num_sources >= 1:
             # ith quadratic function
-            u_i = 1/(i + 1)**2 * (node_coords[:, 0]**2 + node_coords[:, 1]**2)
-            f_i = -(4/(i+1)**2) * np.ones(num_nodes)
+            u_i = (i+1)*np.exp(np.sin(x)) + ((i+1)**2)*np.exp(np.cos(y))
+            f_i = -(i+1)*(np.exp(np.sin(x))*(np.cos(x))
+                          ** 2 - np.exp(np.sin(x))*np.sin(x)) + ((i+1)**2)*(-np.exp(np.cos(y))*(np.sin(y))**2 +
+                                                                            np.exp(np.cos(y))*np.cos(y))
             data_X[num_sources*i, :] = u_i + noise
             data_y[num_sources*i, :] = f_i
 
         if num_sources >= 2:
             # ith exponential function
-            u_i = np.cos((i+1)*node_coords[:, 0]) + np.sin((i+1)*node_coords[:, 1])
-            f_i = (i+1)**2 * u_i
+            u_i = (i+1)*np.log(1 + x) + \
+                1/(i+1)*np.log(1 + y)
+            f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
             data_X[num_sources*i+1, :] = u_i + noise
             data_y[num_sources*i+1, :] = f_i
 
         if num_sources >= 3:
             # ith power function
-            u_i = node_coords[:, 0]**(i+3) + node_coords[:, 1]**(i+3)
-            f_i = -(i+3)*(i+2)*(node_coords[:, 0]**(i+1) + node_coords[:, 1]**(i+1))
+            u_i = x**(i+3) + y**(i+3)
+            f_i = -(i+3)*(i+2)*(x**(i+1) + y**(i+1))
             data_X[num_sources*i+2, :] = u_i + noise
             data_y[num_sources*i+2, :] = f_i
 
