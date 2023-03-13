@@ -103,10 +103,18 @@ class GPSymbRegProblem():
                               pset=pset,
                               min_=min_,
                               max_=max_)
+        self.toolbox.register("expr_pop",
+                              gp.genHalfAndHalf,
+                              pset=pset,
+                              min_=min_,
+                              max_=max_,
+                              is_pop=True)
         self.toolbox.register("individual", tools.initIterate,
                               self.createIndividual, self.toolbox.expr)
+        self.toolbox.register("individual_pop", tools.initIterate,
+                              self.createIndividual, self.toolbox.expr_pop)
         self.toolbox.register("population", tools.initRepeat,
-                              list, self.toolbox.individual)
+                              list, self.toolbox.individual_pop)
         self.toolbox.register("compile", gp.compile, pset=pset)
 
         # Register selection with elitism operator
@@ -241,6 +249,7 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
+        print([str(i) for i in self.pop])
 
         if plot_best_genealogy:
             # Populate the history and the Hall Of Fame
