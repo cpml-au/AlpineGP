@@ -2,7 +2,7 @@ from dctkit.dec import cochain as C
 import networkx as nx
 import matplotlib.pyplot as plt
 import deap
-from deap import gp
+from deap import gp, tools
 import dctkit
 from alpine.models.poisson import pset, get_primitives_strings
 from alpine.data import poisson_dataset as d
@@ -237,6 +237,16 @@ def stgp_poisson(config_file):
 
     GPproblem.toolbox.register("expr", gp.genHalfAndHalf,
                                pset=pset, min_=min_, max_=max_)
+    GPproblem.toolbox.register("expr_pop",
+                               gp.genHalfAndHalf,
+                               pset=pset,
+                               min_=min_,
+                               max_=max_,
+                               is_pop=True)
+    GPproblem.toolbox.register("individual_pop", tools.initIterate,
+                               GPproblem.createIndividual, GPproblem.toolbox.expr_pop)
+    GPproblem.toolbox.register("population", tools.initRepeat,
+                               list, GPproblem.toolbox.individual_pop)
     start = time.perf_counter()
 
     # add functions for fitness evaluation (value of the objective function) on training
