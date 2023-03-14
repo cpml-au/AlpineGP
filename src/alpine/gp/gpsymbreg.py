@@ -57,6 +57,7 @@ class GPSymbRegProblem():
             self.__default_toolbox(pset, min_, max_)
         else:
             self.toolbox = toolbox
+            self.toolbox.register("select", self.select_with_elitism)
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
@@ -249,7 +250,7 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
-        print([str(i) for i in self.pop])
+        # print([str(i) for i in self.pop])
 
         if plot_best_genealogy:
             # Populate the history and the Hall Of Fame
@@ -310,8 +311,8 @@ class GPSymbRegProblem():
                 ind.fitness.values = fit
 
             # The population is entirely replaced by the offspring
-            self.pop[:] = offspring
-
+            # self.pop[:] = offspring
+            self.pop = tools.selBest(self.pop + offspring, self.NINDIVIDUALS)
             # Select the best individual in the current population
             best = tools.selBest(self.pop, k=1)[0]
 
