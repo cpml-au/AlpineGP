@@ -2,9 +2,9 @@
 gp:
   NINDIVIDUALS: 500
   NGEN: 5
-  CXPB: 0.5
-  MUTPB: 0.1
-  frac_elitist: 0.002
+  CXPB: 0
+  MUTPB: 0.6
+  frac_elitist: 0
   min_: 1
   max_: 4
   early_stopping: {'enabled': True, 'max_overfit': 10}
@@ -18,12 +18,12 @@ gp:
     # fun: gp.mutNodeReplacement
     # fun: gp.mutInsert
     # fun: gp.mutShrink
-    kargs: "{'expr': GPproblem.toolbox.expr_mut, 'pset': pset}" # string is important
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset}" # string is important
     # kargs: "{'pset': pset}"
     # kargs: "{}"
     expr_mut: gp.genHalfAndHalf
     # expr_mut: gp.genFull
-    expr_mut_kargs: "{'min_': 0, 'max_': 2}"
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
   crossover:
     #fun: gp.cxOnePoint
     #kargs: "{}"
