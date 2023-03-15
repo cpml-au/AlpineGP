@@ -179,7 +179,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict, S: 
 
 def stgp_poisson(config_file):
     # generate mesh and dataset
-    S, bnodes, triang = d.generate_complex("test3.msh")
+    S, bnodes, triang = d.generate_complex(0.08)
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
 
@@ -350,6 +350,11 @@ def stgp_poisson(config_file):
     nx.draw_networkx_labels(graph, pos, labels)
     plt.axis("off")
     plt.show()
+
+    # save graph in .txt file
+    file = open("graph.txt", "w")
+    a = file.write(str(best))
+    file.close()
 
     # save data for plots to disk
     np.save("train_fit_history.npy", GPproblem.train_fit_history)

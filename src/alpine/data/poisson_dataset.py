@@ -12,19 +12,18 @@ cwd = os.path.dirname(simplex.__file__)
 data_path = os.path.dirname(os.path.realpath(__file__))
 
 
-def generate_complex(filename):
+def generate_complex(lc):
     """Generate a Simplicial complex and its boundary nodes from a msh file.
 
     Args:
-        filename (str): name of the msh file (with .msh at the end).
+        lc (float): target mesh file.
 
     Returns:
         (SimplicialComplex): resulting simplicial complex.
         (np.array): np.array containing the positions of the boundary nodes.
     """
-    # full_path = os.path.join(cwd, filename)
-    # _, _, S_2, node_coords = util.read_mesh(full_path)
-    _, _, S_2, node_coords = util.generate_square_mesh(0.08)
+
+    _, _, S_2, node_coords = util.generate_square_mesh(lc)
 
     triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
     S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
@@ -73,7 +72,7 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
             f_i = -(i+1)*(np.exp(np.sin(x))*(np.cos(x))
                           ** 2 - np.exp(np.sin(x))*np.sin(x)) + ((i+1)**2)*(-np.exp(np.cos(y))*(np.sin(y))**2 +
                                                                             np.exp(np.cos(y))*np.cos(y))
-            data_X[num_sources*i, :] = u_i + noise
+            data_X[num_sources*i, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i, :] = f_i
 
         if num_sources >= 2:
@@ -81,14 +80,14 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
             u_i = (i+1)*np.log(1 + x) + \
                 1/(i+1)*np.log(1 + y)
             f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
-            data_X[num_sources*i+1, :] = u_i + noise
+            data_X[num_sources*i+1, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i+1, :] = f_i
 
         if num_sources >= 3:
             # ith power function
             u_i = x**(i+3) + y**(i+3)
             f_i = -(i+3)*(i+2)*(x**(i+1) + y**(i+1))
-            data_X[num_sources*i+2, :] = u_i + noise
+            data_X[num_sources*i+2, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i+2, :] = f_i
 
     return data_X, data_y
@@ -107,7 +106,6 @@ def split_dataset(X, y, perc_val, perc_test, is_valid=False):
     Returns:
         (tuple): tuple of training and test samples.
         (tuple): tuple of training and test targets.
-        (KFold): KFold class initialized.
     """
 
     if not is_valid:
@@ -129,6 +127,18 @@ def split_dataset(X, y, perc_val, perc_test, is_valid=False):
 
 
 def save_dataset(S, num_samples_per_source, num_sources, noise):
+    """Generate, split and save the dataset.
+
+    Args:
+        S (SimplicialComplex): simplicial complex where the functions of the dataset
+        are defined.
+        num_samples_per_source (int): the multiplicity of every class (for now 3) of
+        functions of the dataset.
+        num_sources (int): number of types (1-3) of functions used to represent the
+        source term.
+        different functions in the dataset.
+        noise (np.array): noise to perturb the solution vector.
+    """
     data_X, data_y = generate_dataset(S, num_samples_per_source, num_sources, noise)
     X, y = split_dataset(data_X, data_y, 0.25, 0.25, True)
     X_train, X_valid, X_test = X
@@ -142,6 +152,18 @@ def save_dataset(S, num_samples_per_source, num_sources, noise):
 
 
 def load_dataset():
+    """Load the dataset from .csv files.
+
+    Returns:
+        (np.array): training samples.
+        (np.array): validation samples.
+        (np.array): test samples.
+        (np.array): training targets.
+        (np.array): validation targets.
+        (np.array): test targets.
+
+
+    """
     X_train = np.loadtxt(os.path.join(data_path, "X_train.csv"),
                          dtype=float, delimiter=",")
     X_valid = np.loadtxt(os.path.join(data_path, "X_valid.csv"),
@@ -160,6 +182,10 @@ def load_dataset():
 if __name__ == '__main__':
     # seet seed
     np.random.seed(42)
-    S, bnodes, triang = generate_complex("test3.msh")
+    S, bnodes, triang = generate_complex(0.08)
     num_nodes = S.num_nodes
     save_dataset(S, 4, 3, 0.1*np.random.rand(num_nodes))
+    # data_X, _ = generate_dataset(S, 4, 3, 0.05*np.random.rand(num_nodes))
+    # for i in range(12):
+    #    plt.tricontourf(triang, data_X[i, :], cmap='RdBu', levels=20)
+    #    plt.show()
