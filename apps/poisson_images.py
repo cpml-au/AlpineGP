@@ -1,19 +1,20 @@
 import numpy as np
 import os
-import matplotlib
+# import matplotlib
 import matplotlib.pyplot as plt
 # import matplotlib.gridspec as gridspec
 from stgp_poisson import apps_path
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
-from deap import gp, tools, base, creator
+from deap import gp, base, creator
 import networkx as nx
+
+path = apps_path[:apps_path.rfind("apps")]
 
 
 def get_poisson_images():
     # correct path
-    _, _, triang = d.generate_complex("test3.msh")
-    path = apps_path[:apps_path.rfind("apps")]
+    _, _, triang = d.generate_complex(0.08)
     # load saved vectors
     train_fit_history = np.load(os.path.join(path, "train_fit_history.npy"))
     val_fit_history = np.load(os.path.join(path, "val_fit_history.npy"))
@@ -122,5 +123,8 @@ def get_graph_from_string(string: str):
 
 if __name__ == "__main__":
     get_poisson_images()
-    get_graph_from_string(
-        "Add(Sub(ExpF(1/2), Inn0(fk, u)), Inn0(delP1(dP0(MulP0(u, 1/2))), u))")
+    # open text file in read mode
+    text_file = open(os.path.join(path, "graph.txt"), "r")
+    best_string = text_file.read()
+    text_file.close()
+    get_graph_from_string(best_string)

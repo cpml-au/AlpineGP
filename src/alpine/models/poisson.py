@@ -139,8 +139,10 @@ pset.addPrimitive(C.square, [C.CochainD1], C.CochainD1, "SquareD1")
 pset.addPrimitive(C.square, [C.CochainD2], C.CochainD2, "SquareD2")
 
 
-# add constant = 0.5
+# add constants
 pset.addTerminal(0.5, float, name="1/2")
+pset.addTerminal(-1., float, name="-1")
+pset.addTerminal(2., float, name="2")
 
 # rename arguments
 pset.renameArguments(ARG0="u")
