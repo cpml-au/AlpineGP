@@ -2,9 +2,12 @@ import numpy as np
 import os
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+# import matplotlib.gridspec as gridspec
 from stgp_poisson import apps_path
+from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
+from deap import gp, tools, base, creator
+import networkx as nx
 
 
 def get_poisson_images():
@@ -25,13 +28,17 @@ def get_poisson_images():
 
     # make and save images
     plt.figure(figsize=(8, 4), dpi=300)
-    x = range(1, len(train_fit_history) + 1)
-    plt.plot(x, train_fit_history, 'b', label="Training Fitness")
-    plt.plot(x, val_fit_history, 'r', label="Validation Fitness")
+    length_x_axis = int(len(train_fit_history)/2)
+    x = np.arange(1, length_x_axis + 1)
+    plt.plot(x, train_fit_history[:len(x)], 'b', label="Training Fitness")
+    plt.plot(x, val_fit_history[:len(x)], 'r', label="Validation Fitness")
     plt.tick_params(axis='both', which='major', labelsize=5)
     plt.tick_params(axis='both', which='minor', labelsize=5)
-    plt.xticks(np.arange(min(x), max(x)+1, 1.0))
-    #plt.legend(loc='upper right')
+    step = 10
+    tick = np.arange(max(x) + 1)
+    tick[0] = 1
+    plt.xticks(tick[::step])
+    plt.legend(loc='upper right')
     plt.xlabel("Generation #")
     plt.ylabel("Best Fitness")
     plt.savefig("fitness.png", dpi=300)
@@ -93,5 +100,27 @@ def get_poisson_images():
     '''
 
 
+def get_graph_from_string(string: str):
+    creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
+    creator.create("Individual",
+                   gp.PrimitiveTree,
+                   fitness=creator.FitnessMin)
+    individual = creator.Individual.from_string(string, pset)
+    nodes, edges, labels = gp.graph(individual)
+    graph = nx.Graph()
+    graph.add_nodes_from(nodes)
+    graph.add_edges_from(edges)
+    pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
+    plt.figure(figsize=(7, 7))
+    nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
+    nx.draw_networkx_edges(graph, pos)
+    nx.draw_networkx_labels(graph, pos, labels)
+    plt.axis("off")
+    plt.savefig("graph.png", dpi=300)
+    plt.show()
+
+
 if __name__ == "__main__":
     get_poisson_images()
+    get_graph_from_string(
+        "Add(Sub(ExpF(1/2), Inn0(fk, u)), Inn0(delP1(dP0(MulP0(u, 1/2))), u))")
