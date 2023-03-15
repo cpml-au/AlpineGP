@@ -3,11 +3,13 @@ import os
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from stgp_poisson import triang, apps_path
+from stgp_poisson import apps_path
+from alpine.data import poisson_dataset as d
 
 
 def get_poisson_images():
     # correct path
+    _, _, triang = d.generate_complex("test3.msh")
     path = apps_path[:apps_path.rfind("apps")]
     # load saved vectors
     train_fit_history = np.load(os.path.join(path, "train_fit_history.npy"))
@@ -22,7 +24,7 @@ def get_poisson_images():
     true_sol_test = [true_sol_test_0, true_sol_test_1, true_sol_test_2]
 
     # make and save images
-    plt.figure(figsize=(2, 2.5), dpi=300)
+    plt.figure(figsize=(8, 4), dpi=300)
     x = range(1, len(train_fit_history) + 1)
     plt.plot(x, train_fit_history, 'b', label="Training Fitness")
     plt.plot(x, val_fit_history, 'r', label="Validation Fitness")
@@ -32,10 +34,10 @@ def get_poisson_images():
     #plt.legend(loc='upper right')
     plt.xlabel("Generation #")
     plt.ylabel("Best Fitness")
-    plt.savefig("fitness.pdf", dpi=300)
+    plt.savefig("fitness.png", dpi=300)
     plt.show()
 
-    _, axes = plt.subplots(2, 3, figsize=(3, 2.5), num=10)
+    _, axes = plt.subplots(2, 3, figsize=(8, 4), num=10)
     fig = plt.gcf()
     for i in range(0, 3):
         axes[0, i].tricontourf(triang, best_sol_test[i], cmap='RdBu', levels=20)
@@ -53,7 +55,7 @@ def get_poisson_images():
     cb.ax.tick_params(labelsize='small')
     fig.canvas.draw()
     fig.canvas.flush_events()
-    plt.savefig("test_performance.pdf", dpi=300)
+    plt.savefig("test_performance.png", dpi=300)
     plt.show()
 
     '''
