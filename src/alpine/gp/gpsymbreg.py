@@ -13,6 +13,7 @@ class GPSymbRegProblem():
                  CXPB=0.5,
                  MUTPB=0.2,
                  frac_elitist=0.,
+                 overlapping_generation=False,
                  parsimony_pressure={'enabled': False,
                                      'fitness_first': True,
                                      'parsimony_size': 1.5},
@@ -40,6 +41,7 @@ class GPSymbRegProblem():
         # best training score among all the populations
         self.tbtp = None
 
+        self.overlapping_generation = overlapping_generation
         self.parsimony_pressure = parsimony_pressure
         self.tournsize = tournsize
         self.stochastic_tournament = stochastic_tournament
@@ -250,7 +252,6 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
-        # print([str(i) for i in self.pop])
 
         if plot_best_genealogy:
             # Populate the history and the Hall Of Fame
@@ -310,9 +311,13 @@ class GPSymbRegProblem():
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
-            # The population is entirely replaced by the offspring
-            # self.pop[:] = offspring
-            self.pop = tools.selBest(self.pop + offspring, self.NINDIVIDUALS)
+            if not self.overlapping_generation:
+                # The population is entirely replaced by the offspring
+                self.pop[:] = offspring
+            else:
+                # parents and offspring compete for survival (truncation selection)
+                self.pop = tools.selBest(self.pop + offspring, self.NINDIVIDUALS)
+
             # Select the best individual in the current population
             best = tools.selBest(self.pop, k=1)[0]
 

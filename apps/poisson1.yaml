@@ -1,12 +1,13 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 10
+  NINDIVIDUALS: 500
   NGEN: 20
   CXPB: 0
   MUTPB: 1.0
   frac_elitist: 0
   min_: 1
   max_: 4
+  overlapping_generation: True
   early_stopping: {'enabled': True, 'max_overfit': 10}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
   penalty: {'method': "length", 'reg_param': 0.1}

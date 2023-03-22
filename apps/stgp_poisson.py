@@ -210,6 +210,7 @@ def stgp_poisson(config_file):
     frac_elitist = int(config_file["gp"]["frac_elitist"]*NINDIVIDUALS)
     min_ = config_file["gp"]["min_"]
     max_ = config_file["gp"]["max_"]
+    overlapping_generation = config_file["gp"]["overlapping_generation"]
     early_stopping = config_file["gp"]["early_stopping"]
     parsimony_pressure = config_file["gp"]["parsimony_pressure"]
     penalty = config_file["gp"]["penalty"]
@@ -304,6 +305,7 @@ def stgp_poisson(config_file):
                                      NGEN=NGEN,
                                      CXPB=CXPB,
                                      MUTPB=MUTPB,
+                                     overlapping_generation=overlapping_generation,
                                      frac_elitist=frac_elitist,
                                      parsimony_pressure=parsimony_pressure,
                                      tournsize=tournsize,
