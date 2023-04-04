@@ -3,7 +3,6 @@ from dctkit.mesh.simplex import SimplicialComplex
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import tri
-import deap
 from deap import gp, tools, base, creator
 import dctkit
 from alpine.models.poisson import pset, get_primitives_strings
