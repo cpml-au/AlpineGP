@@ -8,7 +8,9 @@ data_path = os.path.dirname(os.path.realpath(__file__))
 
 def get_data_with_noise(noise):
     # get data
-    y = np.pi*10/4*np.ones(4, dtype=dt.float_dtype)
+    y = np.empty((4, 2))
+    y[:, 0] = np.pi*10/4*np.ones(4, dtype=dt.float_dtype)
+    y[:, 1] = np.array([-5, -10, -15, -20])
     X = np.empty((4, 10))
     data_string = ["xy_F_5.txt", "xy_F_10.txt", "xy_F_15.txt", "xy_F_20.txt"]
     for i, string in enumerate(data_string):
@@ -20,7 +22,7 @@ def get_data_with_noise(noise):
         theta_true = np.empty(10, dtype=dt.float_dtype)
         for j in range(10):
             theta_true[j] = np.arctan(
-                (y_data[i+1]-y_data[i])/(x_data[i+1]-x_data[i]))
+                (y_data[j+1]-y_data[j])/(x_data[j+1]-x_data[j]))
         # update X
         X[i, :] = theta_true
     return X, y
@@ -52,17 +54,17 @@ def load_dataset():
 
 
     """
-    X_train = np.loadtxt(os.path.join(data_path, "X_train.csv"),
+    X_train = np.loadtxt(os.path.join(data_path, "X_train_elastica.csv"),
                          dtype=float, delimiter=",")
-    X_valid = np.loadtxt(os.path.join(data_path, "X_valid.csv"),
+    X_valid = np.loadtxt(os.path.join(data_path, "X_valid_elastica.csv"),
                          dtype=float, delimiter=",")
-    X_test = np.loadtxt(os.path.join(data_path, "X_test.csv"),
+    X_test = np.loadtxt(os.path.join(data_path, "X_test_elastica.csv"),
                         dtype=float, delimiter=",")
-    y_train = np.loadtxt(os.path.join(data_path, "y_train.csv"),
+    y_train = np.loadtxt(os.path.join(data_path, "y_train_elastica.csv"),
                          dtype=float, delimiter=",")
-    y_valid = np.loadtxt(os.path.join(data_path, "y_valid.csv"),
+    y_valid = np.loadtxt(os.path.join(data_path, "y_valid_elastica.csv"),
                          dtype=float, delimiter=",")
-    y_test = np.loadtxt(os.path.join(data_path, "y_test.csv"),
+    y_test = np.loadtxt(os.path.join(data_path, "y_test_elastica.csv"),
                         dtype=float, delimiter=",")
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
