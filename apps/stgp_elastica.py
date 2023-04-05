@@ -183,8 +183,12 @@ def stgp_elastica(config_file):
     internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
 
+    ones_coch = C.CochainD0(complex=S, coeffs=np.ones(
+        S.num_nodes-1, dtype=dt.float_dtype))
+
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
+    pset.addTerminal(ones_coch, C.CochainD0, name="ones")
 
     # initial guess for the solution
     theta_0 = 0.1*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
