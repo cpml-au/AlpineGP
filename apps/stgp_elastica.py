@@ -34,7 +34,7 @@ class ObjElastica():
         self.energy_func = func
         self.individual = individual
 
-    def total_energy(self, theta_vec: np.array, EI0: np.array, F: float, theta_in: np.array) -> float:
+    def total_energy(self, theta_vec: np.array, F_EI0: np.array, theta_in: np.array) -> float:
         """Energy found by the current individual.
 
         Args:
@@ -48,7 +48,7 @@ class ObjElastica():
         # extend theta on the boundary w.r.t boundary conditions
         theta_vec = jnp.insert(theta_vec, 0, theta_in)
         theta = C.CochainD0(self.S, theta_vec)
-        energy = self.energy_func(theta, EI0[0], F)
+        energy = self.energy_func(theta, F_EI0[0])
         return energy
 
 
@@ -76,7 +76,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
     total_err = 0.
     best_theta = []
-    best_EI0 = []
+    best_FL2_EI0 = []
 
     EI0_0 = np.ones(1, dtype=dt.float_dtype)
     if X.ndim == 1:
@@ -89,9 +89,11 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
         theta_in = theta_true[0]
 
         # extract value of F
-        F = y[i, 1]
+        FL2 = y[i]
+        # define initial value
+        FL2_EI0_0 = FL2/EI0_0
         # set extra args for bilevel program
-        constraint_args = (F, theta_in)
+        constraint_args = (theta_in,)
         obj_args = (theta_true,)
         # set bilevel problem
         prb = optctrl.OptimalControlProblem(objfun=obj_fun_theta,
@@ -100,14 +102,17 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
                                             constraint_args=constraint_args,
                                             obj_args=obj_args)
 
-        theta, EI0, fval = prb.run(theta_0, EI0_0, tol=1e-2)
+        theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0_0, tol=1e-2)
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
         if return_best_sol:
             best_theta.append(theta)
-            best_EI0.append(EI0)
+            best_FL2_EI0.append(FL2_EI0)
 
+        # print(individual)
+        # print(fval)
+        # print(theta)
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
             total_err = 100
@@ -115,12 +120,10 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
         # update the error: it is the sum of the error w.r.t. theta and
         # the error w.r.t. EI0
-        current_err_theta = np.linalg.norm(theta - theta_true)
-        current_err_EI0 = np.linalg.norm(EI0 - y[i, 0])
-        total_err += current_err_theta + current_err_EI0
+        total_err += fval
 
     if return_best_sol:
-        return best_theta, best_EI0
+        return best_theta, best_FL2_EI0
 
     total_err *= 1/(X.shape[0])
 
@@ -184,7 +187,7 @@ def stgp_elastica(config_file):
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
     # initial guess for the solution
-    theta_0 = 0.01*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
+    theta_0 = 0.1*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
 
     # initialize toolbox and creator
     toolbox = base.Toolbox()
