@@ -1,7 +1,7 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 500
-  NGEN: 20
+  NINDIVIDUALS: 10
+  NGEN: 5
   CXPB: 0
   MUTPB: 1.0
   frac_elitist: 0
@@ -36,6 +36,6 @@ plot:
   plot_best_genealogy: False
 
 mp:
-  n_splits: 50
-  n_jobs: 6
+  n_splits: 2
+  n_jobs: 2
   start_method: "fork"

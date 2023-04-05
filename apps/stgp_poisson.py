@@ -22,6 +22,9 @@ import sys
 import yaml
 import os
 
+import pygmo as pg
+from functools import partial
+
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
 # set seed
@@ -89,21 +92,49 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     obj = ObjFunction(S, bnodes, gamma)
     obj.set_energy_func(energy_func, individual)
 
-    # compute/compile jacobian of the objective wrt its first argument (vec_x)
-    jac = jit(grad(obj.total_energy))
-
     total_err = 0.
 
     best_sols = []
+
+    algo = pg.algorithm(pg.nlopt(solver="tnewton"))
+    # algo.extract(pg.nlopt).ftol_abs = 1e-5
+    # algo.extract(pg.nlopt).ftol_rel = 1e-5
+    algo.extract(pg.nlopt).maxeval = 100
+
+    num_nodes = X.shape[1]
 
     # TODO: parallelize using vmap once we can use jaxopt
     for i, vec_y in enumerate(y):
         # extract current bvalues
         vec_bvalues = bvalues[i, :]
 
+        energy = jit(partial(obj.total_energy, vec_y=vec_y, vec_bvalues=vec_bvalues))
+        # compute/compile jacobian of the objective wrt its first argument (vec_x)
+        jac = jit(grad(energy))
+
+        class PoissonProblem():
+            def fitness(self, dv):
+                fit = energy(dv)
+                return [fit]
+
+            def gradient(self, dv):
+                grad = jac(dv)
+                return grad
+
+            def get_bounds(self):
+                return ([-100]*num_nodes, [100]*num_nodes)
+
+        prb = pg.problem(PoissonProblem())
+        # create empty population
+        pop = pg.population(prb)
+        # add initial guess to population
+        pop.push_back(u_0.coeffs)
         # minimize the objective
-        x = minimize(fun=obj.total_energy, x0=u_0.coeffs,
-                     args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
+        pop = algo.evolve(pop)
+        x = pop.champion_x
+
+        # x = minimize(fun=obj.total_energy, x0=u_0.coeffs,
+        #              args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
         if return_best_sol:
             best_sols.append(x)
 
@@ -117,7 +148,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     if return_best_sol:
         return best_sols
 
-    total_err *= 1/(X.shape[0])
+    total_err *= 1/X.shape[0]
+    print(str(individual), total_err)
 
     return total_err
 
