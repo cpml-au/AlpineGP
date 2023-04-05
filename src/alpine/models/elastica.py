@@ -3,15 +3,16 @@ from dctkit.dec import cochain as C
 import math
 import jax.numpy as jnp
 import operator
+import dctkit as dt
 
 # FIXME: these functions are not specific to elastica, move elsewhere
 
 
 def protectedDiv(left, right):
     try:
-        return left / right
+        return jnp.array(left / right, dtype=dt.float_dtype)
     except ZeroDivisionError:
-        return math.nan
+        return jnp.nan
 
 
 def protectedLog(x):
@@ -28,13 +29,29 @@ def protectedSqrt(x):
         return jnp.nan
 
 
+def add_mod(x, y):
+    return jnp.array(operator.add(x, y), dtype=dt.float_dtype)
+
+
+def sub_mod(x, y):
+    return jnp.array(operator.sub(x, y), dtype=dt.float_dtype)
+
+
+def mul_mod(x, y):
+    return jnp.array(operator.mul(x, y), dtype=dt.float_dtype)
+
+
+def square_mod(x):
+    return jnp.square(x).astype(dt.float_dtype)
+
+
 # define primitive set
 pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float, float], float)
 
 # scalar operations
-pset.addPrimitive(operator.add, [float, float], float, name="Add")
-pset.addPrimitive(operator.sub, [float, float], float, name="Sub")
-pset.addPrimitive(operator.mul, [float, float], float, name="MulF")
+pset.addPrimitive(add_mod, [float, float], float, name="Add")
+pset.addPrimitive(sub_mod, [float, float], float, name="Sub")
+pset.addPrimitive(mul_mod, [float, float], float, name="MulF")
 pset.addPrimitive(protectedDiv, [float, float], float, name="Div")
 pset.addPrimitive(jnp.sin, [float], float, name="SinF")
 pset.addPrimitive(jnp.arcsin, [float], float, name="ArcsinF")
@@ -43,7 +60,7 @@ pset.addPrimitive(jnp.arccos, [float], float, name="ArccosF")
 pset.addPrimitive(jnp.exp, [float], float, name="ExpF")
 pset.addPrimitive(protectedLog, [float], float, name="LogF")
 pset.addPrimitive(protectedSqrt, [float], float, name="SqrtF")
-pset.addPrimitive(jnp.square, [float], float, name="SquareF")
+pset.addPrimitive(square_mod, [float], float, name="SquareF")
 
 # cochain operations
 pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")
