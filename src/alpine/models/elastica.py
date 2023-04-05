@@ -46,7 +46,7 @@ def square_mod(x):
 
 
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float, float], float)
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float], float)
 
 # scalar operations
 pset.addPrimitive(add_mod, [float, float], float, name="Add")
@@ -105,5 +105,4 @@ pset.addTerminal(2., float, name="2")
 
 # rename arguments
 pset.renameArguments(ARG0="theta_coch")
-pset.renameArguments(ARG1="EI0")
-pset.renameArguments(ARG2="F")
+pset.renameArguments(ARG1="FL2_EI_0")

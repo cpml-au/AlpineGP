@@ -8,9 +8,7 @@ data_path = os.path.dirname(os.path.realpath(__file__))
 
 def get_data_with_noise(noise):
     # get data
-    y = np.empty((4, 2), dtype=dt.float_dtype)
-    y[:, 0] = np.pi*10/4*np.ones(4, dtype=dt.float_dtype)
-    y[:, 1] = np.array([-5, -10, -15, -20], dtype=dt.float_dtype)
+    y = np.array([-5., -10., -15., -20.], dtype=dt.float_dtype)
     X = np.empty((4, 10), dtype=dt.float_dtype)
     data_string = ["xy_F_5.txt", "xy_F_10.txt", "xy_F_15.txt", "xy_F_20.txt"]
     for i, string in enumerate(data_string):
