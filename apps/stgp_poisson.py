@@ -48,24 +48,59 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 primitives_strings = get_primitives_strings(pset, types)
 
 
-class ObjFunction:
-    def __init__(self, S: SimplicialComplex, bnodes: np.array, gamma: float) -> None:
+# class ObjFunction:
+#     def __init__(self, S: SimplicialComplex, bnodes: np.array, gamma: float) -> None:
+#         self.S = S
+#         self.bnodes = bnodes
+#         self.gamma = gamma
+
+#     def set_energy_func(self, func, individual):
+#         """Set the energy function to be used for the computation of the objective
+#         function."""
+#         self.energy_func = func
+#         self.individual = individual
+
+#     def total_energy(self, vec_x, vec_y, vec_bvalues):
+#         penalty = 0.5*self.gamma*jnp.sum((vec_x[self.bnodes] - vec_bvalues)**2)
+#         c = C.CochainP0(self.S, vec_x)
+#         fk = C.CochainP0(self.S, vec_y)
+#         energy = self.energy_func(c, fk) + penalty
+#         return energy
+
+
+class PoissonProblem():
+    def __init__(self, S: SimplicialComplex, energy_func: callable, num_nodes: float, bnodes: np.array, gamma: float) -> None:
+        self.num_nodes = num_nodes
         self.S = S
         self.bnodes = bnodes
         self.gamma = gamma
+        self.energy_func = energy_func
 
-    def set_energy_func(self, func, individual):
-        """Set the energy function to be used for the computation of the objective
-        function."""
-        self.energy_func = func
-        self.individual = individual
+    def set_data(self, vec_y, b_values):
+        self.vec_y = vec_y
+        self.vec_bvalues = b_values
 
-    def total_energy(self, vec_x, vec_y, vec_bvalues):
-        penalty = 0.5*self.gamma*jnp.sum((vec_x[self.bnodes] - vec_bvalues)**2)
-        c = C.CochainP0(self.S, vec_x)
-        fk = C.CochainP0(self.S, vec_y)
-        energy = self.energy_func(c, fk) + penalty
-        return energy
+    def compile_energy_grad_fn(self):
+        self.comp_energy = self.total_energy
+        self.comp_grad = grad(self.total_energy)
+
+    def total_energy(self, x):
+        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - self.vec_bvalues)**2)
+        c = C.CochainP0(self.S, x)
+        fk = C.CochainP0(self.S, self.vec_y)
+        total_energy = self.energy_func(c, fk) + penalty
+        return total_energy
+
+    def fitness(self, x):
+        fit = self.comp_energy(x)
+        return [fit]
+
+    def gradient(self, x):
+        graden = self.comp_grad(x)
+        return graden
+
+    def get_bounds(self):
+        return ([-100]*self.num_nodes, [100]*self.num_nodes)
 
 
 def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
@@ -89,52 +124,41 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     energy_func = toolbox.compile(expr=individual)
 
     # create objective function and set its energy function
-    obj = ObjFunction(S, bnodes, gamma)
-    obj.set_energy_func(energy_func, individual)
+
+    num_nodes = X.shape[1]
+    poisson = PoissonProblem(S=S, energy_func=energy_func,
+                             num_nodes=num_nodes, bnodes=bnodes, gamma=gamma)
+    prb = pg.problem(poisson)
+    # create empty population
+    # pop = pg.population(prb)
+    # obj = ObjFunction(S, bnodes, gamma)
+    # obj.set_energy_func(energy_func, individual)
+    prb.extract(PoissonProblem).compile_energy_grad_fn()
 
     total_err = 0.
 
     best_sols = []
 
     algo = pg.algorithm(pg.nlopt(solver="tnewton"))
-    # algo.extract(pg.nlopt).ftol_abs = 1e-5
-    # algo.extract(pg.nlopt).ftol_rel = 1e-5
+    algo.extract(pg.nlopt).ftol_abs = 1e-5
+    algo.extract(pg.nlopt).ftol_rel = 1e-5
     algo.extract(pg.nlopt).maxeval = 100
-
-    num_nodes = X.shape[1]
 
     # TODO: parallelize using vmap once we can use jaxopt
     for i, vec_y in enumerate(y):
         # extract current bvalues
         vec_bvalues = bvalues[i, :]
 
-        energy = jit(partial(obj.total_energy, vec_y=vec_y, vec_bvalues=vec_bvalues))
-        # compute/compile jacobian of the objective wrt its first argument (vec_x)
-        jac = jit(grad(energy))
+        # set bvalues and vec_y
+        prb.extract(PoissonProblem).set_data(vec_y, vec_bvalues)
 
-        class PoissonProblem():
-            def fitness(self, dv):
-                fit = energy(dv)
-                return [fit]
-
-            def gradient(self, dv):
-                grad = jac(dv)
-                return grad
-
-            def get_bounds(self):
-                return ([-100]*num_nodes, [100]*num_nodes)
-
-        prb = pg.problem(PoissonProblem())
-        # create empty population
-        pop = pg.population(prb)
         # add initial guess to population
+        pop = pg.population(prb)
         pop.push_back(u_0.coeffs)
         # minimize the objective
         pop = algo.evolve(pop)
         x = pop.champion_x
 
-        # x = minimize(fun=obj.total_energy, x0=u_0.coeffs,
-        #              args=(vec_y, vec_bvalues), method="L-BFGS-B", jac=jac).x
         if return_best_sol:
             best_sols.append(x)
 

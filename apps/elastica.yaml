@@ -37,5 +37,5 @@ plot:
 
 mp:
   n_splits: 2
-  n_jobs: 6
+  n_jobs: 2
   start_method: "fork"

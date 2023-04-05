@@ -32,7 +32,7 @@ gp:
     #kargs: "{'termpb' : 0.1}"
 
 plot:
-  plot_best: True
+  plot_best: False
   plot_best_genealogy: False
 
 mp:
