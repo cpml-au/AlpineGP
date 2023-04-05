@@ -1,1 +1,1 @@
-SqrtF(EI0)
+CosF(F)

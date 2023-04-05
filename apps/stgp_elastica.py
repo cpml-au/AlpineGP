@@ -78,7 +78,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     best_theta = []
     best_EI0 = []
 
-    EI0_0 = 1*np.ones(1, dtype=dt.float_dtype)
+    EI0_0 = np.ones(1, dtype=dt.float_dtype)
     if X.ndim == 1:
         iterate = enumerate(np.array([X]))
         y = np.array([y])
@@ -90,7 +90,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
         # extract value of F
         F = y[i, 1]
-
         # set extra args for bilevel program
         constraint_args = (F, theta_in)
         obj_args = (theta_true,)
@@ -152,7 +151,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
-        #indstr = str(individual)
+        # indstr = str(individual)
         # objval = total_err + penalty["reg_param"] * \
         #    max([indstr.count(string) for string in primitives_strings])
         objval = total_err
@@ -167,8 +166,9 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 
 def stgp_elastica(config_file):
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
+    # print([i.dtype for i in y_val])
     # get normalized simplicial complex
-    S_1, x = generate_1_D_mesh(num_nodes=11, L=1)
+    S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
     S.get_circumcenters()
     S.get_primal_volumes()
@@ -176,15 +176,15 @@ def stgp_elastica(config_file):
     S.get_hodge_star()
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
-    internal_vec[0] = 0
-    internal_vec[-1] = 0
+    internal_vec[0] = 0.
+    internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
 
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
     # initial guess for the solution
-    theta_0 = 0.01*np.random.rand(S.num_nodes-2)
+    theta_0 = 0.01*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
 
     # initialize toolbox and creator
     toolbox = base.Toolbox()
@@ -344,11 +344,15 @@ def stgp_elastica(config_file):
     np.save("train_fit_history.npy", GPproblem.train_fit_history)
     np.save("val_fit_history.npy", GPproblem.val_fit_history)
 
+    '''
+
     best_sols = eval_MSE(best, X_test, y_test, toolbox, S, theta_0, True)
 
     for i, sol in enumerate(best_sols):
         np.save("best_sol_test_" + str(i) + ".npy", sol)
         np.save("true_sol_test_" + str(i) + ".npy", X_test[i])
+
+    '''
 
 
 if __name__ == '__main__':
