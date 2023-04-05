@@ -6,11 +6,11 @@ gp:
   MUTPB: 1.0
   frac_elitist: 0
   min_: 1
-  max_: 4
+  max_: 3
   overlapping_generation: True
   early_stopping: {'enabled': True, 'max_overfit': 10}
   parsimony_pressure: {'enabled': False, 'fitness_first': True, 'parsimony_size': 1.5}
-  penalty: {'method': "length", 'reg_param': 0.1}
+  penalty: {'method': "length", 'reg_param': 0.01}
   select:
     tournsize: 2
     stochastic_tournament: {'enabled': False, 'prob': [0.7, 0.3]}
