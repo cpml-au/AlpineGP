@@ -18,6 +18,8 @@ import mpire
 import networkx as nx
 import matplotlib.pyplot as plt
 import jax
+from jax import jit, grad
+from scipy.optimize import minimize
 
 
 # choose precision and whether to use GPU or CPU
@@ -66,7 +68,7 @@ def obj_fun_theta(theta_guess: np.array, EI_guess: np.array, theta_true: np.arra
 
 
 def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0: np.array, return_best_sol: bool = False) -> float:
+             S: SimplicialComplex, theta_0: np.array, return_best_sol: bool = False, is_bil_train: bool = False,) -> float:
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
@@ -78,7 +80,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     best_theta = []
     best_FL2_EI0 = []
 
-    EI0_0 = np.ones(1, dtype=dt.float_dtype)
+    # EI0 = np.ones(1, dtype=dt.float_dtype)
+    EI0 = individual.param
     if X.ndim == 1:
         iterate = enumerate(np.array([X]))
         y = np.array([y])
@@ -91,24 +94,38 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
         # extract value of F
         FL2 = y[i]
         # define initial value
-        FL2_EI0_0 = FL2/EI0_0
-        # set extra args for bilevel program
-        constraint_args = (theta_in,)
-        obj_args = (theta_true,)
-        # set bilevel problem
-        prb = optctrl.OptimalControlProblem(objfun=obj_fun_theta,
-                                            state_en=obj.total_energy,
-                                            state_dim=S.num_nodes-2,
-                                            constraint_args=constraint_args,
-                                            obj_args=obj_args)
+        FL2_EI0 = FL2/EI0
+        if i == 0 and is_bil_train:
+            # set extra args for bilevel program
+            constraint_args = (theta_in,)
+            obj_args = (theta_true,)
+            # set bilevel problem
+            prb = optctrl.OptimalControlProblem(objfun=obj_fun_theta,
+                                                state_en=obj.total_energy,
+                                                state_dim=S.num_nodes-2,
+                                                constraint_args=constraint_args,
+                                                obj_args=obj_args)
 
-        theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0_0, tol=1e-2)
+            theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0, tol=1e-2)
+            # recover EI0
+            EI0 = FL2/FL2_EI0
+
+        else:
+            jac = jit(grad(obj.total_energy))
+            theta = minimize(fun=obj.total_energy, x0=theta_0,
+                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac).x
+            fval = obj_fun_theta(theta, FL2_EI0, theta_true)
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
+
+        # update individual.param
+        individual.param = EI0
+
+        # FIXME: check how it works, maybe there is a bug
         if return_best_sol:
             best_theta.append(theta)
-            best_FL2_EI0.append(FL2_EI0)
+            best_FL2_EI0.append(EI0)
 
         # print(individual)
         # print(fval)
@@ -131,7 +148,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-                 S: SimplicialComplex, theta_0: np.array, penalty: dict) -> (float,):
+                 S: SimplicialComplex, theta_0: np.array, penalty: dict, is_bil_train: bool = False) -> (float,):
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -150,7 +167,8 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 
     objval = 0.
 
-    total_err = eval_MSE(individual, X, y, toolbox, S, theta_0)
+    total_err = eval_MSE(individual, X, y, toolbox, S,
+                         theta_0, is_bil_train=is_bil_train)
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
@@ -198,7 +216,8 @@ def stgp_elastica(config_file):
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
     creator.create("Individual",
                    gp.PrimitiveTree,
-                   fitness=creator.FitnessMin)
+                   fitness=creator.FitnessMin,
+                   param=np.ones(1, dtype=dt.float_dtype))
     createIndividual = creator.Individual
     # set parameters from config file
     NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
@@ -267,7 +286,8 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0,
-                     penalty=penalty)
+                     penalty=penalty,
+                     is_bil_train=True)
     toolbox.register("evaluate_val_fit",
                      eval_fitness,
                      X=X_val,
