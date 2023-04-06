@@ -13,7 +13,6 @@ import numpy as np
 import warnings
 import jax.numpy as jnp
 from jax import jit, grad
-from scipy.optimize import minimize
 import operator
 import math
 import mpire
@@ -21,9 +20,7 @@ import time
 import sys
 import yaml
 import os
-
 import pygmo as pg
-from functools import partial
 
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -47,25 +44,7 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 # extract list of names of primitives
 primitives_strings = get_primitives_strings(pset, types)
 
-
-# class ObjFunction:
-#     def __init__(self, S: SimplicialComplex, bnodes: np.array, gamma: float) -> None:
-#         self.S = S
-#         self.bnodes = bnodes
-#         self.gamma = gamma
-
-#     def set_energy_func(self, func, individual):
-#         """Set the energy function to be used for the computation of the objective
-#         function."""
-#         self.energy_func = func
-#         self.individual = individual
-
-#     def total_energy(self, vec_x, vec_y, vec_bvalues):
-#         penalty = 0.5*self.gamma*jnp.sum((vec_x[self.bnodes] - vec_bvalues)**2)
-#         c = C.CochainP0(self.S, vec_x)
-#         fk = C.CochainP0(self.S, vec_y)
-#         energy = self.energy_func(c, fk) + penalty
-#         return energy
+# TODO: move to Poisson model
 
 
 class PoissonProblem():
@@ -81,22 +60,22 @@ class PoissonProblem():
         self.vec_bvalues = b_values
 
     def compile_energy_grad_fn(self):
-        self.comp_energy = self.total_energy
-        self.comp_grad = grad(self.total_energy)
+        self.comp_energy = jit(self.total_energy)
+        self.comp_grad = jit(grad(self.total_energy))
 
-    def total_energy(self, x):
-        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - self.vec_bvalues)**2)
+    def total_energy(self, x, vec_y, vec_bvalues):
+        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - vec_bvalues)**2)
         c = C.CochainP0(self.S, x)
-        fk = C.CochainP0(self.S, self.vec_y)
+        fk = C.CochainP0(self.S, vec_y)
         total_energy = self.energy_func(c, fk) + penalty
         return total_energy
 
     def fitness(self, x):
-        fit = self.comp_energy(x)
+        fit = self.comp_energy(x, self.vec_y, self.vec_bvalues)
         return [fit]
 
     def gradient(self, x):
-        graden = self.comp_grad(x)
+        graden = self.comp_grad(x, self.vec_y, self.vec_bvalues)
         return graden
 
     def get_bounds(self):
@@ -119,20 +98,16 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     Returns:
         total MSE over the dataset.
     """
-
+    num_nodes = X.shape[1]
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
     # create objective function and set its energy function
-
-    num_nodes = X.shape[1]
     poisson = PoissonProblem(S=S, energy_func=energy_func,
                              num_nodes=num_nodes, bnodes=bnodes, gamma=gamma)
     prb = pg.problem(poisson)
-    # create empty population
-    # pop = pg.population(prb)
-    # obj = ObjFunction(S, bnodes, gamma)
-    # obj.set_energy_func(energy_func, individual)
+
+    # jit energy and its grad
     prb.extract(PoissonProblem).compile_energy_grad_fn()
 
     total_err = 0.
@@ -144,19 +119,22 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     algo.extract(pg.nlopt).ftol_rel = 1e-5
     algo.extract(pg.nlopt).maxeval = 100
 
-    # TODO: parallelize using vmap once we can use jaxopt
+    # TODO: parallelize
     for i, vec_y in enumerate(y):
         # extract current bvalues
         vec_bvalues = bvalues[i, :]
 
-        # set bvalues and vec_y
+        # set current bvalues and vec_y for the Poisson problem
         prb.extract(PoissonProblem).set_data(vec_y, vec_bvalues)
 
         # add initial guess to population
         pop = pg.population(prb)
         pop.push_back(u_0.coeffs)
+
         # minimize the objective
         pop = algo.evolve(pop)
+
+        # retrieve solution (best among population)
         x = pop.champion_x
 
         if return_best_sol:
@@ -173,7 +151,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
         return best_sols
 
     total_err *= 1/X.shape[0]
-    print(str(individual), total_err)
 
     return total_err
 
