@@ -1,6 +1,6 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 100
+  NINDIVIDUALS: 10
   NGEN: 10
   CXPB: 0
   MUTPB: 1.0
@@ -36,6 +36,6 @@ plot:
   plot_best_genealogy: False
 
 mp:
-  n_splits: 20
+  n_splits: 2
   n_jobs: 6
   start_method: "fork"
