@@ -68,7 +68,7 @@ def obj_fun_theta(theta_guess: np.array, EI_guess: np.array, theta_true: np.arra
 
 
 def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0: np.array, return_best_sol: bool = False, is_bil_train: bool = False,) -> float:
+             S: SimplicialComplex, theta_0: np.array, return_best_sol: bool = False, is_bil_train: bool = False) -> float:
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
@@ -78,10 +78,15 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
     total_err = 0.
     best_theta = []
-    best_FL2_EI0 = []
+    best_EI0 = []
 
-    # EI0 = np.ones(1, dtype=dt.float_dtype)
-    EI0 = individual.param
+    jac = jit(grad(obj.total_energy))
+
+    EI0 = individual.EI0
+    # if X has only one sample, writing for i, theta in enumerate(X)
+    # return i=0 and theta = first entry of the (only) sample of X.
+    # To have i = 0 and theta = first sample, we use this shortcut.
+    # The same holds for y.
     if X.ndim == 1:
         iterate = enumerate(np.array([X]))
         y = np.array([y])
@@ -110,8 +115,10 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
             # recover EI0
             EI0 = FL2/FL2_EI0
 
+            # update individual.EI0
+            individual.EI0 = EI0
+
         else:
-            jac = jit(grad(obj.total_energy))
             theta = minimize(fun=obj.total_energy, x0=theta_0,
                              args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac).x
             fval = obj_fun_theta(theta, FL2_EI0, theta_true)
@@ -119,13 +126,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
         # extend theta
         theta = np.insert(theta, 0, theta_in)
 
-        # update individual.param
-        individual.param = EI0
-
-        # FIXME: check how it works, maybe there is a bug
         if return_best_sol:
             best_theta.append(theta)
-            best_FL2_EI0.append(EI0)
+            best_EI0.append(EI0)
 
         # print(individual)
         # print(fval)
@@ -140,7 +143,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
         total_err += fval
 
     if return_best_sol:
-        return best_theta, best_FL2_EI0
+        return best_theta, best_EI0
 
     total_err *= 1/(X.shape[0])
 
@@ -217,7 +220,7 @@ def stgp_elastica(config_file):
     creator.create("Individual",
                    gp.PrimitiveTree,
                    fitness=creator.FitnessMin,
-                   param=np.ones(1, dtype=dt.float_dtype))
+                   EI0=np.ones(1, dtype=dt.float_dtype))
     createIndividual = creator.Individual
     # set parameters from config file
     NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
