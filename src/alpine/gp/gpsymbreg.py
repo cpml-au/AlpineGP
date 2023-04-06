@@ -5,6 +5,25 @@ import numpy as np
 from mpire.utils import make_single_arguments
 
 
+def get_primitives_strings(pset, types):
+    """Extract a list containing the names of all the primitives.
+
+    Args:
+        pset (gp.PrimitiveSetTyped): a PrimitiveSetTyped object.
+        types (list): list of all the types used in pset.
+
+    Returns:
+        (list): a list containing the names (str) of the primitives.
+    """
+    primitives_strings = []
+    for type in types:
+        # NOTE: pset.primitives is a dictionary
+        current_primitives = [str(pset.primitives[type][i].name)
+                              for i in range(len(pset.primitives[type]))]
+        primitives_strings.extend(current_primitives)
+    return primitives_strings
+
+
 class GPSymbRegProblem():
     def __init__(self,
                  pset,
