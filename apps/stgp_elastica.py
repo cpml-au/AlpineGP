@@ -88,8 +88,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
     jac = jit(grad(obj.total_energy))
 
-    print(individual)
-
     EI0 = individual.EI0
     # if X has only one sample, writing for i, theta in enumerate(X)
     # return i=0 and theta = first entry of the (only) sample of X.
@@ -128,14 +126,12 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
         else:
             theta = minimize(fun=obj.total_energy, x0=theta_0,
-                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac, tol=1e-2).x
+                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac, tol=1e-2,
+                             options={'disp': False, 'ftol': 1e-2}).x
             fval = obj_fun_theta(theta, FL2_EI0, theta_true)
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
-
-        # round fval to 5 decimal digits
-        fval = round(fval, ndigits=5)
 
         if return_best_sol:
             best_theta.append(theta)
@@ -153,8 +149,11 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     if return_best_sol:
         return best_theta, best_EI0
 
-    total_err *= 1/(X.shape[0])
-
+    total_err *= 1/(X.ndim)
+    # round total_err to 5 decimal digits
+    # NOTE: round doesn't work properly.
+    # See https://stackoverflow.com/questions/455612/limiting-floats-to-two-decimal-points
+    total_err = float("{:.5f}".format(total_err))
     return total_err
 
 
@@ -167,8 +166,8 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
         X: samples of the dataset.
         y: targets of the dataset.
         toolbox: toolbox used.
-        S:
-        theta_0:
+        S: simplicial complex.
+        theta_0: initial theta.
         penalty: dictionary containing the penalty method (regularization) and the
         penalty multiplier.
 
