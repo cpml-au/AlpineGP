@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, tools, base, creator
 import dctkit
-from alpine.models.poisson import pset, get_primitives_strings
+from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
 
@@ -42,7 +42,7 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
          C.CochainD0, C.CochainD1, C.CochainD2, float]
 
 # extract list of names of primitives
-primitives_strings = get_primitives_strings(pset, types)
+primitives_strings = gps.get_primitives_strings(pset, types)
 
 # TODO: move to Poisson model
 

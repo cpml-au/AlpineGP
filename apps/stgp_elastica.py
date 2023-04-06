@@ -25,6 +25,12 @@ from scipy.optimize import minimize
 # choose precision and whether to use GPU or CPU
 dt.config(dt.FloatDtype.float64, dt.IntDtype.int64, dt.Backend.jax, dt.Platform.cpu)
 
+# list of types
+types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
+
+# extract list of names of primitives
+primitives_strings = gps.get_primitives_strings(pset, types)
+
 
 class ObjElastica():
     def __init__(self, S: SimplicialComplex) -> None:
@@ -82,6 +88,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
     jac = jit(grad(obj.total_energy))
 
+    print(individual)
+
     EI0 = individual.EI0
     # if X has only one sample, writing for i, theta in enumerate(X)
     # return i=0 and theta = first entry of the (only) sample of X.
@@ -120,19 +128,19 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
 
         else:
             theta = minimize(fun=obj.total_energy, x0=theta_0,
-                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac).x
+                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac, tol=1e-2).x
             fval = obj_fun_theta(theta, FL2_EI0, theta_true)
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
 
+        # round fval to 5 decimal digits
+        fval = round(fval, ndigits=5)
+
         if return_best_sol:
             best_theta.append(theta)
             best_EI0.append(EI0)
 
-        # print(individual)
-        # print(fval)
-        # print(theta)
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
             total_err = 100
@@ -175,10 +183,9 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
-        # indstr = str(individual)
-        # objval = total_err + penalty["reg_param"] * \
-        #    max([indstr.count(string) for string in primitives_strings])
-        objval = total_err
+        indstr = str(individual)
+        objval = total_err + penalty["reg_param"] * \
+            max([indstr.count(string) for string in primitives_strings])
     elif penalty["method"] == "length":
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*len(individual)
@@ -190,7 +197,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 
 def stgp_elastica(config_file):
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
-    # print([i.dtype for i in y_val])
+
     # get normalized simplicial complex
     S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
@@ -222,6 +229,7 @@ def stgp_elastica(config_file):
                    fitness=creator.FitnessMin,
                    EI0=np.ones(1, dtype=dt.float_dtype))
     createIndividual = creator.Individual
+
     # set parameters from config file
     NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
     NGEN = config_file["gp"]["NGEN"]
