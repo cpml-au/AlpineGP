@@ -1,6 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 from deap import base, gp, creator, tools
+from scipy import sparse
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
 from dctkit.math.opt import optctrl
@@ -17,7 +18,6 @@ import time
 import mpire
 import networkx as nx
 import matplotlib.pyplot as plt
-import jax
 from jax import jit, grad
 from scipy.optimize import minimize
 
@@ -194,6 +194,43 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
     return objval,
 
 
+def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
+             S: SimplicialComplex, theta_0: np.array, transform: np.array):
+    best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
+                                theta_0=theta_0, return_best_sol=True)
+    # get theta
+    theta = best_sol_list[0]
+
+    # get theta_true
+    theta_true = X
+    h = 1/(S.num_nodes-1)
+
+    # reconstruct x, y
+    cos_theta = h*jnp.cos(theta)
+    sin_theta = h*jnp.sin(theta)
+    b_x = jnp.insert(cos_theta, 0, 0)
+    b_y = jnp.insert(sin_theta, 0, 0)
+    x_val = jnp.linalg.solve(transform, b_x)
+    y_val = jnp.linalg.solve(transform, b_y)
+
+    # reconstruct x_true and y_true
+    cos_theta_true = h*jnp.cos(theta_true)
+    sin_theta_true = h*jnp.sin(theta_true)
+    b_x_true = jnp.insert(cos_theta_true, 0, 0)
+    b_y_true = jnp.insert(sin_theta_true, 0, 0)
+    x_true = jnp.linalg.solve(transform, b_x_true)
+    y_true = jnp.linalg.solve(transform, b_y_true)
+
+    plt.figure(10, figsize=(5, 5))
+    fig = plt.gcf()
+    # plot the results
+    plt.plot(x_true, y_true, 'r')
+    plt.plot(x_val, y_val, 'b')
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    plt.pause(0.1)
+
+
 def stgp_elastica(config_file):
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
 
@@ -204,6 +241,15 @@ def stgp_elastica(config_file):
     S.get_primal_volumes()
     S.get_dual_volumes()
     S.get_hodge_star()
+
+    # bidiagonal matrix to transform theta in (x,y)
+    diag = [1]*(S.num_nodes)
+    upper_diag = [-1]*(S.num_nodes-1)
+    upper_diag[0] = 0
+    diags = [diag, upper_diag]
+    transform = sparse.diags(diags, [0, -1]).toarray()
+    transform[1, 0] = -1
+
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
     internal_vec[0] = 0.
@@ -313,14 +359,11 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0)
-    '''
+
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
-                         X=X_val, y=y_val, bvalues=bvalues_val,
-                         S=S, bnodes=bnodes, gamma=gamma, u_0=u_0,
-                         triang=triang, toolbox=toolbox)
-
-    '''
+                         X=X_val, y=y_val, toolbox=toolbox,
+                         S=S, theta_0=theta_0, transform=transform)
 
     GPproblem = gps.GPSymbRegProblem(pset=pset,
                                      NINDIVIDUALS=NINDIVIDUALS,
@@ -342,6 +385,8 @@ def stgp_elastica(config_file):
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=False,
                   print_log=True,
+                  plot_best=plot_best,
+                  plot_best_genealogy=plot_best_genealogy,
                   seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping)
