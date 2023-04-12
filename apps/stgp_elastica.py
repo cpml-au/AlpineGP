@@ -221,7 +221,8 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
     x_true = jnp.linalg.solve(transform, b_x_true)
     y_true = jnp.linalg.solve(transform, b_y_true)
 
-    plt.figure(10, figsize=(5, 5))
+    plt.clf()
+    plt.figure(1, figsize=(5, 5))
     fig = plt.gcf()
     # plot the results
     plt.plot(x_true, y_true, 'r')
