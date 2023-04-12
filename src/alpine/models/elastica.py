@@ -45,6 +45,13 @@ def square_mod(x):
     return jnp.square(x).astype(dt.float_dtype)
 
 
+def inv_float(x):
+    try:
+        return 1/x
+    except ZeroDivisionError:
+        return jnp.nan
+
+
 # define primitive set
 pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float], float)
 
@@ -61,6 +68,7 @@ pset.addPrimitive(jnp.exp, [float], float, name="ExpF")
 pset.addPrimitive(protectedLog, [float], float, name="LogF")
 pset.addPrimitive(protectedSqrt, [float], float, name="SqrtF")
 pset.addPrimitive(square_mod, [float], float, name="SquareF")
+pset.addPrimitive(inv_float, [float], float, name="InvF")
 
 # cochain operations
 pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")

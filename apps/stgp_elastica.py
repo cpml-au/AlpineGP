@@ -390,7 +390,8 @@ def stgp_elastica(config_file):
                   plot_best_genealogy=plot_best_genealogy,
                   seed=None,
                   n_splits=n_splits,
-                  early_stopping=early_stopping)
+                  early_stopping=early_stopping,
+                  plot_freq = 1)
 
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
