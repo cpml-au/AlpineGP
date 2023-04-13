@@ -117,7 +117,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
                                                 constraint_args=constraint_args,
                                                 obj_args=obj_args)
 
-            theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0, tol=1e-2)
+            theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0, tol=1e-5)
             # recover EI0
             EI0 = FL2/FL2_EI0
 
@@ -141,7 +141,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
         if math.isnan(fval):
             total_err = 100
             break
-
         # update the error: it is the sum of the error w.r.t. theta and
         # the error w.r.t. EI0
         total_err += fval
@@ -197,7 +196,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0: np.array, transform: np.array):
     best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                                theta_0=theta_0, return_best_sol=True)
+                                theta_0=theta_0, return_best_sol=True, is_bil_train=True)
     # get theta
     theta = best_sol_list[0]
 
@@ -352,14 +351,16 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0,
-                     penalty=penalty)
+                     penalty=penalty,
+                     is_bil_train=True)
     toolbox.register("evaluate_val_MSE",
                      eval_MSE,
                      X=X_val,
                      y=y_val,
                      toolbox=toolbox,
                      S=S,
-                     theta_0=theta_0)
+                     theta_0=theta_0,
+                     is_bil_train=True)
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
@@ -381,6 +382,10 @@ def stgp_elastica(config_file):
                                      individualCreator=createIndividual,
                                      toolbox=toolbox)
 
+    #opt_string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta_coch)), InvSt0(dD0(theta_coch)))), InnD0(MulD0(ones, FL2_EI_0), SinD0(theta_coch))"
+    #opt_individ = creator.Individual.from_string(opt_string, pset)
+    #seed = [opt_individ]
+
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
@@ -391,7 +396,7 @@ def stgp_elastica(config_file):
                   seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping,
-                  plot_freq = 1)
+                  plot_freq=1)
 
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
