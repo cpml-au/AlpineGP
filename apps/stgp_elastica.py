@@ -4,7 +4,6 @@ from deap import base, gp, creator, tools
 from scipy import sparse
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
-from dctkit.math.opt import optctrl
 from dctkit.dec import cochain as C
 import dctkit as dt
 from alpine.data.elastica_data import elastica_dataset as ed
@@ -18,8 +17,10 @@ import time
 import mpire
 import networkx as nx
 import matplotlib.pyplot as plt
-from jax import jit, grad
-from scipy.optimize import minimize
+from jax import grad, Array
+from dctkit.math.opt import optctrl as oc
+import numpy.typing as npt
+from typing import Callable
 
 
 # choose precision and whether to use GPU or CPU
@@ -32,65 +33,57 @@ types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
 primitives_strings = gps.get_primitives_strings(pset, types)
 
 
-class ObjElastica():
+class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
 
-    def set_energy_func(self, func: callable, individual: gp.PrimitiveTree):
+    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree):
         """Set the energy function to be used for the computation of the objective
         function."""
         self.energy_func = func
         self.individual = individual
 
-    def total_energy(self, theta_vec: np.array, F_EI0: np.array, theta_in: np.array) -> float:
-        """Energy found by the current individual.
-
-        Args:
-            theta_vec (np.array): values of theta (internally).
-            EI0 (np.array): value of EI_0.
-            theta_in (np.array): values of theta on the boundary.
-
-        Returns:
-            float: value of the energy.
-        """
+    # elastic energy including Dirichlet BC by elimination of the prescribed dofs
+    def total_energy(self, theta_vec: npt.NDArray, FL2_EI0: float,
+                     theta_in: npt.NDArray) -> Array:
         # extend theta on the boundary w.r.t boundary conditions
         theta_vec = jnp.insert(theta_vec, 0, theta_in)
         theta = C.CochainD0(self.S, theta_vec)
         FL2_EI0_coch = C.CochainD0(
-            self.S, F_EI0[0]*np.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
+            self.S, FL2_EI0*np.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         energy = self.energy_func(theta, FL2_EI0_coch)
         return energy
 
+    # state function: stationarity conditions for the total energy
+    def total_energy_grad(self, x: npt.NDArray, theta_in: float) -> Array:
+        theta = x[:-1]
+        FL2_EI0 = x[-1]
+        return grad(self.total_energy)(theta, FL2_EI0, theta_in)
 
-def obj_fun_theta(theta_guess: np.array, EI_guess: np.array, theta_true: np.array) -> float:
-    """Objective function for the bilevel problem (inverse problem).
-    Args:
-        theta_guess (np.array): candidate solution.
-        EI_guess (np.array): candidate EI.
-        theta_true (np.array): true solution.
-    Returns:
-        float: error between the candidate and the true theta
-    """
-    theta_guess = jnp.insert(theta_guess, 0, theta_true[0])
-    return jnp.sum(jnp.square(theta_guess-theta_true))
+    # objective function for the parameter EI0 identification problem
+    def MSE_theta(self, x: npt.NDArray, theta_true: npt.NDArray) -> Array:
+        theta = x[:-1]
+        theta = jnp.insert(theta, 0, theta_true[0])
+        return jnp.sum(jnp.square(theta-theta_true))
 
 
-def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0: np.array, return_best_sol: bool = False, is_bil_train: bool = False) -> float:
+def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
+             toolbox: base.Toolbox, S: SimplicialComplex, theta_0: npt.NDArray,
+             return_best_sol: bool = False, tune_EI0: bool = False) -> float:
+
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
-    # create objective function and set its energy function
-    obj = ObjElastica(S)
-    obj.set_energy_func(energy_func, individual)
+    # number of unknowns angles
+    dim = len(theta_0)
 
     total_err = 0.
     best_theta = []
     best_EI0 = []
 
-    jac = jit(grad(obj.total_energy))
+    obj = Objectives(S=S)
+    obj.set_energy_func(energy_func, individual)
 
-    EI0 = individual.EI0
     # if X has only one sample, writing for i, theta in enumerate(X)
     # return i=0 and theta = first entry of the (only) sample of X.
     # To have i = 0 and theta = first sample, we use this shortcut.
@@ -101,43 +94,51 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     else:
         iterate = enumerate(X)
     for i, theta_true in iterate:
-        # extract boundary value in 0
+        # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
-        # extract value of F
+        # extract value of FL^2
         FL2 = y[i]
         # define initial value
-        FL2_EI0 = FL2/EI0
-        if i == 0 and is_bil_train:
+        FL2_EI0 = FL2/individual.EI0
+
+        # run parameter identification only on the first dataset of the training set
+        if i == 0 and tune_EI0:
             # set extra args for bilevel program
-            constraint_args = (theta_in,)
-            obj_args = (theta_true,)
+            constraint_args = {'theta_in': theta_in}
+            obj_args = {'theta_true': theta_true}
             # set bilevel problem
-            prb = optctrl.OptimalControlProblem(objfun=obj_fun_theta,
-                                                state_en=obj.total_energy,
-                                                state_dim=S.num_nodes-2,
-                                                constraint_args=constraint_args,
-                                                obj_args=obj_args)
+            prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
+                                           statefun=obj.total_energy_grad,
+                                           state_dim=S.num_nodes-2,
+                                           nparams=S.num_nodes-1,
+                                           constraint_args=constraint_args,
+                                           obj_args=obj_args)
 
-            theta, FL2_EI0, fval = prb.run(theta_0, FL2_EI0, tol=1e-5)
+            x0 = np.append(theta_0, FL2_EI0)
+            x = prb.run(x0)
+            theta = x[:-1]
+            FL2_EI0 = x[-1]
+
+            fval = obj.MSE_theta(x, theta_true)
             # recover EI0
-            EI0 = FL2/FL2_EI0
-
-            # update individual.EI0
-            individual.EI0 = EI0
+            individual.EI0 = FL2/FL2_EI0
 
         else:
-            theta = minimize(fun=obj.total_energy, x0=theta_0,
-                             args=(FL2_EI0, theta_in), method="L-BFGS-B", jac=jac, tol=1e-2,
-                             options={'disp': False, 'ftol': 1e-2}).x
-            fval = obj_fun_theta(theta, FL2_EI0, theta_true)
+            prb = oc.OptimizationProblem(
+                dim=dim, state_dim=dim, objfun=obj.total_energy)
+            args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
+            prb.set_obj_args(args)
+            theta = prb.run(theta_0)
+            x = np.append(theta, FL2_EI0)
+            fval = obj.MSE_theta(x, theta_true)
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
 
         if return_best_sol:
             best_theta.append(theta)
-            best_EI0.append(EI0)
+            best_EI0.append(individual.EI0)
 
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
@@ -158,8 +159,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     return 10*total_err
 
 
-def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-                 S: SimplicialComplex, theta_0: np.array, penalty: dict, is_bil_train: bool = False) -> (float,):
+def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
+                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0: np.array,
+                 penalty: dict, tune_EI0: bool = False) -> (float,):
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -179,7 +181,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
     objval = 0.
 
     total_err = eval_MSE(individual, X, y, toolbox, S,
-                         theta_0, is_bil_train=is_bil_train)
+                         theta_0, tune_EI0=tune_EI0)
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
@@ -198,7 +200,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0: np.array, transform: np.array):
     best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                                theta_0=theta_0, return_best_sol=True, is_bil_train=True)
+                                theta_0=theta_0, return_best_sol=True, tune_EI0=True)
     # get theta
     theta = best_sol_list[0]
 
@@ -345,7 +347,7 @@ def stgp_elastica(config_file):
                      S=S,
                      theta_0=theta_0,
                      penalty=penalty,
-                     is_bil_train=True)
+                     tune_EI0=True)
     toolbox.register("evaluate_val_fit",
                      eval_fitness,
                      X=X_val,
@@ -354,7 +356,7 @@ def stgp_elastica(config_file):
                      S=S,
                      theta_0=theta_0,
                      penalty=penalty,
-                     is_bil_train=True)
+                     tune_EI0=True)
     toolbox.register("evaluate_val_MSE",
                      eval_MSE,
                      X=X_val,
@@ -362,7 +364,7 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0,
-                     is_bil_train=True)
+                     tune_EI0=True)
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
@@ -384,9 +386,9 @@ def stgp_elastica(config_file):
                                      individualCreator=createIndividual,
                                      toolbox=toolbox)
 
-    #opt_string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta_coch)), InvSt0(dD0(theta_coch)))), InnD0(MulD0(ones, FL2_EI_0), SinD0(theta_coch))"
-    #opt_individ = creator.Individual.from_string(opt_string, pset)
-    #seed = [opt_individ]
+    # opt_string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta_coch)), InvSt0(dD0(theta_coch)))), InnD0(MulD0(ones, FL2_EI_0), SinD0(theta_coch))"
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
