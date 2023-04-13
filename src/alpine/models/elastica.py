@@ -52,8 +52,15 @@ def inv_float(x):
         return jnp.nan
 
 
+def inv_scalar_mul(c, f):
+    try:
+        return C.scalar_mul(c, 1/f)
+    except ZeroDivisionError:
+        return C.scalar_mul(c, jnp.nan)
+
+
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float], float)
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
 
 # scalar operations
 pset.addPrimitive(add_mod, [float, float], float, name="Add")
@@ -90,6 +97,11 @@ pset.addPrimitive(C.scalar_mul, [C.CochainP0, float], C.CochainP0, "MulP0")
 pset.addPrimitive(C.scalar_mul, [C.CochainP1, float], C.CochainP1, "MulP1")
 pset.addPrimitive(C.scalar_mul, [C.CochainD0, float], C.CochainD0, "MulD0")
 pset.addPrimitive(C.scalar_mul, [C.CochainD1, float], C.CochainD1, "MulD1")
+pset.addPrimitive(inv_scalar_mul, [C.CochainP0, float], C.CochainP0, "InvMulP0")
+pset.addPrimitive(inv_scalar_mul, [C.CochainP1, float], C.CochainP1, "InvMulP1")
+pset.addPrimitive(inv_scalar_mul, [C.CochainD0, float], C.CochainD0, "InvMulD0")
+pset.addPrimitive(inv_scalar_mul, [C.CochainD1, float], C.CochainD1, "InvMulD1")
+
 
 pset.addPrimitive(C.cochain_mul, [C.CochainP0, C.CochainP0], C.CochainP0, "CochMulP0")
 pset.addPrimitive(C.cochain_mul, [C.CochainP1, C.CochainP1], C.CochainP1, "CochMulP1")
@@ -112,5 +124,5 @@ pset.addTerminal(-1., float, name="-1")
 pset.addTerminal(2., float, name="2")
 
 # rename arguments
-pset.renameArguments(ARG0="theta_coch")
-pset.renameArguments(ARG1="FL2_EI_0")
+pset.renameArguments(ARG0="theta")
+pset.renameArguments(ARG1="FL2_EI0")
