@@ -115,12 +115,19 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                                            constraint_args=constraint_args,
                                            obj_args=obj_args)
 
+            def get_bounds():
+                lb = -100*np.ones(dim+1, dt.float_dtype)
+                ub = 100*np.ones(dim+1, dt.float_dtype)
+                lb[-1] = -100
+                ub[-1] = -1e-3
+                return (lb, ub)
+            prb.get_bounds = get_bounds
+
             x0 = np.append(theta_0, FL2_EI0)
-            x = prb.run(x0)
+            x = prb.run(x0=x0, maxeval=100)
             theta = x[:-1]
             FL2_EI0 = x[-1]
 
-            fval = obj.MSE_theta(x, theta_true)
             # recover EI0
             individual.EI0 = FL2/FL2_EI0
 
@@ -129,9 +136,13 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
-            theta = prb.run(theta_0)
+            theta = prb.run(x0=theta_0, maxeval=100)
             x = np.append(theta, FL2_EI0)
+
+        if prb.last_opt_result == 1 or prb.last_opt_result == 3:
             fval = obj.MSE_theta(x, theta_true)
+        else:
+            fval = math.nan
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
