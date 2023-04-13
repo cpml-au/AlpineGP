@@ -155,7 +155,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: ba
     # NOTE: round doesn't work properly.
     # See https://stackoverflow.com/questions/455612/limiting-floats-to-two-decimal-points
     total_err = float("{:.5f}".format(total_err))
-    return total_err
+    return 10*total_err
 
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
