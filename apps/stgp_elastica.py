@@ -175,7 +175,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
                  toolbox: base.Toolbox, S: SimplicialComplex, theta_0: np.array,
-                 penalty: dict, tune_EI0: bool = False) -> (float,):
+                 penalty: dict, tune_EI0: bool = False) -> tuple[float, ]:
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -285,13 +285,8 @@ def stgp_elastica(config_file):
     theta_0 = 0.1*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
 
     # initialize toolbox and creator
-    toolbox = base.Toolbox()
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
-    creator.create("Individual",
-                   gp.PrimitiveTree,
-                   fitness=creator.FitnessMin,
-                   EI0=np.ones(1, dtype=dt.float_dtype))
-    createIndividual = creator.Individual
+    createIndividual, toolbox = gps.creator_toolbox_config(
+        config_file=config_file, pset=pset)
 
     # set parameters from config file
     NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
@@ -309,24 +304,6 @@ def stgp_elastica(config_file):
     tournsize = config_file["gp"]["select"]["tournsize"]
     stochastic_tournament = config_file["gp"]["select"]["stochastic_tournament"]
 
-    expr_mut_fun = config_file["gp"]["mutate"]["expr_mut"]
-    expr_mut_kargs = eval(config_file["gp"]["mutate"]["expr_mut_kargs"])
-
-    toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-
-    crossover_fun = config_file["gp"]["crossover"]["fun"]
-    crossover_kargs = eval(config_file["gp"]["crossover"]["kargs"])
-
-    mutate_fun = config_file["gp"]["mutate"]["fun"]
-    mutate_kargs = eval(config_file["gp"]["mutate"]["kargs"])
-    toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
-    toolbox.register("mutate",
-                     eval(mutate_fun), **mutate_kargs)
-    toolbox.decorate(
-        "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-    toolbox.decorate(
-        "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-
     plot_best = config_file["plot"]["plot_best"]
     plot_best_genealogy = config_file["plot"]["plot_best_genealogy"]
 
@@ -334,21 +311,6 @@ def stgp_elastica(config_file):
     n_splits = config_file["mp"]["n_splits"]
     start_method = config_file["mp"]["start_method"]
 
-    toolbox.register("expr", gp.genHalfAndHalf,
-                     pset=pset, min_=min_, max_=max_)
-    toolbox.register("expr_pop",
-                     gp.genHalfAndHalf,
-                     pset=pset,
-                     min_=min_,
-                     max_=max_,
-                     is_pop=True)
-    toolbox.register("individual", tools.initIterate,
-                     createIndividual, toolbox.expr)
-    toolbox.register("individual_pop", tools.initIterate,
-                     createIndividual, toolbox.expr_pop)
-    toolbox.register("population", tools.initRepeat,
-                     list, toolbox.individual_pop)
-    toolbox.register("compile", gp.compile, pset=pset)
     start = time.perf_counter()
 
     # add functions for fitness evaluation (value of the objective function) on training
