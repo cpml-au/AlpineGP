@@ -93,14 +93,18 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         y = np.array([y])
     else:
         iterate = enumerate(X)
+
+    # get initial guess for EI0
+    EI0 = individual.EI0
+
     for i, theta_true in iterate:
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
         # extract value of FL^2
         FL2 = y[i]
-        # define initial value
-        FL2_EI0 = FL2/individual.EI0
+        # define value of the dimensionless parameter
+        FL2_EI0 = FL2/EI0
 
         # run parameter identification only on the first dataset of the training set
         if i == 0 and tune_EI0:
@@ -122,14 +126,13 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 ub[-1] = -1e-3
                 return (lb, ub)
             prb.get_bounds = get_bounds
-
             x0 = np.append(theta_0, FL2_EI0)
             x = prb.run(x0=x0, maxeval=100)
             theta = x[:-1]
             FL2_EI0 = x[-1]
-
-            # recover EI0
-            individual.EI0 = FL2/FL2_EI0
+            # update EI0 with the optimal result for the other evaluations of the
+            # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
+            EI0 = FL2/FL2_EI0
 
         else:
             prb = oc.OptimizationProblem(
