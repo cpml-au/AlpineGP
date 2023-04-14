@@ -2,7 +2,6 @@ from deap import algorithms, tools, gp, base, creator
 from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
-import random
 from mpire.utils import make_single_arguments
 
 
@@ -307,8 +306,10 @@ class GPSymbRegProblem():
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population...", flush=True)
-        fitnesses = list(self.toolbox.map(self.toolbox.evaluate_train, make_single_arguments(
-            self.pop), iterable_len=self.NINDIVIDUALS, n_splits=n_splits))
+        fitnesses = list(self.toolbox.map(self.toolbox.evaluate_train,
+                                          make_single_arguments(self.pop),
+                                          iterable_len=self.NINDIVIDUALS,
+                                          n_splits=n_splits))
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
@@ -344,8 +345,10 @@ class GPSymbRegProblem():
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, make_single_arguments(
-                invalid_ind), iterable_len=len(invalid_ind), n_splits=n_splits)
+            fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
+                                         make_single_arguments(invalid_ind),
+                                         iterable_len=len(invalid_ind),
+                                         n_splits=n_splits)
 
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
@@ -401,7 +404,8 @@ class GPSymbRegProblem():
                 fig.canvas.flush_events()
                 plt.pause(0.1)
 
-            if plot_best and (self.toolbox.plot_best_func is not None) and (cgen % plot_freq == 0 or cgen == 1):
+            if plot_best and (self.toolbox.plot_best_func is not None) \
+                    and (cgen % plot_freq == 0 or cgen == 1):
                 best = tools.selBest(self.pop, k=1)[0]
                 self.toolbox.plot_best_func(best)
 
