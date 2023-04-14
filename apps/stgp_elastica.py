@@ -138,7 +138,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
-            theta = prb.run(x0=theta_0, maxeval=100)
+            theta = prb.run(x0=theta_0, maxeval=500, ftol_abs=1e-7, ftol_rel=1e-7)
             x = np.append(theta, FL2_EI0)
 
         if prb.last_opt_result == 1 or prb.last_opt_result == 3:
