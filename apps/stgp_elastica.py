@@ -1,6 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
-from deap import base, gp, creator, tools
+from deap import base, gp
 from scipy import sparse
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
@@ -12,7 +12,6 @@ from alpine.gp import gpsymbreg as gps
 import math
 import sys
 import yaml
-import operator
 import time
 import mpire
 import networkx as nx
@@ -212,41 +211,55 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0: np.array, transform: np.array):
+             S: SimplicialComplex, theta_0: np.array, transform: np.array, is_animated: bool = True):
     best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
                                 theta_0=theta_0, return_best_sol=True, tune_EI0=True)
-    # get theta
-    theta = best_sol_list[0]
-
-    # get theta_true
-    theta_true = X
-    h = 1/(S.num_nodes-1)
-
-    # reconstruct x, y
-    cos_theta = h*jnp.cos(theta)
-    sin_theta = h*jnp.sin(theta)
-    b_x = jnp.insert(cos_theta, 0, 0)
-    b_y = jnp.insert(sin_theta, 0, 0)
-    x_val = jnp.linalg.solve(transform, b_x)
-    y_val = jnp.linalg.solve(transform, b_y)
-
-    # reconstruct x_true and y_true
-    cos_theta_true = h*jnp.cos(theta_true)
-    sin_theta_true = h*jnp.sin(theta_true)
-    b_x_true = jnp.insert(cos_theta_true, 0, 0)
-    b_y_true = jnp.insert(sin_theta_true, 0, 0)
-    x_true = jnp.linalg.solve(transform, b_x_true)
-    y_true = jnp.linalg.solve(transform, b_y_true)
-
-    plt.clf()
-    plt.figure(1, figsize=(5, 5))
+    if X.ndim == 1:
+        plt.figure(1, figsize=(6, 6))
+    else:
+        plt.figure(1, figsize=(8, 4))
     fig = plt.gcf()
-    # plot the results
-    plt.plot(x_true, y_true, 'r')
-    plt.plot(x_val, y_val, 'b')
+    _, axes = plt.subplots(1, X.ndim, num=1)
+    for i in range(X.ndim):
+        # get theta
+        theta = best_sol_list[i]
+
+        # get theta_true
+        if X.ndim == 1:
+            theta_true = X
+        else:
+            theta_true = X[i, :]
+        h = 1/(S.num_nodes-1)
+
+        # reconstruct x, y
+        cos_theta = h*jnp.cos(theta)
+        sin_theta = h*jnp.sin(theta)
+        b_x = jnp.insert(cos_theta, 0, 0)
+        b_y = jnp.insert(sin_theta, 0, 0)
+        x_current = jnp.linalg.solve(transform, b_x)
+        y_current = jnp.linalg.solve(transform, b_y)
+
+        # reconstruct x_true and y_true
+        cos_theta_true = h*jnp.cos(theta_true)
+        sin_theta_true = h*jnp.sin(theta_true)
+        b_x_true = jnp.insert(cos_theta_true, 0, 0)
+        b_y_true = jnp.insert(sin_theta_true, 0, 0)
+        x_true = jnp.linalg.solve(transform, b_x_true)
+        y_true = jnp.linalg.solve(transform, b_y_true)
+
+        # plot the results
+        if X.ndim == 1:
+            plt.plot(x_true, y_true, 'r')
+            plt.plot(x_current, y_current, 'b')
+        else:
+            axes[i].plot(x_true, y_true, 'r')
+            axes[i].plot(x_current, y_current, 'b')
     fig.canvas.draw()
     fig.canvas.flush_events()
-    plt.pause(0.1)
+    if is_animated:
+        plt.pause(0.1)
+    else:
+        plt.show()
 
 
 def stgp_elastica(config_file):
@@ -274,12 +287,8 @@ def stgp_elastica(config_file):
     internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
 
-    # ones_coch = C.CochainD0(complex=S, coeffs=np.ones(
-    #    S.num_nodes-1, dtype=dt.float_dtype))
-
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
-    # pset.addTerminal(ones_coch, C.CochainD0, name="ones")
 
     # initial guess for the solution
     theta_0 = 0.1*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)

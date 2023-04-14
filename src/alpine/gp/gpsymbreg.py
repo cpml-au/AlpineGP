@@ -460,6 +460,8 @@ class GPSymbRegProblem():
                     and (cgen % plot_freq == 0 or cgen == 1):
                 best = tools.selBest(self.pop, k=1)[0]
                 self.toolbox.plot_best_func(best)
+                if cgen != self.NGEN and m != early_stopping:
+                    plt.clf()
 
             if early_stopping['enabled']:
                 training_fit = best.fitness.values[0]
