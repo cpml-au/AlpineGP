@@ -3,9 +3,11 @@ from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
 from mpire.utils import make_single_arguments
+import dctkit as dt
+import operator
 
 
-def get_primitives_strings(pset, types):
+def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> list:
     """Extract a list containing the names of all the primitives.
 
     Args:
@@ -35,6 +37,56 @@ def mixedMutate(individual, expr, pset, prob):
         return gp.mutNodeReplacement(individual, pset)
     elif chosen_index == 2:
         return gp.mutShrink(individual)
+
+
+def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> tuple[gp.PrimitiveTree, base.Toolbox]:
+    # initialize toolbox and creator
+    toolbox = base.Toolbox()
+    creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
+    creator.create("Individual",
+                   gp.PrimitiveTree,
+                   fitness=creator.FitnessMin,
+                   EI0=np.ones(1, dtype=dt.float_dtype))
+    createIndividual = creator.Individual
+
+    min_ = config_file["gp"]["min_"]
+    max_ = config_file["gp"]["max_"]
+
+    expr_mut_fun = config_file["gp"]["mutate"]["expr_mut"]
+    expr_mut_kargs = eval(config_file["gp"]["mutate"]["expr_mut_kargs"])
+
+    toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
+
+    crossover_fun = config_file["gp"]["crossover"]["fun"]
+    crossover_kargs = eval(config_file["gp"]["crossover"]["kargs"])
+
+    mutate_fun = config_file["gp"]["mutate"]["fun"]
+    mutate_kargs = eval(config_file["gp"]["mutate"]["kargs"])
+    toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
+    toolbox.register("mutate",
+                     eval(mutate_fun), **mutate_kargs)
+    toolbox.decorate(
+        "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+    toolbox.decorate(
+        "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+
+    toolbox.register("expr", gp.genHalfAndHalf,
+                     pset=pset, min_=min_, max_=max_)
+    toolbox.register("expr_pop",
+                     gp.genHalfAndHalf,
+                     pset=pset,
+                     min_=min_,
+                     max_=max_,
+                     is_pop=True)
+    toolbox.register("individual", tools.initIterate,
+                     createIndividual, toolbox.expr)
+    toolbox.register("individual_pop", tools.initIterate,
+                     createIndividual, toolbox.expr_pop)
+    toolbox.register("population", tools.initRepeat,
+                     list, toolbox.individual_pop)
+    toolbox.register("compile", gp.compile, pset=pset)
+
+    return createIndividual, toolbox
 
 
 class GPSymbRegProblem():

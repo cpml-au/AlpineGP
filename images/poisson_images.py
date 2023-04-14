@@ -3,7 +3,7 @@ import os
 # import matplotlib
 import matplotlib.pyplot as plt
 # import matplotlib.gridspec as gridspec
-from stgp_poisson import apps_path
+from apps.stgp_poisson import apps_path
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from deap import gp, base, creator
