@@ -29,16 +29,16 @@ def protectedSqrt(x):
         return jnp.nan
 
 
-def add_mod(x, y):
-    return jnp.array(operator.add(x, y), dtype=dt.float_dtype)
+def add(x, y):
+    return jnp.add(x, y).astype(dt.float_dtype)
 
 
-def sub_mod(x, y):
-    return jnp.array(operator.sub(x, y), dtype=dt.float_dtype)
+def sub(x, y):
+    return jnp.subtract(x, y).astype(dt.float_dtype)
 
 
-def mul_mod(x, y):
-    return jnp.array(operator.mul(x, y), dtype=dt.float_dtype)
+def mul(x, y):
+    return jnp.multiply(x, y).astype(dt.float_dtype)
 
 
 def square_mod(x):
@@ -63,9 +63,9 @@ def inv_scalar_mul(c, f):
 pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
 
 # scalar operations
-pset.addPrimitive(add_mod, [float, float], float, name="Add")
-pset.addPrimitive(sub_mod, [float, float], float, name="Sub")
-pset.addPrimitive(mul_mod, [float, float], float, name="MulF")
+pset.addPrimitive(add, [float, float], float, name="Add")
+pset.addPrimitive(sub, [float, float], float, name="Sub")
+pset.addPrimitive(mul, [float, float], float, name="MulF")
 pset.addPrimitive(protectedDiv, [float, float], float, name="Div")
 pset.addPrimitive(jnp.sin, [float], float, name="SinF")
 pset.addPrimitive(jnp.arcsin, [float], float, name="ArcsinF")
@@ -80,8 +80,12 @@ pset.addPrimitive(inv_float, [float], float, name="InvF")
 # cochain operations
 pset.addPrimitive(C.add, [C.CochainP0, C.CochainP0], C.CochainP0, name="AddP0")
 pset.addPrimitive(C.add, [C.CochainP1, C.CochainP1], C.CochainP1, name="AddP1")
+pset.addPrimitive(C.add, [C.CochainD0, C.CochainD0], C.CochainD0, name="AddD0")
+pset.addPrimitive(C.add, [C.CochainD1, C.CochainD1], C.CochainD1, name="AddD1")
 pset.addPrimitive(C.sub, [C.CochainP0, C.CochainP0], C.CochainP0, name="SubP0")
 pset.addPrimitive(C.sub, [C.CochainP1, C.CochainP1], C.CochainP1, name="SubP1")
+pset.addPrimitive(C.sub, [C.CochainD0, C.CochainD0], C.CochainD0, name="SubD0")
+pset.addPrimitive(C.sub, [C.CochainD1, C.CochainD1], C.CochainD1, name="SubD1")
 
 pset.addPrimitive(C.coboundary, [C.CochainP0], C.CochainP1, name="dP0")
 pset.addPrimitive(C.coboundary, [C.CochainD0], C.CochainD1, name="dD0")
@@ -117,6 +121,41 @@ pset.addPrimitive(C.sin, [C.CochainP0], C.CochainP0, "SinP0")
 pset.addPrimitive(C.sin, [C.CochainP1], C.CochainP1, "SinP1")
 pset.addPrimitive(C.sin, [C.CochainD0], C.CochainD0, "SinD0")
 pset.addPrimitive(C.sin, [C.CochainD1], C.CochainD1, "SinD1")
+
+pset.addPrimitive(C.arcsin, [C.CochainP0], C.CochainP0, "ArcsinP0")
+pset.addPrimitive(C.arcsin, [C.CochainP1], C.CochainP1, "ArcsinP1")
+pset.addPrimitive(C.arcsin, [C.CochainD0], C.CochainD0, "ArcsinD0")
+pset.addPrimitive(C.arcsin, [C.CochainD1], C.CochainD1, "ArcsinD1")
+
+pset.addPrimitive(C.cos, [C.CochainP0], C.CochainP0, "CosP0")
+pset.addPrimitive(C.cos, [C.CochainP1], C.CochainP1, "CosP1")
+pset.addPrimitive(C.cos, [C.CochainD0], C.CochainD0, "CosD0")
+pset.addPrimitive(C.cos, [C.CochainD1], C.CochainD1, "CosD1")
+
+pset.addPrimitive(C.arccos, [C.CochainP0], C.CochainP0, "ArccosP0")
+pset.addPrimitive(C.arccos, [C.CochainP1], C.CochainP1, "ArccosP1")
+pset.addPrimitive(C.arccos, [C.CochainD0], C.CochainD0, "ArccosD0")
+pset.addPrimitive(C.arccos, [C.CochainD1], C.CochainD1, "ArccosD1")
+
+pset.addPrimitive(C.exp, [C.CochainP0], C.CochainP0, "ExpP0")
+pset.addPrimitive(C.exp, [C.CochainP1], C.CochainP1, "ExpP1")
+pset.addPrimitive(C.exp, [C.CochainD0], C.CochainD0, "ExpD0")
+pset.addPrimitive(C.exp, [C.CochainD1], C.CochainD1, "ExpD1")
+
+pset.addPrimitive(C.log, [C.CochainP0], C.CochainP0, "LogP0")
+pset.addPrimitive(C.log, [C.CochainP1], C.CochainP1, "LogP1")
+pset.addPrimitive(C.log, [C.CochainD0], C.CochainD0, "LogD0")
+pset.addPrimitive(C.log, [C.CochainD1], C.CochainD1, "LogD1")
+
+pset.addPrimitive(C.sqrt, [C.CochainP0], C.CochainP0, "SqrtP0")
+pset.addPrimitive(C.sqrt, [C.CochainP1], C.CochainP1, "SqrtP1")
+pset.addPrimitive(C.sqrt, [C.CochainD0], C.CochainD0, "SqrtD0")
+pset.addPrimitive(C.sqrt, [C.CochainD1], C.CochainD1, "SqrtD1")
+
+pset.addPrimitive(C.square, [C.CochainP0], C.CochainP0, "SquareP0")
+pset.addPrimitive(C.square, [C.CochainP1], C.CochainP1, "SquareP1")
+pset.addPrimitive(C.square, [C.CochainD0], C.CochainD0, "SquareD0")
+pset.addPrimitive(C.square, [C.CochainD1], C.CochainD1, "SquareD1")
 
 # add constants
 pset.addTerminal(0.5, float, name="1/2")

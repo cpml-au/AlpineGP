@@ -17,7 +17,7 @@ sys.path.append(parent_directory)
 
 
 def elastica_img_from_string(config_file: dict, string: str, X: np.array, y: np.array):
-    from stgp_elastica import plot_sol
+    from stgp_elastica import plot_sol, eval_MSE
     # get normalized simplicial complex
     S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
@@ -51,6 +51,7 @@ def elastica_img_from_string(config_file: dict, string: str, X: np.array, y: np.
         config_file=config_file, pset=pset)
 
     ind = createIndividual.from_string(string, pset)
+    print(f"MSE: {eval_MSE(ind, X, y, toolbox, S, theta_0, tune_EI0=True)}")
     plot_sol(ind, X, y, toolbox, S, theta_0, transform, False)
 
 
@@ -63,5 +64,5 @@ if __name__ == '__main__':
         config_file = yaml.safe_load(file)
         print(yaml.dump(config_file))
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
-    string = " Sub(InnD0(theta, delD1(CochMulD1(dD0(theta), St0(int_coch)))), InnD0(FL2_EI0, SinD0(SinD0(theta))))"
+    string = "Add(InnD0(SinD0(theta), InvMulD0(FL2_EI0, -1)), InnD0(theta, delD1(CochMulD1(St0(int_coch), dD0(theta)))))"
     elastica_img_from_string(config_file, string=string, X=X_train, y=y_train)
