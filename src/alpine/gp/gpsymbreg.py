@@ -2,6 +2,7 @@ from deap import algorithms, tools, gp, base, creator
 from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 from mpire.utils import make_single_arguments
 
 
@@ -22,6 +23,19 @@ def get_primitives_strings(pset, types):
                               for i in range(len(pset.primitives[type]))]
         primitives_strings.extend(current_primitives)
     return primitives_strings
+
+
+def mixedMutate(individual, expr, pset, prob):
+    """Implements a mixed mutation operator that randomly chooses among mutUniform,
+    mutNodeReplacement and mutShrink with given probabilities.
+    """
+    chosen_index = int(np.random.choice(range(3), 1, p=prob))
+    if chosen_index == 0:
+        return gp.mutUniform(individual, expr, pset)
+    elif chosen_index == 1:
+        return gp.mutNodeReplacement(individual, pset)
+    elif chosen_index == 2:
+        return gp.mutShrink(individual)
 
 
 class GPSymbRegProblem():
@@ -45,8 +59,14 @@ class GPSymbRegProblem():
         """Symbolic regression problem via GP.
 
             Args:
+                NINDIVIDUALS: number of individuals in the parent population.
+                NGEN: number of generations.
+                CXPB: cross-over probability.
+                MUTPB: mutation probability.
                 frac_elitist: best individuals to keep expressed as a percentage of the
-                population (ex. 0.1 = keep top 10% individuals)
+                    population (ex. 0.1 = keep top 10% individuals)
+                overlapping_generation: True if the offspring competes with the parents
+                    for survival.
         """
         self.pset = pset
         self.NINDIVIDUALS = NINDIVIDUALS
@@ -230,16 +250,16 @@ class GPSymbRegProblem():
 
     def selStochasticTournament(self, individuals, k, tournsize, prob,
                                 fit_attr="fitness"):
-        """Select the best individual among *tournsize* randomly chosen
-        individuals, *k* times. The list returned contains
-        references to the input *individuals*.
-        :param individuals: A list of individuals to select from.
-        :param k: The number of individuals to select.
-        :param tournsize: The number of individuals participating in each tournament.
-        :param fit_attr: The attribute of individuals to use as selection criterion
-        :returns: A list of selected individuals.
-        This function uses the :func:`~random.choice` function from the python base
-        :mod:`random` module.
+        """Select the best individual among *tournsize* randomly chosen individuals, *k*
+        times. The list returned contains references to the input *individuals*.
+
+        Args:
+            individuals: A list of individuals to select from.
+            k: The number of individuals to select.
+            tournsize: The number of individuals participating in each tournament.
+            fit_attr: The attribute of individuals to use as selection criterion
+        Returns:
+            A list of selected individuals.
         """
         chosen = []
         for _ in range(k):
