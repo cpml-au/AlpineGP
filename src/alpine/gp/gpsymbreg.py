@@ -359,6 +359,15 @@ class GPSymbRegProblem():
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population...", flush=True)
+        if is_elastica:
+            EI0s = self.toolbox.map(self.toolbox.evaluate_EI0,
+                                    make_single_arguments(self.pop),
+                                    iterable_len=len(self.pop),
+                                    n_splits=n_splits)
+
+            for ind, EI0 in zip(self.pop, EI0s):
+                ind.EI0 = EI0
+
         fitnesses = list(self.toolbox.map(self.toolbox.evaluate_train,
                                           make_single_arguments(self.pop),
                                           iterable_len=self.NINDIVIDUALS,
