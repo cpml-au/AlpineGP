@@ -8,9 +8,9 @@ data_path = os.path.dirname(os.path.realpath(__file__))
 
 def get_data_with_noise(noise):
     # get data
-    y = np.array([-5., -10., -15., -20.], dtype=dt.float_dtype)
+    y = np.array([-5., -10., -50., -20.], dtype=dt.float_dtype)
     X = np.empty((4, 10), dtype=dt.float_dtype)
-    data_string = ["xy_F_5.txt", "xy_F_10.txt", "xy_F_15.txt", "xy_F_20.txt"]
+    data_string = ["xy_F_5.txt", "xy_F_10.txt", "xy_F_50.txt", "xy_F_20.txt"]
     for i, string in enumerate(data_string):
         data = np.loadtxt(os.path.join(data_path, string), dtype=float)
         # get data position
@@ -70,4 +70,4 @@ def load_dataset():
 if __name__ == '__main__':
     # seet seed
     np.random.seed(42)
-    save_data(0.01*np.random.rand(11))
+    save_data(0.005*np.random.rand(11))
