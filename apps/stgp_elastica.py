@@ -164,7 +164,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         total_err += fval
 
     if return_best_sol:
-        return best_theta, best_EI0
+        return best_theta
 
     total_err *= 1/(X.ndim)
     # round total_err to 5 decimal digits
@@ -214,8 +214,8 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0: np.array, transform: np.array, is_animated: bool = True):
-    best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                                theta_0=theta_0, return_best_sol=True, tune_EI0=False)
+    best_sol_list = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
+                             theta_0=theta_0, return_best_sol=True, tune_EI0=False)
     if X.ndim == 1:
         plt.figure(1, figsize=(6, 6))
         dim = X.ndim
@@ -329,13 +329,12 @@ def stgp_elastica(config_file):
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
     toolbox.register("evaluate_EI0",
-                     eval_fitness,
+                     eval_MSE,
                      X=X_train,
                      y=y_train,
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0,
-                     penalty=penalty,
                      tune_EI0=True)
     toolbox.register("evaluate_train",
                      eval_fitness,
@@ -436,15 +435,9 @@ def stgp_elastica(config_file):
     np.save("train_fit_history.npy", GPproblem.train_fit_history)
     np.save("val_fit_history.npy", GPproblem.val_fit_history)
 
-    '''
-
-    best_sols = eval_MSE(best, X_test, y_test, toolbox, S, theta_0, True)
-
-    for i, sol in enumerate(best_sols):
-        np.save("best_sol_test_" + str(i) + ".npy", sol)
-        np.save("true_sol_test_" + str(i) + ".npy", X_test[i])
-
-    '''
+    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0, True, False)
+    np.save("best_sol_test_0.npy", best_sol)
+    np.save("true_sol_test_0.npy", X_test)
 
 
 if __name__ == '__main__':
