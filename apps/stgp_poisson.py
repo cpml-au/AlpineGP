@@ -270,6 +270,11 @@ def stgp_poisson(config_file):
                                      toolbox=toolbox)
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
+
+    # opt_string = "Sub(MulF(Inn1(dP0(u), dP0(u)), 1/2), Inn0(u,fk))"
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
+
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
     GPproblem.run(plot_history=True,
