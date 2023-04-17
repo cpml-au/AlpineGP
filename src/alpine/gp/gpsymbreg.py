@@ -328,7 +328,8 @@ class GPSymbRegProblem():
             plot_best_genealogy=False,
             seed=None,
             n_splits=10,
-            early_stopping={'enabled': False, 'max_overfit': 0}):
+            early_stopping={'enabled': False, 'max_overfit': 0},
+            is_elastica=False):
         """Runs symbolic regression.
 
             Args:
@@ -397,6 +398,16 @@ class GPSymbRegProblem():
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+
+            if is_elastica:
+                EI0s = self.toolbox.map(self.toolbox.evaluate_EI0,
+                                        make_single_arguments(invalid_ind),
+                                        iterable_len=len(invalid_ind),
+                                        n_splits=n_splits)
+
+                for ind, EI0 in zip(invalid_ind, EI0s):
+                    ind.EI0 = EI0
+
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
                                          make_single_arguments(invalid_ind),
                                          iterable_len=len(invalid_ind),

@@ -99,6 +99,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     for i, theta_true in iterate:
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
+        # theta_0 = theta_true[1:]
 
         # extract value of FL^2
         FL2 = y[i]
@@ -106,7 +107,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         FL2_EI0 = FL2/EI0
 
         # run parameter identification only on the first dataset of the training set
-        if i == 0 and tune_EI0:
+        if tune_EI0:
             # set extra args for bilevel program
             constraint_args = {'theta_in': theta_in}
             obj_args = {'theta_true': theta_true}
@@ -132,6 +133,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             # update EI0 with the optimal result for the other evaluations of the
             # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
             EI0 = FL2/FL2_EI0
+            return EI0
 
         else:
             prb = oc.OptimizationProblem(
@@ -213,14 +215,16 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0: np.array, transform: np.array, is_animated: bool = True):
     best_sol_list, _ = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                                theta_0=theta_0, return_best_sol=True, tune_EI0=True)
+                                theta_0=theta_0, return_best_sol=True, tune_EI0=False)
     if X.ndim == 1:
         plt.figure(1, figsize=(6, 6))
+        dim = X.ndim
     else:
         plt.figure(1, figsize=(8, 4))
+        dim = X.shape[0]
     fig = plt.gcf()
-    _, axes = plt.subplots(1, X.ndim, num=1)
-    for i in range(X.ndim):
+    _, axes = plt.subplots(1, dim, num=1)
+    for i in range(dim):
         # get theta
         theta = best_sol_list[i]
 
@@ -324,7 +328,7 @@ def stgp_elastica(config_file):
 
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
-    toolbox.register("evaluate_train",
+    toolbox.register("evaluate_EI0",
                      eval_fitness,
                      X=X_train,
                      y=y_train,
@@ -333,6 +337,15 @@ def stgp_elastica(config_file):
                      theta_0=theta_0,
                      penalty=penalty,
                      tune_EI0=True)
+    toolbox.register("evaluate_train",
+                     eval_fitness,
+                     X=X_train,
+                     y=y_train,
+                     toolbox=toolbox,
+                     S=S,
+                     theta_0=theta_0,
+                     penalty=penalty,
+                     tune_EI0=False)
     toolbox.register("evaluate_val_fit",
                      eval_fitness,
                      X=X_val,
@@ -341,7 +354,7 @@ def stgp_elastica(config_file):
                      S=S,
                      theta_0=theta_0,
                      penalty=penalty,
-                     tune_EI0=True)
+                     tune_EI0=False)
     toolbox.register("evaluate_val_MSE",
                      eval_MSE,
                      X=X_val,
@@ -349,7 +362,7 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0=theta_0,
-                     tune_EI0=True)
+                     tune_EI0=False)
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
@@ -385,7 +398,8 @@ def stgp_elastica(config_file):
                   seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping,
-                  plot_freq=1)
+                  plot_freq=1,
+                  is_elastica=True)
 
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
