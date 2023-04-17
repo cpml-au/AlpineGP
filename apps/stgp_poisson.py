@@ -1,9 +1,10 @@
 from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
+from dctkit.math.opt import optctrl as oc
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import tri
-from deap import gp, tools, base, creator
+from deap import gp, base
 import dctkit
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
@@ -12,15 +13,13 @@ from alpine.gp import gpsymbreg as gps
 import numpy as np
 import warnings
 import jax.numpy as jnp
-from jax import jit, grad
-import operator
 import math
 import mpire
 import time
 import sys
 import yaml
 import os
-import pygmo as pg
+from typing import Tuple
 
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -44,47 +43,11 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 # extract list of names of primitives
 primitives_strings = gps.get_primitives_strings(pset, types)
 
-# TODO: move to Poisson model
-
-
-class PoissonProblem():
-    def __init__(self, S: SimplicialComplex, energy_func: callable, num_nodes: float, bnodes: np.array, gamma: float) -> None:
-        self.num_nodes = num_nodes
-        self.S = S
-        self.bnodes = bnodes
-        self.gamma = gamma
-        self.energy_func = energy_func
-
-    def set_data(self, vec_y, b_values):
-        self.vec_y = vec_y
-        self.vec_bvalues = b_values
-
-    def compile_energy_grad_fn(self):
-        self.comp_energy = jit(self.total_energy)
-        self.comp_grad = jit(grad(self.total_energy))
-
-    def total_energy(self, x, vec_y, vec_bvalues):
-        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - vec_bvalues)**2)
-        c = C.CochainP0(self.S, x)
-        fk = C.CochainP0(self.S, vec_y)
-        total_energy = self.energy_func(c, fk) + penalty
-        return total_energy
-
-    def fitness(self, x):
-        fit = self.comp_energy(x, self.vec_y, self.vec_bvalues)
-        return [fit]
-
-    def gradient(self, x):
-        graden = self.comp_grad(x, self.vec_y, self.vec_bvalues)
-        return graden
-
-    def get_bounds(self):
-        return ([-100]*self.num_nodes, [100]*self.num_nodes)
-
 
 def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
              bvalues: dict, S: SimplicialComplex, bnodes: np.array,
-             gamma: float, u_0: np.array, toolbox: base.Toolbox, return_best_sol=False) -> float:
+             gamma: float, u_0: np.array, toolbox: base.Toolbox,
+             return_best_sol=False) -> float:
     """Evaluate total MSE over the dataset.
 
     Args:
@@ -103,21 +66,20 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     energy_func = toolbox.compile(expr=individual)
 
     # create objective function and set its energy function
-    poisson = PoissonProblem(S=S, energy_func=energy_func,
-                             num_nodes=num_nodes, bnodes=bnodes, gamma=gamma)
-    prb = pg.problem(poisson)
 
-    # jit energy and its grad
-    prb.extract(PoissonProblem).compile_energy_grad_fn()
+    def total_energy(x, vec_y, vec_bvalues):
+        penalty = 0.5*gamma*jnp.sum((x[bnodes] - vec_bvalues)**2)
+        c = C.CochainP0(S, x)
+        fk = C.CochainP0(S, vec_y)
+        total_energy = energy_func(c, fk) + penalty
+        return total_energy
+
+    prb = oc.OptimizationProblem(
+        dim=num_nodes, state_dim=num_nodes, objfun=total_energy)
 
     total_err = 0.
 
     best_sols = []
-
-    algo = pg.algorithm(pg.nlopt(solver="tnewton"))
-    algo.extract(pg.nlopt).ftol_abs = 1e-5
-    algo.extract(pg.nlopt).ftol_rel = 1e-5
-    algo.extract(pg.nlopt).maxeval = 100
 
     # TODO: parallelize
     for i, vec_y in enumerate(y):
@@ -125,17 +87,11 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
         vec_bvalues = bvalues[i, :]
 
         # set current bvalues and vec_y for the Poisson problem
-        prb.extract(PoissonProblem).set_data(vec_y, vec_bvalues)
-
-        # add initial guess to population
-        pop = pg.population(prb)
-        pop.push_back(u_0.coeffs)
+        args = {'vec_y': vec_y, 'vec_bvalues': vec_bvalues}
+        prb.set_obj_args(args)
 
         # minimize the objective
-        pop = algo.evolve(pop)
-
-        # retrieve solution (best among population)
-        x = pop.champion_x
+        x = prb.run(x0=u_0.coeffs)
 
         if return_best_sol:
             best_sols.append(x)
@@ -156,8 +112,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict,
-                 S: SimplicialComplex, bnodes: np.array, gamma: float, u_0: np.array, penalty: dict,
-                 toolbox: base.Toolbox) -> (float, ):
+                 S: SimplicialComplex, bnodes: np.array, gamma: float, u_0: np.array,
+                 penalty: dict, toolbox: base.Toolbox) -> Tuple[float, ]:
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -191,10 +147,12 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues
 
 
 # Plot best solution
-def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict, S: SimplicialComplex,
-             bnodes: np.array, gamma: float, u_0: np.array, triang: tri.Triangulation,  toolbox: base.Toolbox):
+def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict,
+             S: SimplicialComplex, bnodes: np.array, gamma: float, u_0: np.array,
+             triang: tri.Triangulation,  toolbox: base.Toolbox):
     u = eval_MSE(ind, X=X, y=y, bvalues=bvalues, S=S,
-                 bnodes=bnodes, gamma=gamma, u_0=u_0, toolbox=toolbox, return_best_sol=True)
+                 bnodes=bnodes, gamma=gamma, u_0=u_0, toolbox=toolbox,
+                 return_best_sol=True)
     plt.figure(10, figsize=(8, 4))
     fig = plt.gcf()
     _, axes = plt.subplots(2, 3, num=10)
