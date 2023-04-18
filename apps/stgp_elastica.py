@@ -73,6 +73,14 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
+    # remove constants as candidate solutions
+    if str(individual).count("theta") == 0:
+        # the solution is constant in theta
+        if tune_EI0:
+            # in this case eval_MSE returns EI0
+            return 1.
+        return 1000.
+
     # number of unknowns angles
     dim = len(theta_0)
 
@@ -100,10 +108,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
-        # center theta_0
-        theta_0 *= np.mean(theta_true)
-
-        # theta_0 = theta_true[1:]
+        theta_0 = theta_true[1:]
 
         # extract value of FL^2
         FL2 = y[i]
@@ -131,7 +136,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 return (lb, ub)
             prb.get_bounds = get_bounds
             x0 = np.append(theta_0, FL2_EI0)
-            x = prb.run(x0=x0, maxeval=100)
+            x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-6, ftol_rel=1e-6)
             theta = x[:-1]
             FL2_EI0 = x[-1]
             # update EI0 with the optimal result for the other evaluations of the
@@ -145,7 +150,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
             theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
-                            ftol_abs=1e-12, ftol_rel=1e-12)
+                            ftol_abs=1e-6, ftol_rel=1e-6)
             x = np.append(theta, FL2_EI0)
 
         if prb.last_opt_result == 1 or prb.last_opt_result == 3:
@@ -304,7 +309,7 @@ def stgp_elastica(config_file):
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
     # initial guess for the solution
-    theta_0 = 0.1*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
+    theta_0 = 0.1*np.ones(S.num_nodes-2).astype(dt.float_dtype)
 
     # initialize toolbox and creator
     createIndividual, toolbox = gps.creator_toolbox_config(
