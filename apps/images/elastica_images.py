@@ -48,7 +48,6 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
     # initial guess for the solution
     np.random.seed(42)
     theta_0 = 0.1*np.ones(S.num_nodes-2).astype(dt.float_dtype)
-    print(theta_0)
 
     # initialize toolbox and creator
     createIndividual, toolbox = gps.creator_toolbox_config(
@@ -74,8 +73,9 @@ if __name__ == '__main__':
         print(yaml.dump(config_file))
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
     # data_X, data_y = ed.get_data_with_noise(0.01*np.random.rand(11))
-    string = "InnD0(AddD0(CosD0(theta), SinD0(theta)), AddD0(theta, CosD0(ArcsinD0(SqrtD0(SinD0(FL2_EI0))))))"
+    # string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
     # string = "InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), SqrtF(InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta)))))))))"
     # string = " InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta))))))))"
+    string = "SquareF(InnD1(SinD1(St0(int_coch)), dD0(InvMulD0(CosD0(theta), InnD0(SinD0(theta), CosD0(SquareD0(delD1(St0(int_coch)))))))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)

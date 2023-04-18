@@ -154,7 +154,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             x = np.append(theta, FL2_EI0)
 
         if prb.last_opt_result == 1 or prb.last_opt_result == 3:
-            fval = obj.MSE_theta(theta, theta_true[1:])
+            fval = obj.MSE_theta(x, theta_true)
         else:
             fval = math.nan
 
