@@ -99,6 +99,10 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     for i, theta_true in iterate:
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
+
+        # center theta_0
+        theta_0 *= np.mean(theta_true)
+
         # theta_0 = theta_true[1:]
 
         # extract value of FL^2
@@ -140,11 +144,12 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
-            theta = prb.run(x0=theta_0, maxeval=500, ftol_abs=1e-7, ftol_rel=1e-7)
+            theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
+                            ftol_abs=1e-12, ftol_rel=1e-12)
             x = np.append(theta, FL2_EI0)
 
         if prb.last_opt_result == 1 or prb.last_opt_result == 3:
-            fval = obj.MSE_theta(x, theta_true)
+            fval = obj.MSE_theta(theta, theta_true[1:])
         else:
             fval = math.nan
 
@@ -166,7 +171,11 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     if return_best_sol:
         return best_theta
 
-    total_err *= 1/(X.ndim)
+    if X.ndim == 1:
+        dim = 1
+    else:
+        dim = X.shape[0]
+    total_err *= 1/(dim)
     # round total_err to 5 decimal digits
     # NOTE: round doesn't work properly.
     # See https://stackoverflow.com/questions/455612/limiting-floats-to-two-decimal-points

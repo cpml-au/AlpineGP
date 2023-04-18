@@ -68,6 +68,7 @@ if __name__ == '__main__':
         print(yaml.dump(config_file))
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
     # data_X, data_y = ed.get_data_with_noise(0.01*np.random.rand(11))
-    string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
+    # string = "InnD0(AddD0(CosD0(theta), SinD0(theta)), AddD0(theta, CosD0(ArcsinD0(SqrtD0(SinD0(FL2_EI0))))))"
+    string = "Add(SinF(InvF(LogF(1/2))), MulF(SinF(CosF(InvF(Div(1/2, InnD1(SinD1(LogD1(CosD1(dD0(theta)))), St0(int_coch)))))), InnD0(theta, SinD0(AddD0(SquareD0(FL2_EI0), theta)))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
