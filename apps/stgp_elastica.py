@@ -21,6 +21,8 @@ from dctkit.math.opt import optctrl as oc
 import numpy.typing as npt
 from typing import Callable
 
+noise = np.random.rand(9).astype(dt.float_dtype)
+
 
 # choose precision and whether to use GPU or CPU
 dt.config(dt.FloatDtype.float64, dt.IntDtype.int64, dt.Backend.jax, dt.Platform.cpu)
@@ -108,7 +110,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
-        theta_0 = theta_true[1:]
+        theta_0 = theta_true[1:] + noise
 
         # extract value of FL^2
         FL2 = y[i]
