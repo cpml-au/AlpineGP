@@ -2,7 +2,6 @@ from deap import algorithms, tools, gp, base, creator
 from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
-from mpire.utils import make_single_arguments
 import operator
 from typing import Tuple, List, Dict
 
@@ -58,7 +57,39 @@ def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tupl
     return GPproblem_settings, GPproblem_run, GPproblem_extra
 
 
-def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
+def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict]:
+    GPproblem_settings = dict()
+    GPproblem_extra = dict()
+    GPproblem_run = dict()
+    GPproblem_settings['NINDIVIDUALS'] = config_file_data["gp"]["NINDIVIDUALS"]
+    GPproblem_settings['NGEN'] = config_file_data["gp"]["NGEN"]
+    GPproblem_settings['CXPB'] = config_file_data["gp"]["CXPB"]
+    GPproblem_settings['MUTPB'] = config_file_data["gp"]["MUTPB"]
+    GPproblem_settings['frac_elitist'] = int(
+        config_file_data["gp"]["frac_elitist"]*GPproblem_settings['NINDIVIDUALS'])
+    GPproblem_settings['min_'] = config_file_data["gp"]["min_"]
+    GPproblem_settings['max_'] = config_file_data["gp"]["max_"]
+    GPproblem_settings['overlapping_generation'] = config_file_data["gp"]["overlapping_generation"]
+    GPproblem_settings['parsimony_pressure'] = config_file_data["gp"]["parsimony_pressure"]
+    GPproblem_settings['tournsize'] = config_file_data["gp"]["select"]["tournsize"]
+    GPproblem_settings['stochastic_tournament'] = config_file_data["gp"]["select"]["stochastic_tournament"]
+
+    individualCreator, toolbox = creator_toolbox_config(
+        config_file=config_file_data, pset=pset)
+    GPproblem_settings['toolbox'] = toolbox
+    GPproblem_settings['individualCreator'] = individualCreator
+
+    GPproblem_extra['penalty'] = config_file_data["gp"]["penalty"]
+    GPproblem_extra['n_jobs'] = config_file_data["mp"]["n_jobs"]
+
+    GPproblem_run['early_stopping'] = config_file_data["gp"]["early_stopping"]
+    GPproblem_run['plot_best'] = config_file_data["plot"]["plot_best"]
+    GPproblem_run['plot_best_genealogy'] = config_file_data["plot"]["plot_best_genealogy"]
+
+    return GPproblem_settings, GPproblem_run, GPproblem_extra
+
+
+def creator_toolbox_config(config_file: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
     # initialize toolbox and creator
     toolbox = base.Toolbox()
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
@@ -238,6 +269,7 @@ class GPSymbRegProblem():
                               gp.mutUniform,
                               expr=self.toolbox.expr_mut,
                               pset=pset)
+        self.toolbox.register("map", map)
 
     def __overfit_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
@@ -252,9 +284,10 @@ class GPSymbRegProblem():
         return overfit
 
     def __compute_valid_stats(self, overfit_measure=False):
-        best = tools.selBest(self.pop, k=1)[0]
-        valid_fit = self.toolbox.evaluate_val_fit(best)[0]
-        valid_err = self.toolbox.evaluate_val_MSE(best)
+        best = tools.selBest(self.pop, k=1)
+        # FIXME: ugly way of handling lists/tuples
+        valid_fit = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
+        valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0]
         overfit = 0
         if overfit_measure:
             training_fit = best.fitness.values[0]
@@ -386,7 +419,6 @@ class GPSymbRegProblem():
             plot_freq=5,
             plot_best_genealogy=False,
             seed=None,
-            n_splits=10,
             early_stopping={'enabled': False, 'max_overfit': 0},
             preprocess_fun=None,
             callback_fun=None):
@@ -430,10 +462,8 @@ class GPSymbRegProblem():
         if preprocess_fun is not None:
             preprocess_fun(self.pop)
 
-        fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
-                                     make_single_arguments(self.pop),
-                                     iterable_len=self.NINDIVIDUALS,
-                                     n_splits=n_splits)
+        fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
+
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
@@ -441,11 +471,11 @@ class GPSymbRegProblem():
 
         if early_stopping['enabled']:
             print("Using early-stopping.")
-            best = tools.selBest(self.pop, k=1)[0]
-            self.tbtp = best.fitness.values[0]
+            best = tools.selBest(self.pop, k=1)
+            self.tbtp = best[0].fitness.values[0]
             # Evaluate fitness on the validation set
-            self.bvp = self.toolbox.evaluate_val_fit(best)[0]
-            self.best = best
+            self.bvp = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
+            self.best = best[0]
             self.last_improvement = self.tbtp
             # initialize overfit index m
             m = 0
@@ -471,10 +501,7 @@ class GPSymbRegProblem():
             if preprocess_fun is not None:
                 preprocess_fun(invalid_ind)
 
-            fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
-                                         make_single_arguments(invalid_ind),
-                                         iterable_len=len(invalid_ind),
-                                         n_splits=n_splits)
+            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
 
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
