@@ -67,24 +67,14 @@ class Objectives():
 
 
 def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
-             toolbox: base.Toolbox, S: SimplicialComplex, theta_0: npt.NDArray, coords,
+             toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
              return_best_sol: bool = False, tune_EI0: bool = False) -> float:
 
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
-    x_all, y_all = coords
-
-    # remove constants as candidate solutions
-    if str(individual).count("theta") == 0:
-        # the solution is constant in theta
-        if tune_EI0:
-            # in this case eval_MSE returns EI0
-            return 1.
-        return 1000.
-
     # number of unknowns angles
-    dim = len(theta_0)
+    dim = S.num_nodes-2
 
     total_err = 0.
     best_theta = []
@@ -110,18 +100,12 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
-        if X.ndim == 1:
-            x_current = x_all
-            y_current = y_all
+        # get the right theta_0
+        if theta_0_all.ndim == 1:
+            theta_0 = theta_0_all
         else:
-            x_current = x_all[i, :]
-            y_current = y_all[i, :]
+            theta_0 = theta_0_all[i, :]
 
-        # def theta_0
-        theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
-        theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
-                             (x_current[-1] - x_current[1]))
-        # theta_0 *= np.mean(theta_true[1:])
         # extract value of FL^2
         FL2 = y[i]
         # define value of the dimensionless parameter
@@ -167,7 +151,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
         if prb.last_opt_result == 1 or prb.last_opt_result == 3:
             fval = obj.MSE_theta(x, theta_true)
-            # print(fval)
         else:
             fval = math.nan
 
@@ -202,8 +185,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
-                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0: np.array,
-                 penalty: dict, coords, tune_EI0: bool = False) -> tuple[float, ]:
+                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: np.array,
+                 penalty: dict, tune_EI0: bool = False) -> tuple[float, ]:
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -223,7 +206,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     objval = 0.
 
     total_err = eval_MSE(individual, X, y, toolbox, S,
-                         theta_0, coords, tune_EI0=tune_EI0)
+                         theta_0_all, tune_EI0=tune_EI0)
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
@@ -240,9 +223,9 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0: np.array, coords, transform: np.array, is_animated: bool = True):
+             S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True):
     best_sol_list = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                             theta_0=theta_0, coords=coords, return_best_sol=True, tune_EI0=False)
+                             theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
     if X.ndim == 1:
         plt.figure(1, figsize=(6, 6))
         dim = X.ndim
@@ -278,35 +261,13 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
         x_true = jnp.linalg.solve(transform, b_x_true)
         y_true = jnp.linalg.solve(transform, b_y_true)
 
-        # reconstruct x_0 and y_0
-        if X.ndim == 1:
-            x_current_true = coords[0]
-            y_current_true = coords[1]
-        else:
-            x_current_true = coords[0][i, :]
-            y_current_true = coords[1][i, :]
-
-        # def theta_0
-        theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
-        theta_0 *= np.arctan((y_current_true[-1] - y_current_true[1]) /
-                             (x_current_true[-1] - x_current_true[1]))
-        theta_0_up = np.insert(theta_0, 0, theta_true[0])
-        cos_theta_0 = h*jnp.cos(theta_0_up)
-        sin_theta_0 = h*jnp.sin(theta_0_up)
-        b_x_0 = jnp.insert(cos_theta_0, 0, 0)
-        b_y_0 = jnp.insert(sin_theta_0, 0, 0)
-        x_0 = jnp.linalg.solve(transform, b_x_0)
-        y_0 = jnp.linalg.solve(transform, b_y_0)
-
         # plot the results
         if X.ndim == 1:
             plt.plot(x_true, y_true, 'r')
             plt.plot(x_current, y_current, 'b')
-            plt.plot(x_0, y_0, 'g')
         else:
             axes[i].plot(x_true, y_true, 'r')
             axes[i].plot(x_current, y_current, 'b')
-            axes[i].plot(x_0, y_0, 'g')
     fig.canvas.draw()
     fig.canvas.flush_events()
     if is_animated:
@@ -343,6 +304,7 @@ def stgp_elastica(config_file):
     y_all = []
     for i in range(3):
         X_current = X[i]
+        # again to handle the case in which X_current has dimension 1. (see eval_MSE)
         if X_current.ndim == 1:
             dim = X_current.ndim
             x_i = np.empty(S.num_nodes)
@@ -371,6 +333,35 @@ def stgp_elastica(config_file):
         x_all.append(x_i)
         y_all.append(y_i)
 
+    # get all theta_0
+    theta_0_all = []
+    for i in range(3):
+        x_all_current = x_all[i]
+        y_all_current = y_all[i]
+        if x_all_current.ndim == 1:
+            dim = x_all_current.ndim
+            theta_0_current = np.empty(S.num_nodes-2, dtype=dt.float_dtype)
+        else:
+            dim = x_all_current.shape[0]
+            theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
+        for j in range(dim):
+            if dim == 1:
+                x_current = x_all_current
+                y_current = y_all_current
+            else:
+                x_current = x_all_current[j, :]
+                y_current = y_all_current[j, :]
+
+            # def theta_0
+            theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
+            theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
+                                 (x_current[-1] - x_current[1]))
+            if dim == 1:
+                theta_0_current = theta_0
+            else:
+                theta_0_current[j, :] = theta_0
+        theta_0_all.append(theta_0_current)
+
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
     internal_vec[0] = 0.
@@ -379,9 +370,6 @@ def stgp_elastica(config_file):
 
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
-
-    # initial guess for the solution
-    theta_0 = np.sqrt(2)/2*np.ones(S.num_nodes-2).astype(dt.float_dtype)
 
     # initialize toolbox and creator
     createIndividual, toolbox = gps.creator_toolbox_config(
@@ -420,8 +408,7 @@ def stgp_elastica(config_file):
                      y=y_train,
                      toolbox=toolbox,
                      S=S,
-                     theta_0=theta_0,
-                     coords=(x_all[0], y_all[0]),
+                     theta_0_all=theta_0_all[0],
                      tune_EI0=True)
     toolbox.register("evaluate_train",
                      eval_fitness,
@@ -429,9 +416,8 @@ def stgp_elastica(config_file):
                      y=y_train,
                      toolbox=toolbox,
                      S=S,
-                     theta_0=theta_0,
+                     theta_0_all=theta_0_all[0],
                      penalty=penalty,
-                     coords=(x_all[0], y_all[0]),
                      tune_EI0=False)
     toolbox.register("evaluate_val_fit",
                      eval_fitness,
@@ -439,9 +425,8 @@ def stgp_elastica(config_file):
                      y=y_val,
                      toolbox=toolbox,
                      S=S,
-                     theta_0=theta_0,
+                     theta_0_all=theta_0_all[1],
                      penalty=penalty,
-                     coords=(x_all[1], y_all[1]),
                      tune_EI0=False)
     toolbox.register("evaluate_val_MSE",
                      eval_MSE,
@@ -449,14 +434,13 @@ def stgp_elastica(config_file):
                      y=y_val,
                      toolbox=toolbox,
                      S=S,
-                     theta_0=theta_0,
-                     coords=(x_all[1], y_all[1]),
+                     theta_0_all=theta_0_all[1],
                      tune_EI0=False)
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
                          X=X_val, y=y_val, toolbox=toolbox,
-                         S=S, theta_0=theta_0, coords=(x_all[1], y_all[1]), transform=transform)
+                         S=S, theta_0_all=theta_0_all[1], transform=transform)
 
     GPproblem = gps.GPSymbRegProblem(pset=pset,
                                      NINDIVIDUALS=NINDIVIDUALS,
@@ -499,11 +483,9 @@ def stgp_elastica(config_file):
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
     # first tune EI0
-    EI0 = eval_MSE(best, X_train, y_train, toolbox, S, theta_0,
-                   (x_all[0], y_all[0]), tune_EI0=True)
+    EI0 = eval_MSE(best, X_train, y_train, toolbox, S, theta_0_all[0], tune_EI0=True)
     best.EI0 = EI0
-    score_test = eval_MSE(best, X_test, y_test, toolbox,
-                          S, theta_0, (x_all[2], y_all[2]))
+    score_test = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2])
     print(f"The best MSE on the test set is {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
@@ -530,8 +512,7 @@ def stgp_elastica(config_file):
     np.save("train_fit_history.npy", GPproblem.train_fit_history)
     np.save("val_fit_history.npy", GPproblem.val_fit_history)
 
-    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0,
-                        (x_all[2], y_all[2]), True, False)
+    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2], True, False)
     np.save("best_sol_test_0.npy", best_sol)
     np.save("true_sol_test_0.npy", X_test)
 

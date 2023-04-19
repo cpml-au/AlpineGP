@@ -19,7 +19,7 @@ sys.path.append(parent_directory)
 def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X_val, y_val):
     from stgp_elastica import plot_sol, eval_MSE, eval_fitness
 
-    penalty = {"method": "length", "reg_param": 0.1}
+    penalty = {"method": "length", "reg_param": 0.05}
     # get normalized simplicial complex
     S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
@@ -73,6 +73,35 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
         x_all.append(x_i)
         y_all.append(y_i)
 
+    # get all theta_0
+    theta_0_all = []
+    for i in range(3):
+        x_all_current = x_all[i]
+        y_all_current = y_all[i]
+        if x_all_current.ndim == 1:
+            dim = x_all_current.ndim
+            theta_0_current = np.empty(S.num_nodes-2, dtype=dt.float_dtype)
+        else:
+            dim = x_all_current.shape[0]
+            theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
+        for j in range(dim):
+            if dim == 1:
+                x_current = x_all_current
+                y_current = y_all_current
+            else:
+                x_current = x_all_current[j, :]
+                y_current = y_all_current[j, :]
+
+            # def theta_0
+            theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
+            theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
+                                 (x_current[-1] - x_current[1]))
+            if dim == 1:
+                theta_0_current = theta_0
+            else:
+                theta_0_current[j, :] = theta_0
+        theta_0_all.append(theta_0_current)
+
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
     internal_vec[0] = 0.
@@ -82,26 +111,20 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
-    # initial guess for the solution
-    np.random.seed(42)
-    theta_0 = -np.sqrt(2)/2*np.ones(S.num_nodes-2).astype(dt.float_dtype)
-
     # initialize toolbox and creator
     createIndividual, toolbox = gps.creator_toolbox_config(
         config_file=config_file, pset=pset)
 
     ind = createIndividual.from_string(string, pset)
     # estimate EI0
-    EI0 = eval_MSE(ind, X_train, y_train, toolbox, S, theta_0,
-                   (x_all[0], y_all[0]), tune_EI0=True)
+    EI0 = eval_MSE(ind, X_train, y_train, toolbox, S, theta_0_all[0], tune_EI0=True)
     ind.EI0 = EI0
     print(f"EI0: {EI0}")
     print(
-        f"train_fit: {eval_fitness(ind, X_train, y_train, toolbox, S, theta_0, penalty, (x_all[0], y_all[0]))[0]}")
+        f"train_fit: {eval_fitness(ind, X_train, y_train, toolbox, S, theta_0_all[0], penalty)[0]}")
     print(
-        f"MSE: {eval_MSE(ind, X_val, y_val, toolbox, S, theta_0, (x_all[1], y_all[1]), tune_EI0=False)}")
-    plot_sol(ind, X_val, y_val, toolbox, S, theta_0,
-             (x_all[1], y_all[1]), transform, False)
+        f"MSE: {eval_MSE(ind, X_val, y_val, toolbox, S, theta_0_all[1], tune_EI0=False)}")
+    plot_sol(ind, X_val, y_val, toolbox, S, theta_0_all[1], transform, False)
 
 
 if __name__ == '__main__':
@@ -116,9 +139,12 @@ if __name__ == '__main__':
     # data_X, data_y = ed.get_data_with_noise(0.01*np.random.rand(11))
     # string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
     # string = "InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), SqrtF(InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta)))))))))"
-    string = " InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta))))))))"
+    # string = " InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta))))))))"
     # string = "InnD0(SquareD0(CosD0(AddD0(FL2_EI0, theta))), theta)"
     # string = "InnD0(theta, SubD0(theta, theta))"
     # string = " InnD0(SinD0(SinD0(SubD0(InvMulD0(FL2_EI0, 2), theta))), theta)"
+    # string = "SinF(Sub(ArccosF(InnD0(theta, theta)), InnD0(theta, delD1(SinD1(SubD1(CosD1(MulD1(dD0(theta), 2)), SinD1(dD0(FL2_EI0))))))))"
+    # string = "InnD1(ExpD1(ExpD1(ArcsinD1(LogD1(CosD1(SubD1(St0(int_coch), ArccosD1(CosD1(CosD1(ArcsinD1(CochMulD1(St0(int_coch), dD0(InvMulD0(CochMulD0(FL2_EI0, theta), InnD0(FL2_EI0, theta)))))))))))))), AddD1(St0(int_coch), ArcsinD1(St0(int_coch))))"
+    string = " InnD1(CosD1(CosD1(CosD1(CosD1(CochMulD1(St0(int_coch), dD0(InvMulD0(CochMulD0(FL2_EI0, theta), InnD0(FL2_EI0, theta)))))))), St0(int_coch))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
