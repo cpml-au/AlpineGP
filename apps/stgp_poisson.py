@@ -5,16 +5,19 @@ from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
-import dctkit
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
+from dctkit import config, FloatDtype, IntDtype, Backend, Platform
+import dctkit
+
+from ray.util.multiprocessing import Pool
+import ray
 
 import numpy as np
 import warnings
 import jax.numpy as jnp
 import math
-import mpire
 import time
 import sys
 import yaml
@@ -26,9 +29,8 @@ import numpy.typing as npt
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
 # choose precision and whether to use GPU or CPU
-dctkit.config(dctkit.FloatDtype.float64, dctkit.IntDtype.int64,
-              dctkit.Backend.jax, dctkit.Platform.cpu)
-
+# needed for context of the plots at the end of the evolution
+config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
 # suppress warnings
 warnings.filterwarnings('ignore')
@@ -41,41 +43,26 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 primitives_strings = gps.get_primitives_strings(pset, types)
 
 
-class Objectives():
-    def __init__(self, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float) -> None:
-        self.S = S
-        self.bnodes = bnodes
-        self.gamma = gamma
-
-    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree) -> None:
-        """Set the energy function to be used for the computation of the objective
-        function."""
-        self.energy_func = func
-        self.individual = individual
-
-    def total_energy(self, x, vec_y, vec_bvalues):
-        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - vec_bvalues)**2)
-        c = C.CochainP0(self.S, x)
-        fk = C.CochainP0(self.S, vec_y)
-        total_energy = self.energy_func(c, fk) + penalty
-        return total_energy
-
-
-def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
-             bvalues: dict, S: SimplicialComplex, bnodes: np.array,
-             gamma: float, u_0: np.array, toolbox: base.Toolbox,
-             return_best_sol=False) -> float:
+def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+             bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+             gamma: float, u_0: C.CochainP0, return_best_sol: bool = False) -> float:
 
     num_nodes = X.shape[1]
 
-    # transform the individual expression into a callable function
-    energy_func = toolbox.compile(expr=individual)
+    # need to call config again before using JAX in energy evaluations to make sure that
+    # the current worker has initialized JAX
+    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
-    obj = Objectives(S=S, bnodes=bnodes, gamma=gamma)
-    obj.set_energy_func(energy_func, individual)
+    # create objective function and set its energy function
+    def total_energy(x, vec_y, vec_bvalues):
+        penalty = 0.5*gamma*jnp.sum((x[bnodes] - vec_bvalues)**2)
+        c = C.CochainP0(S, x)
+        fk = C.CochainP0(S, vec_y)
+        total_energy = energy_func(c, fk) + penalty
+        return total_energy
 
     prb = oc.OptimizationProblem(
-        dim=num_nodes, state_dim=num_nodes, objfun=obj.total_energy)
+        dim=num_nodes, state_dim=num_nodes, objfun=total_energy)
 
     total_err = 0.
 
@@ -111,35 +98,46 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     return total_err
 
 
-def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict,
-                 S: SimplicialComplex, bnodes: np.array, gamma: float, u_0: np.array,
-                 penalty: dict, toolbox: base.Toolbox) -> Tuple[float, ]:
+def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+                 bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
+                 u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
 
     objval = 0.
 
-    total_err = eval_MSE(individual, X, y, bvalues, S, bnodes, gamma, u_0, toolbox)
+    total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    if penalty["method"] == "primitive":
-        # penalty terms on primitives
-        indstr = str(individual)
-        objval = total_err + penalty["reg_param"] * \
-            max([indstr.count(string) for string in primitives_strings])
-    elif penalty["method"] == "length":
+    # if penalty["method"] == "primitive":
+    #     # penalty terms on primitives
+    #     indstr = str(individual)
+    #     objval = total_err + penalty["reg_param"] * \
+    #         max([indstr.count(string) for string in primitives_strings])
+    if penalty["method"] == "length":
         # penalty terms on length
-        objval = total_err + penalty["reg_param"]*len(individual)
+        objval = total_err + penalty["reg_param"]*indlen
     else:
         # no penalty
         objval = total_err
+
     return objval,
 
 
 # Plot best solution
-def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, bvalues: dict,
-             S: SimplicialComplex, bnodes: np.array, gamma: float, u_0: np.array,
-             triang: tri.Triangulation,  toolbox: base.Toolbox):
-    u = eval_MSE(ind, X=X, y=y, bvalues=bvalues, S=S,
-                 bnodes=bnodes, gamma=gamma, u_0=u_0, toolbox=toolbox,
-                 return_best_sol=True)
+def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
+             bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+             gamma: float, u_0: C.CochainP0, toolbox: base.Toolbox,
+             triang: tri.Triangulation):
+
+    # the refs of these objects are not automatically converted to objects
+    # (because we are not calling plot_sol via .remote())
+    bnodes = ray.get(bnodes)
+    gamma = ray.get(gamma)
+    u_0 = ray.get(u_0)
+    S = ray.get(S)
+    indfun = toolbox.compile(expr=ind)
+
+    u = eval_MSE(indfun, indlen=0, X=X, y=y, bvalues=bvalues, S=S,
+                 bnodes=bnodes, gamma=gamma, u_0=u_0, return_best_sol=True)
+
     plt.figure(10, figsize=(8, 4))
     fig = plt.gcf()
     _, axes = plt.subplots(2, 3, num=10)
@@ -168,8 +166,8 @@ def stgp_poisson(config_file, output_path=None):
     # penalty parameter for the Dirichlet bcs
     gamma = 1000.
 
-    # initial guess for the solution
-    u_0_vec = 0.01*np.random.rand(num_nodes)
+    # initial guess for the solution of the Poisson problem
+    u_0_vec = 0.01*np.random.rand(num_nodes).astype(dctkit.float_dtype)
     u_0 = C.CochainP0(S, u_0_vec)
 
     # set parameters from config file
@@ -179,30 +177,46 @@ def stgp_poisson(config_file, output_path=None):
     penalty = GPproblem_extra['penalty']
     n_jobs = GPproblem_extra['n_jobs']
 
+    ray.init()
+
+    # store shared objects refs
+    S_ref = ray.put(S)
+    penalty_ref = ray.put(penalty)
+    bnodes_ref = ray.put(bnodes)
+    gamma_ref = ray.put(gamma)
+    u_0_ref = ray.put(u_0)
+    X_train_ref = ray.put(X_train)
+    y_train_ref = ray.put(y_train)
+    bvalues_train_ref = ray.put(bvalues_train)
+
     # set arguments for evaluate functions
     if GPproblem_run['early_stopping']['enabled']:
-        args_train = {'X': X_train, 'y': y_train, 'bvalues': bvalues_train,
-                      'penalty': penalty, 'S': S, 'bnodes': bnodes,
-                      'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+        args_train = {'X': X_train_ref, 'y': y_train_ref, 'bvalues': bvalues_train_ref,
+                      'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
+                      'gamma': gamma_ref, 'u_0': u_0_ref}
         args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
-                        'penalty': penalty, 'S': S,
-                        'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
-        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S,
-                        'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
-
+                        'penalty': penalty_ref, 'S': S_ref,
+                        'bnodes': bnodes_ref, 'gamma': gamma_ref, 'u_0': u_0_ref}
+        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S_ref,
+                        'bnodes': bnodes_ref, 'gamma': gamma_ref, 'u_0': u_0_ref}
         # register functions for fitness/MSE evaluation on different datasets
-        toolbox.register("evaluate_val_fit", eval_fitness, **args_val_fit)
-        toolbox.register("evaluate_val_MSE", eval_MSE, **args_val_MSE)
+        toolbox.register("evaluate_val_fit", ray.remote(
+            eval_fitness).remote, **args_val_fit)
+        toolbox.register("evaluate_val_MSE", ray.remote(
+            eval_MSE).remote, **args_val_MSE)
     else:
         X_tr = np.vstack((X_train, X_val))
         y_tr = np.vstack((y_train, y_val))
+        X_tr_ref = ray.put(X_tr)
+        y_tr_ref = ray.put(y_tr)
         bvalues_tr = np.vstack((bvalues_train, bvalues_val))
-        args_train = {'X': X_tr, 'y': y_tr, 'bvalues': bvalues_tr,
-                      'penalty': penalty, 'S': S, 'bnodes': bnodes,
-                      'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+        bvalues_tr_ref = ray.put(bvalues_tr)
+        args_train = {'X': X_tr_ref, 'y': y_tr_ref, 'bvalues': bvalues_tr_ref,
+                      'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
+                      'gamma': gamma_ref, 'u_0': u_0_ref}
 
-    # register functions for fitness evaluation on training dataset
-    toolbox.register("evaluate_train", eval_fitness, **args_train)
+    # register functions for fitness/MSE evaluation on different datasets
+    toolbox.register("evaluate_train", ray.remote(eval_fitness).remote, **args_train)
 
     if GPproblem_run['plot_best']:
         toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
@@ -211,33 +225,44 @@ def stgp_poisson(config_file, output_path=None):
     # create symbolic regression problem instance
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
-    # opt_string = "Sub(MulF(Inn1(dP0(u), dP0(u)), 1/2), Inn0(u,fk))"
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    # MULTIPROCESSING SETTINGS ---------------------------------------------------------
+    ray.init()
 
-    pool = mpire.WorkerPool(n_jobs=n_jobs)
-    GPproblem.toolbox.register("map", pool.map)
+    pool = Pool()
+
+    def ray_mapper(f, individuals, toolbox):
+        # We are not duplicating global scope on workers so we need to use the toolbox
+        # Transform the tree expression in a callable function
+        runnables = [toolbox.compile(expr=ind) for ind in individuals]
+        lenghts = [len(ind) for ind in individuals]
+        fitnesses = ray.get([f(*args) for args in zip(runnables, lenghts)])
+        return fitnesses
+
+    GPproblem.toolbox.register("map", ray_mapper, toolbox=GPproblem.toolbox)
+    # ----------------------------------------------------------------------------------
 
     start = time.perf_counter()
 
     GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run)
 
+    # print stats on best individual at the end of the evolution
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
-
     print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
+
     if GPproblem_run['early_stopping']['enabled']:
         print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
-    print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
+    score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)),
+                          X_test, y_test, bvalues_test, S=S,
+                          bnodes=bnodes, gamma=gamma, u_0=u_0)
 
-    score_test = eval_MSE(best, X_test, y_test, bvalues_test, S=S,
-                          bnodes=bnodes, gamma=gamma, u_0=u_0, toolbox=toolbox)
     print(f"The best MSE on the test set is {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
-    pool.terminate()
+    pool.close()
+    ray.shutdown()
 
     # plot the tree of the best individual
     # nodes, edges, labels = gp.graph(best)
@@ -263,10 +288,9 @@ def stgp_poisson(config_file, output_path=None):
     if GPproblem_run['early_stopping']['enabled']:
         np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
 
-    best_sols = eval_MSE(best, X=X_test, y=y_test,
-                         bvalues=bvalues_test, S=S,
-                         bnodes=bnodes, gamma=gamma,
-                         u_0=u_0, toolbox=toolbox, return_best_sol=True)
+    best_sols = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)), X=X_test,
+                         y=y_test, bvalues=bvalues_test, S=S, bnodes=bnodes,
+                         gamma=gamma, u_0=u_0, return_best_sol=True)
 
     for i, sol in enumerate(best_sols):
         np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
