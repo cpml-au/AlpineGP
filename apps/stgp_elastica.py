@@ -20,6 +20,7 @@ from jax import grad, Array
 from dctkit.math.opt import optctrl as oc
 import numpy.typing as npt
 from typing import Callable
+import jax
 
 
 # choose precision and whether to use GPU or CPU
@@ -51,6 +52,7 @@ class Objectives():
         FL2_EI0_coch = C.CochainD0(
             self.S, FL2_EI0*np.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         energy = self.energy_func(theta, FL2_EI0_coch)
+        # jax.debug.print("{energy}", energy=energy)
         return energy
 
     # state function: stationarity conditions for the total energy
@@ -148,13 +150,13 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
             theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
-                            ftol_abs=1e-6, ftol_rel=1e-6)
+                            ftol_abs=1e-12, ftol_rel=1e-12)
             x = np.append(theta, FL2_EI0)
             # check if the solution is constant
-            noise = 0.001*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
+            noise = 0.0001*np.ones(S.num_nodes-2).astype(dt.float_dtype)
             theta_0_noise = theta_0 + noise
             theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
-                                  ftol_abs=1e-6, ftol_rel=1e-6)
+                                  ftol_abs=1e-12, ftol_rel=1e-12)
             if np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6):
                 is_constant = False
 
