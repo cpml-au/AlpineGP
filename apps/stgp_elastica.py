@@ -79,8 +79,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     dim = S.num_nodes-2
 
     total_err = 0.
-    best_theta = []
-    best_EI0 = []
+    # best_theta = theta_0_all
 
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func, individual)
@@ -92,15 +91,16 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     if X.ndim == 1:
         iterate = enumerate(np.array([X]))
         y = np.array([y])
+        best_theta = np.zeros(S.num_nodes-1, dtype=dt.float_dtype)
     else:
         iterate = enumerate(X)
+        best_theta = np.zeros((X.shape[0], S.num_nodes-1), dtype=dt.float_dtype)
 
     # get initial guess for EI0
     EI0 = individual.EI0
 
-    is_constant = True
-
     for i, theta_true in iterate:
+        # is_constant = True
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
@@ -142,35 +142,41 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             # update EI0 with the optimal result for the other evaluations of the
             # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
             EI0 = FL2/FL2_EI0
+            if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
+                EI0 = -1
             return EI0
 
         else:
-            prb = oc.OptimizationProblem(
-                dim=dim, state_dim=dim, objfun=obj.total_energy)
-            args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
-            prb.set_obj_args(args)
-            theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
-                            ftol_abs=1e-12, ftol_rel=1e-12)
-            x = np.append(theta, FL2_EI0)
-            # check if the solution is constant
-            noise = 0.0001*np.ones(S.num_nodes-2).astype(dt.float_dtype)
-            theta_0_noise = theta_0 + noise
-            theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
-                                  ftol_abs=1e-12, ftol_rel=1e-12)
-            if np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6):
-                is_constant = False
+            if EI0 > 0:
+                prb = oc.OptimizationProblem(
+                    dim=dim, state_dim=dim, objfun=obj.total_energy)
+                args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
+                prb.set_obj_args(args)
+                theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
+                                ftol_abs=1e-12, ftol_rel=1e-12)
+                x = np.append(theta, FL2_EI0)
+                # check if the solution is constant
+                noise = 0.0001*np.ones(S.num_nodes-2).astype(dt.float_dtype)
+                theta_0_noise = theta_0 + noise
+                theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
+                                      ftol_abs=1e-12, ftol_rel=1e-12)
 
-        if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (not is_constant):
-            fval = obj.MSE_theta(x, theta_true)
-        else:
-            fval = math.nan
+                isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
+
+                if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (isnt_constant):
+                    fval = obj.MSE_theta(x, theta_true)
+                else:
+                    fval = math.nan
+            else:
+                fval = math.nan
+                theta = theta_0
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
-
-        if return_best_sol:
-            best_theta.append(theta)
-            best_EI0.append(individual.EI0)
+        if X.ndim == 1:
+            best_theta = theta
+        else:
+            best_theta[i, :] = theta
 
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
@@ -179,9 +185,6 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         # update the error: it is the sum of the error w.r.t. theta and
         # the error w.r.t. EI0
         total_err += fval
-
-        # reset is_constant
-        is_constant = True
 
     if return_best_sol:
         return best_theta
@@ -250,7 +253,10 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
     _, axes = plt.subplots(1, dim, num=1)
     for i in range(dim):
         # get theta
-        theta = best_sol_list[i]
+        if X.ndim == 1:
+            theta = best_sol_list
+        else:
+            theta = best_sol_list[i, :]
 
         # get theta_true
         if dim == 1:
@@ -471,9 +477,9 @@ def stgp_elastica(config_file):
                                      individualCreator=createIndividual,
                                      toolbox=toolbox)
 
-    # opt_string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta_coch)), InvSt0(dD0(theta_coch)))), InnD0(MulD0(ones, FL2_EI_0), SinD0(theta_coch))"
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_string = "Add(SinF(SqrtF(Add(ExpF(CosF(InvF(SinF(2)))), Add(CosF(InnD1(CosD1(CochMulD1(SinD1(SqrtD1(St0(int_coch))), dD0(theta))), SubD1(dD0(FL2_EI0), St0(int_coch)))), SqrtF(SinF(2)))))), CosF(InnD0(AddD0(FL2_EI0, theta), ExpD0(InvMulD0(theta, 1/2)))))"
+    opt_individ = createIndividual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
@@ -482,7 +488,7 @@ def stgp_elastica(config_file):
                   print_log=True,
                   plot_best=plot_best,
                   plot_best_genealogy=plot_best_genealogy,
-                  seed=None,
+                  seed=seed,
                   n_splits=n_splits,
                   early_stopping=early_stopping,
                   plot_freq=1,
