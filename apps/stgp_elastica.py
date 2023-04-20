@@ -117,33 +117,34 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
         # run parameter identification only on the first dataset of the training set
         if tune_EI0:
-            # set extra args for bilevel program
-            constraint_args = {'theta_in': theta_in}
-            obj_args = {'theta_true': theta_true}
-            # set bilevel problem
-            prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
-                                           statefun=obj.total_energy_grad,
-                                           state_dim=S.num_nodes-2,
-                                           nparams=S.num_nodes-1,
-                                           constraint_args=constraint_args,
-                                           obj_args=obj_args)
+            if EI0 > 0:
+                # set extra args for bilevel program
+                constraint_args = {'theta_in': theta_in}
+                obj_args = {'theta_true': theta_true}
+                # set bilevel problem
+                prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
+                                               statefun=obj.total_energy_grad,
+                                               state_dim=S.num_nodes-2,
+                                               nparams=S.num_nodes-1,
+                                               constraint_args=constraint_args,
+                                               obj_args=obj_args)
 
-            def get_bounds():
-                lb = -100*np.ones(dim+1, dt.float_dtype)
-                ub = 100*np.ones(dim+1, dt.float_dtype)
-                lb[-1] = -100
-                ub[-1] = -1e-3
-                return (lb, ub)
-            prb.get_bounds = get_bounds
-            x0 = np.append(theta_0, FL2_EI0)
-            x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-6, ftol_rel=1e-6)
-            theta = x[:-1]
-            FL2_EI0 = x[-1]
-            # update EI0 with the optimal result for the other evaluations of the
-            # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
-            EI0 = FL2/FL2_EI0
-            if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
-                EI0 = -1
+                def get_bounds():
+                    lb = -100*np.ones(dim+1, dt.float_dtype)
+                    ub = 100*np.ones(dim+1, dt.float_dtype)
+                    lb[-1] = -100
+                    ub[-1] = -1e-3
+                    return (lb, ub)
+                prb.get_bounds = get_bounds
+                x0 = np.append(theta_0, FL2_EI0)
+                x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-6, ftol_rel=1e-6)
+                theta = x[:-1]
+                FL2_EI0 = x[-1]
+                # update EI0 with the optimal result for the other evaluations of the
+                # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
+                EI0 = FL2/FL2_EI0
+                if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
+                    EI0 = -1
             return EI0
 
         else:
@@ -477,9 +478,9 @@ def stgp_elastica(config_file):
                                      individualCreator=createIndividual,
                                      toolbox=toolbox)
 
-    opt_string = "Add(SinF(SqrtF(Add(ExpF(CosF(InvF(SinF(2)))), Add(CosF(InnD1(CosD1(CochMulD1(SinD1(SqrtD1(St0(int_coch))), dD0(theta))), SubD1(dD0(FL2_EI0), St0(int_coch)))), SqrtF(SinF(2)))))), CosF(InnD0(AddD0(FL2_EI0, theta), ExpD0(InvMulD0(theta, 1/2)))))"
-    opt_individ = createIndividual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_string = "Add(SinF(SqrtF(Add(ExpF(CosF(InvF(SinF(2)))), Add(CosF(InnD1(CosD1(CochMulD1(SinD1(SqrtD1(St0(int_coch))), dD0(theta))), SubD1(dD0(FL2_EI0), St0(int_coch)))), SqrtF(SinF(2)))))), CosF(InnD0(AddD0(FL2_EI0, theta), ExpD0(InvMulD0(theta, 1/2)))))"
+    # opt_individ = createIndividual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
@@ -488,7 +489,7 @@ def stgp_elastica(config_file):
                   print_log=True,
                   plot_best=plot_best,
                   plot_best_genealogy=plot_best_genealogy,
-                  seed=seed,
+                  seed=None,
                   n_splits=n_splits,
                   early_stopping=early_stopping,
                   plot_freq=1,
