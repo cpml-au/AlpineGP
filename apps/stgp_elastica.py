@@ -96,6 +96,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     # get initial guess for EI0
     EI0 = individual.EI0
 
+    is_constant = True
+
     for i, theta_true in iterate:
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
@@ -148,8 +150,15 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
                             ftol_abs=1e-6, ftol_rel=1e-6)
             x = np.append(theta, FL2_EI0)
+            # check if the solution is constant
+            noise = 0.001*np.random.rand(S.num_nodes-2).astype(dt.float_dtype)
+            theta_0_noise = theta_0 + noise
+            theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
+                                  ftol_abs=1e-6, ftol_rel=1e-6)
+            if np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6):
+                is_constant = False
 
-        if prb.last_opt_result == 1 or prb.last_opt_result == 3:
+        if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (not is_constant):
             fval = obj.MSE_theta(x, theta_true)
         else:
             fval = math.nan
@@ -163,11 +172,14 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
-            total_err = 100
+            total_err = 10.
             break
         # update the error: it is the sum of the error w.r.t. theta and
         # the error w.r.t. EI0
         total_err += fval
+
+        # reset is_constant
+        is_constant = True
 
     if return_best_sol:
         return best_theta

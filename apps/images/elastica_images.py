@@ -145,6 +145,6 @@ if __name__ == '__main__':
     # string = " InnD0(SinD0(SinD0(SubD0(InvMulD0(FL2_EI0, 2), theta))), theta)"
     # string = "SinF(Sub(ArccosF(InnD0(theta, theta)), InnD0(theta, delD1(SinD1(SubD1(CosD1(MulD1(dD0(theta), 2)), SinD1(dD0(FL2_EI0))))))))"
     # string = "InnD1(ExpD1(ExpD1(ArcsinD1(LogD1(CosD1(SubD1(St0(int_coch), ArccosD1(CosD1(CosD1(ArcsinD1(CochMulD1(St0(int_coch), dD0(InvMulD0(CochMulD0(FL2_EI0, theta), InnD0(FL2_EI0, theta)))))))))))))), AddD1(St0(int_coch), ArcsinD1(St0(int_coch))))"
-    string = " InnD1(CosD1(CosD1(CosD1(CosD1(CochMulD1(St0(int_coch), dD0(InvMulD0(CochMulD0(FL2_EI0, theta), InnD0(FL2_EI0, theta)))))))), St0(int_coch))"
+    string = "InvF(SinF(InnD0(SqrtD0(InvMulD0(InvMulD0(FL2_EI0, -1), SquareF(2))), CosD0(theta))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
