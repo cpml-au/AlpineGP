@@ -2,6 +2,7 @@ import numpy as np
 import jax.numpy as jnp
 from deap import base, gp
 from scipy import sparse
+from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
 from dctkit.dec import cochain as C
@@ -20,7 +21,6 @@ from jax import grad, Array
 from dctkit.math.opt import optctrl as oc
 import numpy.typing as npt
 from typing import Callable
-import jax
 
 
 # choose precision and whether to use GPU or CPU
@@ -33,26 +33,75 @@ types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
 primitives_strings = gps.get_primitives_strings(pset, types)
 
 
-def get_coords(theta: np.array, transform: np.array) -> tuple[np.array, np.array]:
-    """Get x,y coordinates given a vector of angles theta. To do it, we have to solve
-    two linear systems Ax = b_x, Ay = b_y, where A is a bidiagonal matrix.
+def get_coords(X: tuple, transform: np.array) -> list:
+    """Get x,y coordinates given a tuple containing all theta matrices. 
+    To do it, we have to solve two linear systems Ax = b_x, Ay = b_y, 
+    where A is a block diagonal matrix where each block is bidiagonal.
 
     Args:
-        theta (np.array): vector of the angles.
-        transform (np.array): bidiagonal matrix of the linear system.
+        X (tuple): tuple containing theta to transform in coordinates.
+        transform (np.array): matrix of the linear system.
 
     Returns:
-        (np.array): x-coordinates
-        (np.array): y-coordinates
+        (list): list of x-coordinates
+        (list): list of y-coordinates
     """
-    h = 1/len(theta)
-    cos_theta = h*jnp.cos(theta)
-    sin_theta = h*jnp.sin(theta)
-    b_x = jnp.insert(cos_theta, 0, 0)
-    b_y = jnp.insert(sin_theta, 0, 0)
-    x = jnp.linalg.solve(transform, b_x)
-    y = jnp.linalg.solve(transform, b_y)
-    return x, y
+    x_all = []
+    y_all = []
+    h = 1/X[0].shape[1]
+    for i in range(len(X)):
+        theta = X[i]
+        dim = theta.shape[0]
+
+        # compute cos and sin theta
+        cos_theta = h*jnp.cos(theta)
+        sin_theta = h*jnp.sin(theta)
+        b_x = np.zeros((theta.shape[0], theta.shape[1]+1), dtype=dt.float_dtype)
+        b_y = np.zeros((theta.shape[0], theta.shape[1]+1), dtype=dt.float_dtype)
+        b_x[:, 1:] = cos_theta
+        b_y[:, 1:] = sin_theta
+        # reshape to a vector
+        b_x = b_x.reshape(theta.shape[0]*(theta.shape[1]+1))
+        b_y = b_y.reshape(theta.shape[0]*(theta.shape[1]+1))
+        transform_list = [transform]*dim
+        T = block_diag(*transform_list)
+        # solve the system. In this way we find the solution but
+        # as a vector and not as a matrix.
+        x_i = jnp.linalg.solve(T, b_x)
+        y_i = jnp.linalg.solve(T, b_y)
+        # reshape again to have a matrix
+        x_i = x_i.reshape((theta.shape[0], theta.shape[1]+1))
+        y_i = y_i.reshape((theta.shape[0], theta.shape[1]+1))
+        # update the list
+        x_all.append(x_i)
+        y_all.append(y_i)
+    return x_all, y_all
+
+
+def get_theta_0(x: list, y: list) -> list:
+    """Routine to compute all the theta_0.
+
+    Args:
+        x (list): list in which each entry is the matrix of x-coordinates
+        of the dataset.
+        y (list): list in which each entry is the matrix of x-coordinates
+        of the dataset.
+
+    Returns:
+        (list): list of all the theta_0
+
+    """
+    theta_0_all = []
+    for i in range(3):
+        x_current = x[i]
+        y_current = y[i]
+        theta_0_init = np.ones(
+            (x_current.shape[0], x_current.shape[1]-2), dtype=dt.float_dtype)
+        const_angles = np.arctan((y_current[:, -1] - y_current[:, 1]
+                                  )/(x_current[:, -1] - x_current[:, 1]))
+        theta_0_current = np.diag(const_angles) @ theta_0_init
+        theta_0_all.append(theta_0_current)
+    return theta_0_all
 
 
 def is_possible_energy(theta_0: np.array, theta: np.array, prb: oc.OptimizationProblem) -> bool:
@@ -268,24 +317,14 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
     dim = X.shape[0]
     fig = plt.gcf()
     _, axes = plt.subplots(1, dim, num=1)
+    # get the x,y coordinates LIST of the best and of the true
+    x_curr, y_curr = get_coords((best_sol_all,), transform)
+    x_true, y_true = get_coords((X,), transform)
     for i in range(dim):
-        # get theta
-        theta = best_sol_all[i, :]
-        # get theta_true
-        theta_true = X[i, :]
-        # reconstruct x, y
-        x_current, y_current = get_coords(theta=theta, transform=transform)
-        # reconstruct x_true and y_true
-        x_true, y_true = get_coords(theta=theta_true, transform=transform)
-
         # plot the results
-        # FIXME: CHANGE IT
-        if dim == 1:
-            plt.plot(x_true, y_true, 'r')
-            plt.plot(x_current, y_current, 'b')
-        else:
-            axes[i].plot(x_true, y_true, 'r')
-            axes[i].plot(x_current, y_current, 'b')
+        axes[i].plot(x_true[0][i, :], y_true[0][i, :], 'r')
+        axes[i].plot(x_curr[0][i, :], y_curr[0][i, :], 'b')
+
     fig.canvas.draw()
     fig.canvas.flush_events()
     if is_animated:
@@ -314,40 +353,11 @@ def stgp_elastica(config_file):
     transform[1, 0] = -1
 
     # get (x,y) coordinates for the dataset
-    X = (X_train, X_val, X_test)
-    x_all = []
-    y_all = []
-    for i in range(3):
-        X_current = X[i]
-        # again to handle the case in which X_current has dimension 1. (see eval_MSE)
-        dim = X_current.shape[0]
-        x_i = np.zeros((dim, S.num_nodes), dtype=dt.float_dtype)
-        y_i = np.zeros((dim, S.num_nodes), dtype=dt.float_dtype)
-
-        for j in range(dim):
-            theta_true = X_current[j, :]
-            # reconstruct x_true and y_true
-            x_i[j, :], y_i[j, :] = get_coords(theta=theta_true, transform=transform)
-        x_all.append(x_i)
-        y_all.append(y_i)
+    X = X_train, X_val, X_test
+    x_all, y_all = get_coords(X, transform)
 
     # get all theta_0
-    theta_0_all = []
-    for i in range(3):
-        x_all_current = x_all[i]
-        y_all_current = y_all[i]
-        dim = x_all_current.shape[0]
-        theta_0_current = np.zeros((dim, S.num_nodes-2), dtype=dt.float_dtype)
-        for j in range(dim):
-            x_current = x_all_current[j, :]
-            y_current = y_all_current[j, :]
-
-            # def theta_0
-            theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
-            theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
-                                 (x_current[-1] - x_current[1]))
-            theta_0_current[j, :] = theta_0
-        theta_0_all.append(theta_0_current)
+    theta_0_all = get_theta_0(x_all, y_all)
 
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
