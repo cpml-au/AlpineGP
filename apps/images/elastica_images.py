@@ -139,7 +139,7 @@ if __name__ == '__main__':
         print(yaml.dump(config_file))
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
     # data_X, data_y = ed.get_data_with_noise(0.01*np.random.rand(11))
-    # string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
+    string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
     # string = "InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), SqrtF(InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta)))))))))"
     # string = " InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta))))))))"
     # string = "InnD0(SquareD0(CosD0(AddD0(FL2_EI0, theta))), theta)"
@@ -149,6 +149,6 @@ if __name__ == '__main__':
     # string = "Sub(InnP0(InvSt0(dD0(theta), InvSt0(dD0(theta))), InnD0(FL2_EI0, SinD0(theta))"
     # string = " SinF(CosF(InnD0(ExpD0(theta), FL2_EI0)))"
     # string = "InnD0(theta, SubD0(theta, theta))"
-    string = "InnP0(ArccosP0(SubP0(SqrtP0(int_coch), int_coch)), SinP0(InvSt0(dD0(SqrtD0(CosD0(SubD0(FL2_EI0, theta)))))))"
+    # string = "InnP0(ArccosP0(SubP0(SqrtP0(int_coch), int_coch)), SinP0(InvSt0(dD0(SqrtD0(CosD0(SubD0(FL2_EI0, theta)))))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)

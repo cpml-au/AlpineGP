@@ -33,6 +33,49 @@ types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
 primitives_strings = gps.get_primitives_strings(pset, types)
 
 
+def get_coords(theta: np.array, transform: np.array) -> tuple[np.array, np.array]:
+    h = 1/len(theta)
+    cos_theta = h*jnp.cos(theta)
+    sin_theta = h*jnp.sin(theta)
+    b_x = jnp.insert(cos_theta, 0, 0)
+    b_y = jnp.insert(sin_theta, 0, 0)
+    x = jnp.linalg.solve(transform, b_x)
+    y = jnp.linalg.solve(transform, b_y)
+    return x, y
+
+
+def dimension_handler(dim_dict: dict) -> np.array:
+    if dim_dict["type"] == "vec":
+        v, dim, i = dim_dict["args"]
+        if dim == 1:
+            return v
+        return v[i, :]
+    elif dim_dict["type"] == "set_vec":
+        set, get, dim, i = dim_dict["args"]
+        if dim == 1:
+            set = get
+        else:
+            set[i, :] = get
+        return set
+    elif dim_dict["type"] == "init_dim":
+        v = dim_dict["args"]
+        if v.ndim == 1:
+            return v.ndim
+        return v.shape[0]
+    elif dim_dict["type"] == "init_vec":
+        dim, len = dim_dict["args"]
+        if dim == 1:
+            return np.zeros(len, dtype=dt.float_dtype)
+        return np.zeros((dim, len), dtype=dt.float_dtype)
+    elif dim_dict["type"] == "dataset":
+        data, dim = dim_dict["args"]
+        X, y = data
+        if dim == 1:
+            return np.array([X]), np.array([y])
+        else:
+            return X, y
+
+
 class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
@@ -84,37 +127,28 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func, individual)
 
-    # if X has only one sample, writing for i, theta in enumerate(X)
-    # return i=0 and theta = first entry of the (only) sample of X.
-    # To have i = 0 and theta = first sample, we use this shortcut.
-    # The same holds for y.
-    if X.ndim == 1:
-        iterate = enumerate(np.array([X]))
-        y = np.array([y])
-        best_theta = np.zeros(S.num_nodes-1, dtype=dt.float_dtype)
-    else:
-        iterate = enumerate(X)
-        best_theta = np.zeros((X.shape[0], S.num_nodes-1), dtype=dt.float_dtype)
+    # FIXME: add comments here or in dimension_handler
+    X_dim = dimension_handler({"type": "init_dim",
+                               "args": (X)})
+    iterable_X, y = dimension_handler({"type": "dataset",
+                                       "args": ((X, y), X_dim)})
+    best_theta = dimension_handler({"type": "init_vec",
+                                    "args": (X_dim, S.num_nodes-1)})
 
     # get initial guess for EI0
     EI0 = individual.EI0
 
-    for i, theta_true in iterate:
-        # is_constant = True
+    for i, theta_true in zip(range(X_dim), iterable_X):
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
         # get the right theta_0
-        if theta_0_all.ndim == 1:
-            theta_0 = theta_0_all
-        else:
-            theta_0 = theta_0_all[i, :]
-
+        theta_0 = dimension_handler({"type": "vec",
+                                    "args": (theta_0_all, theta_0_all.ndim, i)})
         # extract value of FL^2
         FL2 = y[i]
         # define value of the dimensionless parameter
         FL2_EI0 = FL2/EI0
-
         # run parameter identification only on the first dataset of the training set
         if tune_EI0:
             if EI0 > 0:
@@ -124,7 +158,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 # set bilevel problem
                 prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
                                                statefun=obj.total_energy_grad,
-                                               state_dim=S.num_nodes-2,
+                                               state_dim=dim,
                                                nparams=S.num_nodes-1,
                                                constraint_args=constraint_args,
                                                obj_args=obj_args)
@@ -157,7 +191,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                                 ftol_abs=1e-12, ftol_rel=1e-12)
                 x = np.append(theta, FL2_EI0)
                 # check if the solution is constant
-                noise = 0.0001*np.ones(S.num_nodes-2).astype(dt.float_dtype)
+                noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
                 theta_0_noise = theta_0 + noise
                 theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
                                       ftol_abs=1e-12, ftol_rel=1e-12)
@@ -174,10 +208,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
-        if X.ndim == 1:
-            best_theta = theta
-        else:
-            best_theta[i, :] = theta
+        # update best_theta
+        best_theta = dimension_handler({"type": "set_vec",
+                                        "args": (best_theta, theta, X_dim, i)})
 
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
@@ -190,11 +223,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     if return_best_sol:
         return best_theta
 
-    if X.ndim == 1:
-        dim = 1
-    else:
-        dim = X.shape[0]
-    total_err *= 1/(dim)
+    total_err *= 1/(X_dim)
     # round total_err to 5 decimal digits
     # NOTE: round doesn't work properly.
     # See https://stackoverflow.com/questions/455612/limiting-floats-to-two-decimal-points
@@ -242,8 +271,8 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True):
-    best_sol_list = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                             theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
+    best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
+                            theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
     if X.ndim == 1:
         plt.figure(1, figsize=(6, 6))
         dim = X.ndim
@@ -254,36 +283,18 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
     _, axes = plt.subplots(1, dim, num=1)
     for i in range(dim):
         # get theta
-        if X.ndim == 1:
-            theta = best_sol_list
-        else:
-            theta = best_sol_list[i, :]
-
+        theta = dimension_handler({"type": "vec",
+                                   "args": (best_sol_all, dim, i)})
         # get theta_true
-        if dim == 1:
-            theta_true = X
-        else:
-            theta_true = X[i, :]
-        h = 1/(S.num_nodes-1)
-
+        theta_true = dimension_handler({"type": "vec",
+                                        "args": (X, dim, i)})
         # reconstruct x, y
-        cos_theta = h*jnp.cos(theta)
-        sin_theta = h*jnp.sin(theta)
-        b_x = jnp.insert(cos_theta, 0, 0)
-        b_y = jnp.insert(sin_theta, 0, 0)
-        x_current = jnp.linalg.solve(transform, b_x)
-        y_current = jnp.linalg.solve(transform, b_y)
-
+        x_current, y_current = get_coords(theta=theta, transform=transform)
         # reconstruct x_true and y_true
-        cos_theta_true = h*jnp.cos(theta_true)
-        sin_theta_true = h*jnp.sin(theta_true)
-        b_x_true = jnp.insert(cos_theta_true, 0, 0)
-        b_y_true = jnp.insert(sin_theta_true, 0, 0)
-        x_true = jnp.linalg.solve(transform, b_x_true)
-        y_true = jnp.linalg.solve(transform, b_y_true)
+        x_true, y_true = get_coords(theta=theta_true, transform=transform)
 
         # plot the results
-        if X.ndim == 1:
+        if dim == 1:
             plt.plot(x_true, y_true, 'r')
             plt.plot(x_current, y_current, 'b')
         else:
@@ -316,9 +327,6 @@ def stgp_elastica(config_file):
     transform = sparse.diags(diags, [0, -1]).toarray()
     transform[1, 0] = -1
 
-    # def h
-    h = 1/(S.num_nodes-1)
-
     # get (x,y) coordinates for the dataset
     X = (X_train, X_val, X_test)
     x_all = []
@@ -326,31 +334,21 @@ def stgp_elastica(config_file):
     for i in range(3):
         X_current = X[i]
         # again to handle the case in which X_current has dimension 1. (see eval_MSE)
-        if X_current.ndim == 1:
-            dim = X_current.ndim
-            x_i = np.empty(S.num_nodes)
-            y_i = np.empty(S.num_nodes)
-        else:
-            dim = X_current.shape[0]
-            x_i = np.empty((dim, S.num_nodes))
-            y_i = np.empty((dim, S.num_nodes))
-        for j in range(dim):
-            if dim == 1:
-                theta_true = X_current
-            else:
-                theta_true = X_current[j, :]
+        dim = dimension_handler({"type": "init_dim",
+                                 "args": (X_current)})
+        x_i = dimension_handler({"type": "init_vec",
+                                 "args": (dim, S.num_nodes)})
+        y_i = dimension_handler({"type": "init_vec",
+                                 "args": (dim, S.num_nodes)})
 
+        for j in range(dim):
+            theta_true = dimension_handler({"type": "vec",
+                                           "args": (X_current, dim, j)})
             # reconstruct x_true and y_true
-            cos_theta_true = h*jnp.cos(theta_true)
-            sin_theta_true = h*jnp.sin(theta_true)
-            b_x_true = jnp.insert(cos_theta_true, 0, 0)
-            b_y_true = jnp.insert(sin_theta_true, 0, 0)
             if dim == 1:
-                x_i = np.linalg.solve(transform, b_x_true)
-                y_i = np.linalg.solve(transform, b_y_true)
+                x_i, y_i = get_coords(theta=theta_true, transform=transform)
             else:
-                x_i[j, :] = np.linalg.solve(transform, b_x_true)
-                y_i[j, :] = np.linalg.solve(transform, b_y_true)
+                x_i[j, :], y_i[j, :] = get_coords(theta=theta_true, transform=transform)
         x_all.append(x_i)
         y_all.append(y_i)
 
@@ -359,28 +357,22 @@ def stgp_elastica(config_file):
     for i in range(3):
         x_all_current = x_all[i]
         y_all_current = y_all[i]
-        if x_all_current.ndim == 1:
-            dim = x_all_current.ndim
-            theta_0_current = np.empty(S.num_nodes-2, dtype=dt.float_dtype)
-        else:
-            dim = x_all_current.shape[0]
-            theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
+        dim = dimension_handler({"type": "init_dim",
+                                 "args": (x_all_current)})
+        theta_0_current = dimension_handler({"type": "init_vec",
+                                             "args": (dim, S.num_nodes-2)})
         for j in range(dim):
-            if dim == 1:
-                x_current = x_all_current
-                y_current = y_all_current
-            else:
-                x_current = x_all_current[j, :]
-                y_current = y_all_current[j, :]
+            x_current = dimension_handler({"type": "vec",
+                                           "args": (x_all_current, dim, j)})
+            y_current = dimension_handler({"type": "vec",
+                                           "args": (y_all_current, dim, j)})
 
             # def theta_0
             theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
             theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
                                  (x_current[-1] - x_current[1]))
-            if dim == 1:
-                theta_0_current = theta_0
-            else:
-                theta_0_current[j, :] = theta_0
+            theta_0_current = dimension_handler({"type": "vec",
+                                                 "args": (theta_0, dim, j)})
         theta_0_all.append(theta_0_current)
 
     # define internal cochain
