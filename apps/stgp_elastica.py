@@ -55,57 +55,6 @@ def get_coords(theta: np.array, transform: np.array) -> tuple[np.array, np.array
     return x, y
 
 
-def dimension_handler(dim_dict: dict) -> np.array:
-    """Method that handle the dimension in various cases, since when dim = 1 the syntax
-    slightly change. 
-
-    Args:
-        dim_dict (dict): dictionary containing two keys: type and args. The first one is
-        to identify the problem in which we want to handle the dim, the second one contains
-        the args to solve the problem.
-
-    Returns:
-        (np.array) array(s) depending on the problem we are solving.
-
-    """
-
-    # get the right entry of an np.array
-    if dim_dict["type"] == "vec":
-        v, dim, i = dim_dict["args"]
-        if dim == 1:
-            return v
-        return v[i, :]
-    # set an entry of a vector with another vector
-    elif dim_dict["type"] == "set_vec":
-        set, get, dim, i = dim_dict["args"]
-        if dim == 1:
-            set = get
-        else:
-            set[i, :] = get
-        return set
-    # get dimension from a vec. We want to have its length if it has dim = 1,
-    # and we want to have its number of rows if it is a matrix.
-    elif dim_dict["type"] == "init_dim":
-        v = dim_dict["args"]
-        if v.ndim == 1:
-            return v.ndim
-        return v.shape[0]
-    # initialize a vector with zeros.
-    elif dim_dict["type"] == "init_vec":
-        dim, len = dim_dict["args"]
-        if dim == 1:
-            return np.zeros(len, dtype=dt.float_dtype)
-        return np.zeros((dim, len), dtype=dt.float_dtype)
-    # handle the dataset
-    elif dim_dict["type"] == "dataset":
-        data, dim = dim_dict["args"]
-        X, y = data
-        if dim == 1:
-            return np.array([X]), np.array([y])
-        else:
-            return X, y
-
-
 def is_possible_energy(theta_0: np.array, theta: np.array, prb: oc.OptimizationProblem) -> bool:
     """Check if a candidate energy is possible or not. To do it, we run the same opt problem with
     a very slight change of theta_0. If the solution change it means that the candidate energy is
@@ -181,24 +130,19 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func, individual)
 
-    # handle dimension 1 issue.
-    X_dim = dimension_handler({"type": "init_dim",
-                               "args": (X)})
-    iterable_X, y = dimension_handler({"type": "dataset",
-                                       "args": ((X, y), X_dim)})
-    best_theta = dimension_handler({"type": "init_vec",
-                                    "args": (X_dim, S.num_nodes-1)})
+    # init X_dim and best_theta
+    X_dim = X.shape[0]
+    best_theta = np.zeros((X_dim, S.num_nodes-1), dtype=dt.float_dtype)
 
     # get initial guess for EI0
     EI0 = individual.EI0
 
-    for i, theta_true in zip(range(X_dim), iterable_X):
+    for i, theta_true in enumerate(X):
         # extract prescribed value of theta at x = 0 from the dataset
         theta_in = theta_true[0]
 
         # get the right theta_0
-        theta_0 = dimension_handler({"type": "vec",
-                                    "args": (theta_0_all, theta_0_all.ndim, i)})
+        theta_0 = theta_0_all[i, :]
         # extract value of FL^2
         FL2 = y[i]
         # define value of the dimensionless parameter
@@ -257,8 +201,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         # extend theta
         theta = np.insert(theta, 0, theta_in)
         # update best_theta
-        best_theta = dimension_handler({"type": "set_vec",
-                                        "args": (best_theta, theta, X_dim, i)})
+        best_theta[i, :] = theta
 
         # if fval is nan, the candidate can't be the solution
         if math.isnan(fval):
@@ -321,27 +264,22 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
              S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True) -> None:
     best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
                             theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
-    if X.ndim == 1:
-        plt.figure(1, figsize=(6, 6))
-        dim = X.ndim
-    else:
-        plt.figure(1, figsize=(8, 4))
-        dim = X.shape[0]
+    plt.figure(1, figsize=(10, 4))
+    dim = X.shape[0]
     fig = plt.gcf()
     _, axes = plt.subplots(1, dim, num=1)
     for i in range(dim):
         # get theta
-        theta = dimension_handler({"type": "vec",
-                                   "args": (best_sol_all, dim, i)})
+        theta = best_sol_all[i, :]
         # get theta_true
-        theta_true = dimension_handler({"type": "vec",
-                                        "args": (X, dim, i)})
+        theta_true = X[i, :]
         # reconstruct x, y
         x_current, y_current = get_coords(theta=theta, transform=transform)
         # reconstruct x_true and y_true
         x_true, y_true = get_coords(theta=theta_true, transform=transform)
 
         # plot the results
+        # FIXME: CHANGE IT
         if dim == 1:
             plt.plot(x_true, y_true, 'r')
             plt.plot(x_current, y_current, 'b')
@@ -382,21 +320,14 @@ def stgp_elastica(config_file):
     for i in range(3):
         X_current = X[i]
         # again to handle the case in which X_current has dimension 1. (see eval_MSE)
-        dim = dimension_handler({"type": "init_dim",
-                                 "args": (X_current)})
-        x_i = dimension_handler({"type": "init_vec",
-                                 "args": (dim, S.num_nodes)})
-        y_i = dimension_handler({"type": "init_vec",
-                                 "args": (dim, S.num_nodes)})
+        dim = X_current.shape[0]
+        x_i = np.zeros((dim, S.num_nodes), dtype=dt.float_dtype)
+        y_i = np.zeros((dim, S.num_nodes), dtype=dt.float_dtype)
 
         for j in range(dim):
-            theta_true = dimension_handler({"type": "vec",
-                                           "args": (X_current, dim, j)})
+            theta_true = X_current[j, :]
             # reconstruct x_true and y_true
-            if dim == 1:
-                x_i, y_i = get_coords(theta=theta_true, transform=transform)
-            else:
-                x_i[j, :], y_i[j, :] = get_coords(theta=theta_true, transform=transform)
+            x_i[j, :], y_i[j, :] = get_coords(theta=theta_true, transform=transform)
         x_all.append(x_i)
         y_all.append(y_i)
 
@@ -405,22 +336,17 @@ def stgp_elastica(config_file):
     for i in range(3):
         x_all_current = x_all[i]
         y_all_current = y_all[i]
-        dim = dimension_handler({"type": "init_dim",
-                                 "args": (x_all_current)})
-        theta_0_current = dimension_handler({"type": "init_vec",
-                                             "args": (dim, S.num_nodes-2)})
+        dim = x_all_current.shape[0]
+        theta_0_current = np.zeros((dim, S.num_nodes-2), dtype=dt.float_dtype)
         for j in range(dim):
-            x_current = dimension_handler({"type": "vec",
-                                           "args": (x_all_current, dim, j)})
-            y_current = dimension_handler({"type": "vec",
-                                           "args": (y_all_current, dim, j)})
+            x_current = x_all_current[j, :]
+            y_current = y_all_current[j, :]
 
             # def theta_0
             theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
             theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
                                  (x_current[-1] - x_current[1]))
-            theta_0_current = dimension_handler({"type": "set_vec",
-                                                 "args": (theta_0_current, theta_0, dim, j)})
+            theta_0_current[j, :] = theta_0
         theta_0_all.append(theta_0_current)
 
     # define internal cochain
