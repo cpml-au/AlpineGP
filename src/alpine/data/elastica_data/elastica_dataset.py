@@ -8,9 +8,10 @@ data_path = os.path.dirname(os.path.realpath(__file__))
 
 def get_data_with_noise(noise):
     # get data
-    y = np.array([-5., -10., -50., -20.], dtype=dt.float_dtype)
-    X = np.empty((4, 10), dtype=dt.float_dtype)
-    data_string = ["xy_F_5.txt", "xy_F_10.txt", "xy_F_50.txt", "xy_F_20.txt"]
+    abs_force = 5*np.arange(1, 11)
+    y = -abs_force.astype(dt.float_dtype)
+    X = np.empty((10, 10), dtype=dt.float_dtype)
+    data_string = ["xy_F_" + str(i) + ".txt" for i in abs_force]
     for i, string in enumerate(data_string):
         data = np.loadtxt(os.path.join(data_path, string), dtype=float)
         # get data position
@@ -28,7 +29,7 @@ def get_data_with_noise(noise):
 
 def save_data(noise):
     data_X, data_y = get_data_with_noise(noise)
-    X, y = split_dataset(data_X, data_y, 0.25, 0.25, True)
+    X, y = split_dataset(data_X, data_y, 0.3, 0.2, True)
     X_train, X_valid, X_test = X
     y_train, y_valid, y_test = y
     np.savetxt("X_train_elastica.csv", X_train, delimiter=",")

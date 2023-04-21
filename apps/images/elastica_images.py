@@ -19,7 +19,7 @@ sys.path.append(parent_directory)
 def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X_val, y_val):
     from stgp_elastica import plot_sol, eval_MSE, eval_fitness
 
-    penalty = {"method": "length", "reg_param": 0.001}
+    penalty = {"method": "length", "reg_param": 0.01}
     # get normalized simplicial complex
     S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
@@ -45,19 +45,11 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
     y_all = []
     for i in range(3):
         X_current = X[i]
-        if X_current.ndim == 1:
-            dim = X_current.ndim
-            x_i = np.empty(S.num_nodes)
-            y_i = np.empty(S.num_nodes)
-        else:
-            dim = X_current.shape[0]
-            x_i = np.empty((dim, S.num_nodes))
-            y_i = np.empty((dim, S.num_nodes))
+        dim = X_current.shape[0]
+        x_i = np.empty((dim, S.num_nodes))
+        y_i = np.empty((dim, S.num_nodes))
         for j in range(dim):
-            if dim == 1:
-                theta_true = X_current
-            else:
-                theta_true = X_current[j, :]
+            theta_true = X_current[j, :]
 
             # reconstruct x_true and y_true
             cos_theta_true = h*np.cos(theta_true)
@@ -78,28 +70,16 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
     for i in range(3):
         x_all_current = x_all[i]
         y_all_current = y_all[i]
-        if x_all_current.ndim == 1:
-            dim = x_all_current.ndim
-            theta_0_current = np.empty(S.num_nodes-2, dtype=dt.float_dtype)
-        else:
-            dim = x_all_current.shape[0]
-            theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
+        dim = x_all_current.shape[0]
+        theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
         for j in range(dim):
-            if dim == 1:
-                x_current = x_all_current
-                y_current = y_all_current
-            else:
-                x_current = x_all_current[j, :]
-                y_current = y_all_current[j, :]
-
+            x_current = x_all_current[j, :]
+            y_current = y_all_current[j, :]
             # def theta_0
             theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
             theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
                                  (x_current[-1] - x_current[1]))
-            if dim == 1:
-                theta_0_current = theta_0
-            else:
-                theta_0_current[j, :] = theta_0
+            theta_0_current[j, :] = theta_0
         theta_0_all.append(theta_0_current)
 
     # define internal cochain
