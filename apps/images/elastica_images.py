@@ -17,7 +17,7 @@ sys.path.append(parent_directory)
 
 
 def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X_val, y_val):
-    from stgp_elastica import plot_sol, eval_MSE, eval_fitness
+    from stgp_elastica import plot_sol, eval_MSE, eval_fitness, get_coords, get_theta_0
 
     penalty = {"method": "length", "reg_param": 0.01}
     # get normalized simplicial complex
@@ -40,47 +40,11 @@ def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X
     h = 1/(S.num_nodes-1)
 
     # get (x,y) coordinates for the dataset
-    X = (X_train, X_val, X_test)
-    x_all = []
-    y_all = []
-    for i in range(3):
-        X_current = X[i]
-        dim = X_current.shape[0]
-        x_i = np.empty((dim, S.num_nodes))
-        y_i = np.empty((dim, S.num_nodes))
-        for j in range(dim):
-            theta_true = X_current[j, :]
-
-            # reconstruct x_true and y_true
-            cos_theta_true = h*np.cos(theta_true)
-            sin_theta_true = h*np.sin(theta_true)
-            b_x_true = np.insert(cos_theta_true, 0, 0)
-            b_y_true = np.insert(sin_theta_true, 0, 0)
-            if dim == 1:
-                x_i = np.linalg.solve(transform, b_x_true)
-                y_i = np.linalg.solve(transform, b_y_true)
-            else:
-                x_i[j, :] = np.linalg.solve(transform, b_x_true)
-                y_i[j, :] = np.linalg.solve(transform, b_y_true)
-        x_all.append(x_i)
-        y_all.append(y_i)
+    X = X_train, X_val, X_test
+    x_all, y_all = get_coords(X, transform)
 
     # get all theta_0
-    theta_0_all = []
-    for i in range(3):
-        x_all_current = x_all[i]
-        y_all_current = y_all[i]
-        dim = x_all_current.shape[0]
-        theta_0_current = np.empty((dim, S.num_nodes-2), dtype=dt.float_dtype)
-        for j in range(dim):
-            x_current = x_all_current[j, :]
-            y_current = y_all_current[j, :]
-            # def theta_0
-            theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
-            theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
-                                 (x_current[-1] - x_current[1]))
-            theta_0_current[j, :] = theta_0
-        theta_0_all.append(theta_0_current)
+    theta_0_all = get_theta_0(x_all, y_all)
 
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
@@ -119,7 +83,7 @@ if __name__ == '__main__':
         print(yaml.dump(config_file))
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
     # data_X, data_y = ed.get_data_with_noise(0.01*np.random.rand(11))
-    string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
+    # string = "Sub(MulF(1/2, InnP0(CochMulP0(int_coch, InvSt0(dD0(theta)), InvSt0(dD0(theta)))), InnD0(FL2_EI0, SinD0(theta))"
     # string = "InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), SqrtF(InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta)))))))))"
     # string = " InnD0(SinD0(theta), SquareD0(InvMulD0(SubD0(FL2_EI0, theta), InnP0(int_coch, InvSt0(ExpD1(SquareD1(dD0(theta))))))))"
     # string = "InnD0(SquareD0(CosD0(AddD0(FL2_EI0, theta))), theta)"
@@ -129,6 +93,7 @@ if __name__ == '__main__':
     # string = "Sub(InnP0(InvSt0(dD0(theta), InvSt0(dD0(theta))), InnD0(FL2_EI0, SinD0(theta))"
     # string = " SinF(CosF(InnD0(ExpD0(theta), FL2_EI0)))"
     # string = "InnD0(theta, SubD0(theta, theta))"
+    string = "Sub(InnD1(St0(int_coch), MulD1(CosD1(dD0(theta)), -1)), InnD0(SinD0(theta), FL2_EI0))"
     # string = "InnP0(ArccosP0(SubP0(SqrtP0(int_coch), int_coch)), SinP0(InvSt0(dD0(SqrtD0(CosD0(SubD0(FL2_EI0, theta)))))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
