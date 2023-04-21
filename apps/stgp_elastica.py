@@ -135,7 +135,7 @@ class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
 
-    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree):
+    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree) -> None:
         """Set the energy function to be used for the computation of the objective
         function."""
         self.energy_func = func
@@ -177,12 +177,11 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     dim = S.num_nodes-2
 
     total_err = 0.
-    # best_theta = theta_0_all
 
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func, individual)
 
-    # FIXME: add comments here or in dimension_handler
+    # handle dimension 1 issue.
     X_dim = dimension_handler({"type": "init_dim",
                                "args": (X)})
     iterable_X, y = dimension_handler({"type": "dataset",
@@ -204,9 +203,10 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         FL2 = y[i]
         # define value of the dimensionless parameter
         FL2_EI0 = FL2/EI0
-        # run parameter identification only on the first sample of the training set
-        if tune_EI0:
-            if EI0 > 0:
+        # check if the energy is constant or not
+        if EI0 > 0:
+            # run parameter identification only on the first sample of the training set
+            if tune_EI0:
                 # set extra args for bilevel program
                 constraint_args = {'theta_in': theta_in}
                 obj_args = {'theta_true': theta_true}
@@ -234,8 +234,8 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 EI0 = FL2/FL2_EI0
                 if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
                     EI0 = -1
-            return EI0
-        if EI0 > 0:
+                return EI0
+
             prb = oc.OptimizationProblem(
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
@@ -318,7 +318,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
 
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True):
+             S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True) -> None:
     best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
                             theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
     if X.ndim == 1:
@@ -419,8 +419,8 @@ def stgp_elastica(config_file):
             theta_0 = np.ones(S.num_nodes-2, dtype=dt.float_dtype)
             theta_0 *= np.arctan((y_current[-1] - y_current[1]) /
                                  (x_current[-1] - x_current[1]))
-            theta_0_current = dimension_handler({"type": "vec",
-                                                 "args": (theta_0, dim, j)})
+            theta_0_current = dimension_handler({"type": "set_vec",
+                                                 "args": (theta_0_current, theta_0, dim, j)})
         theta_0_all.append(theta_0_current)
 
     # define internal cochain
