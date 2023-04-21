@@ -34,6 +34,17 @@ primitives_strings = gps.get_primitives_strings(pset, types)
 
 
 def get_coords(theta: np.array, transform: np.array) -> tuple[np.array, np.array]:
+    """Get x,y coordinates given a vector of angles theta. To do it, we have to solve
+    two linear systems Ax = b_x, Ay = b_y, where A is a bidiagonal matrix.
+
+    Args:
+        theta (np.array): vector of the angles.
+        transform (np.array): bidiagonal matrix of the linear system.
+
+    Returns:
+        (np.array): x-coordinates
+        (np.array): y-coordinates
+    """
     h = 1/len(theta)
     cos_theta = h*jnp.cos(theta)
     sin_theta = h*jnp.sin(theta)
@@ -45,11 +56,26 @@ def get_coords(theta: np.array, transform: np.array) -> tuple[np.array, np.array
 
 
 def dimension_handler(dim_dict: dict) -> np.array:
+    """Method that handle the dimension in various cases, since when dim = 1 the syntax
+    slightly change. 
+
+    Args:
+        dim_dict (dict): dictionary containing two keys: type and args. The first one is
+        to identify the problem in which we want to handle the dim, the second one contains
+        the args to solve the problem.
+
+    Returns:
+        (np.array) array(s) depending on the problem we are solving.
+
+    """
+
+    # get the right entry of an np.array
     if dim_dict["type"] == "vec":
         v, dim, i = dim_dict["args"]
         if dim == 1:
             return v
         return v[i, :]
+    # set an entry of a vector with another vector
     elif dim_dict["type"] == "set_vec":
         set, get, dim, i = dim_dict["args"]
         if dim == 1:
@@ -57,16 +83,20 @@ def dimension_handler(dim_dict: dict) -> np.array:
         else:
             set[i, :] = get
         return set
+    # get dimension from a vec. We want to have its length if it has dim = 1,
+    # and we want to have its number of rows if it is a matrix.
     elif dim_dict["type"] == "init_dim":
         v = dim_dict["args"]
         if v.ndim == 1:
             return v.ndim
         return v.shape[0]
+    # initialize a vector with zeros.
     elif dim_dict["type"] == "init_vec":
         dim, len = dim_dict["args"]
         if dim == 1:
             return np.zeros(len, dtype=dt.float_dtype)
         return np.zeros((dim, len), dtype=dt.float_dtype)
+    # handle the dataset
     elif dim_dict["type"] == "dataset":
         data, dim = dim_dict["args"]
         X, y = data
@@ -74,6 +104,31 @@ def dimension_handler(dim_dict: dict) -> np.array:
             return np.array([X]), np.array([y])
         else:
             return X, y
+
+
+def is_possible_energy(theta_0: np.array, theta: np.array, prb: oc.OptimizationProblem) -> bool:
+    """Check if a candidate energy is possible or not. To do it, we run the same opt problem with
+    a very slight change of theta_0. If the solution change it means that the candidate energy is
+    too unstable and we want to avoid it.
+
+    Args:
+        theta_0 (np.array): initial value of the starting opt problem.
+        theta (np.array): theta founded starting from theta_0.
+        prb (OptimizationProblem): opt problem class.
+
+    Returns:
+        (bool): True if it's stable, False otherwise.
+
+
+    """
+    dim = len(theta_0)
+    noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
+    theta_0_noise = theta_0 + noise
+    theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
+                          ftol_abs=1e-12, ftol_rel=1e-12)
+
+    isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
+    return isnt_constant
 
 
 class Objectives():
@@ -149,7 +204,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         FL2 = y[i]
         # define value of the dimensionless parameter
         FL2_EI0 = FL2/EI0
-        # run parameter identification only on the first dataset of the training set
+        # run parameter identification only on the first sample of the training set
         if tune_EI0:
             if EI0 > 0:
                 # set extra args for bilevel program
@@ -180,31 +235,24 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
                     EI0 = -1
             return EI0
+        if EI0 > 0:
+            prb = oc.OptimizationProblem(
+                dim=dim, state_dim=dim, objfun=obj.total_energy)
+            args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
+            prb.set_obj_args(args)
+            theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
+                            ftol_abs=1e-12, ftol_rel=1e-12)
+            x = np.append(theta, FL2_EI0)
+            # check if the solution is constant
+            isnt_constant = is_possible_energy(theta_0=theta_0, theta=theta, prb=prb)
 
-        else:
-            if EI0 > 0:
-                prb = oc.OptimizationProblem(
-                    dim=dim, state_dim=dim, objfun=obj.total_energy)
-                args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
-                prb.set_obj_args(args)
-                theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
-                                ftol_abs=1e-12, ftol_rel=1e-12)
-                x = np.append(theta, FL2_EI0)
-                # check if the solution is constant
-                noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
-                theta_0_noise = theta_0 + noise
-                theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
-                                      ftol_abs=1e-12, ftol_rel=1e-12)
-
-                isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
-
-                if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (isnt_constant):
-                    fval = obj.MSE_theta(x, theta_true)
-                else:
-                    fval = math.nan
+            if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (isnt_constant):
+                fval = obj.MSE_theta(x, theta_true)
             else:
                 fval = math.nan
-                theta = theta_0
+        else:
+            fval = math.nan
+            theta = theta_0
 
         # extend theta
         theta = np.insert(theta, 0, theta_in)
