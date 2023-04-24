@@ -45,8 +45,7 @@ def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> tup
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
     creator.create("Individual",
                    gp.PrimitiveTree,
-                   fitness=creator.FitnessMin,
-                   EI0=np.ones(1, dtype=dt.float_dtype))
+                   fitness=creator.FitnessMin)
     createIndividual = creator.Individual
 
     min_ = config_file["gp"]["min_"]
@@ -498,6 +497,8 @@ class GPSymbRegProblem():
                 self.last_improvement = training_fit
                 print(f"The best of this generation is: {best}")
                 print(f"The best until now is: {self.best}")
+                if is_elastica:
+                    print(f"Best individual's EI0: {best.EI0}")
 
                 if m == early_stopping['max_overfit']:
                     # save number of generations when stopping for the last training run

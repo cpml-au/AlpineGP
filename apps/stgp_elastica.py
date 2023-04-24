@@ -164,9 +164,63 @@ class Objectives():
         return jnp.sum(jnp.square(theta-theta_true))
 
 
+def tune_EI0(individual: gp.PrimitiveTree, toolbox: base.Toolbox, FL2: float,
+             EI0_guess: float, theta_guess: npt.NDArray, theta_true: npt.NDArray,
+             S: SimplicialComplex) -> float:
+
+    # transform the individual expression into a callable function
+    energy_func = toolbox.compile(expr=individual)
+
+    # number of unknowns angles
+    dim = S.num_nodes-2
+
+    obj = Objectives(S=S)
+    obj.set_energy_func(energy_func, individual)
+
+    theta_in = theta_true[0]
+
+    # run parameter identification on the first sample of the training set
+    # set extra args for bilevel program
+    constraint_args = {'theta_in': theta_in}
+    obj_args = {'theta_true': theta_true}
+    # set bilevel problem
+    prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
+                                   statefun=obj.total_energy_grad,
+                                   state_dim=dim,
+                                   nparams=S.num_nodes-1,
+                                   constraint_args=constraint_args,
+                                   obj_args=obj_args)
+
+    def get_bounds():
+        lb = -100*np.ones(dim+1, dt.float_dtype)
+        ub = 100*np.ones(dim+1, dt.float_dtype)
+        lb[-1] = -100
+        ub[-1] = -1e-3
+        return (lb, ub)
+
+    prb.get_bounds = get_bounds
+
+    FL2_EI0 = FL2/EI0_guess
+
+    x0 = np.append(theta_guess, FL2_EI0)
+
+    x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+
+    # theta = x[:-1]
+    FL2_EI0 = x[-1]
+
+    EI0 = FL2/FL2_EI0
+
+    # if optimization failed, set negative EI0
+    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
+        EI0 = -1
+
+    return EI0
+
+
 def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
              toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
-             return_best_sol: bool = False, tune_EI0: bool = False) -> float:
+             return_best_sol: bool = False) -> float:
 
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
@@ -183,51 +237,21 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     X_dim = X.shape[0]
     best_theta = np.zeros((X_dim, S.num_nodes-1), dtype=dt.float_dtype)
 
-    # get initial guess for EI0
     EI0 = individual.EI0
 
-    for i, theta_true in enumerate(X):
-        # extract prescribed value of theta at x = 0 from the dataset
-        theta_in = theta_true[0]
+    if EI0 < 0:
+        total_err = 10.
+    else:
+        for i, theta_true in enumerate(X):
+            # extract prescribed value of theta at x = 0 from the dataset
+            theta_in = theta_true[0]
 
-        # get the right theta_0
-        theta_0 = theta_0_all[i, :]
-        # extract value of FL^2
-        FL2 = y[i]
-        # define value of the dimensionless parameter
-        FL2_EI0 = FL2/EI0
-        # check if the energy is constant or not
-        if EI0 > 0:
-            # run parameter identification only on the first sample of the training set
-            if tune_EI0:
-                # set extra args for bilevel program
-                constraint_args = {'theta_in': theta_in}
-                obj_args = {'theta_true': theta_true}
-                # set bilevel problem
-                prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
-                                               statefun=obj.total_energy_grad,
-                                               state_dim=dim,
-                                               nparams=S.num_nodes-1,
-                                               constraint_args=constraint_args,
-                                               obj_args=obj_args)
-
-                def get_bounds():
-                    lb = -100*np.ones(dim+1, dt.float_dtype)
-                    ub = 100*np.ones(dim+1, dt.float_dtype)
-                    lb[-1] = -100
-                    ub[-1] = -1e-3
-                    return (lb, ub)
-                prb.get_bounds = get_bounds
-                x0 = np.append(theta_0, FL2_EI0)
-                x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
-                theta = x[:-1]
-                FL2_EI0 = x[-1]
-                # update EI0 with the optimal result for the other evaluations of the
-                # current dataset (NOT UPDATED IN THE INDIVIDUAL ATTRIBUTES)
-                EI0 = FL2/FL2_EI0
-                if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
-                    EI0 = -1
-                return EI0
+            # get the right theta_0
+            theta_0 = theta_0_all[i, :]
+            # extract value of FL^2
+            FL2 = y[i]
+            # define value of the dimensionless parameter
+            FL2_EI0 = FL2/EI0
 
             prb = oc.OptimizationProblem(
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
@@ -235,7 +259,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             prb.set_obj_args(args)
             theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
                             ftol_abs=1e-12, ftol_rel=1e-12)
+
             x = np.append(theta, FL2_EI0)
+
             # check if the solution is constant
             isnt_constant = is_possible_energy(theta_0=theta_0, theta=theta, prb=prb)
 
@@ -243,22 +269,20 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 fval = obj.MSE_theta(x, theta_true)
             else:
                 fval = math.nan
-        else:
-            fval = math.nan
-            theta = theta_0
 
-        # extend theta
-        theta = np.insert(theta, 0, theta_in)
-        # update best_theta
-        best_theta[i, :] = theta
+            # if fval is nan, the candidate can't be the solution
+            if math.isnan(fval):
+                total_err = 10.
+                break
 
-        # if fval is nan, the candidate can't be the solution
-        if math.isnan(fval):
-            total_err = 10.
-            break
-        # update the error: it is the sum of the error w.r.t. theta and
-        # the error w.r.t. EI0
-        total_err += fval
+            # update the error: it is the sum of the error w.r.t. theta and
+            # the error w.r.t. EI0
+            total_err += fval
+
+            # extend theta
+            theta = np.insert(theta, 0, theta_in)
+            # update best_theta
+            best_theta[i, :] = theta
 
     if return_best_sol:
         return best_theta
@@ -273,7 +297,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
                  toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: np.array,
-                 penalty: dict, tune_EI0: bool = False) -> tuple[float, ]:
+                 penalty: dict) -> tuple[float, ]:
     """Evaluate total fitness over the dataset.
 
     Args:
@@ -292,8 +316,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 
     objval = 0.
 
-    total_err = eval_MSE(individual, X, y, toolbox, S,
-                         theta_0_all, tune_EI0=tune_EI0)
+    total_err = eval_MSE(individual, X, y, toolbox, S, theta_0_all)
 
     if penalty["method"] == "primitive":
         # penalty terms on primitives
@@ -312,7 +335,7 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
 def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
              S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True) -> None:
     best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
-                            theta_0_all=theta_0_all, return_best_sol=True, tune_EI0=False)
+                            theta_0_all=theta_0_all, return_best_sol=True)
     plt.figure(1, figsize=(10, 4))
     dim = X.shape[0]
     fig = plt.gcf()
@@ -400,13 +423,13 @@ def stgp_elastica(config_file):
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
     toolbox.register("evaluate_EI0",
-                     eval_MSE,
-                     X=X_train,
-                     y=y_train,
+                     tune_EI0,
                      toolbox=toolbox,
-                     S=S,
-                     theta_0_all=theta_0_all[0],
-                     tune_EI0=True)
+                     FL2=y_train[0],
+                     EI0_guess=1.,
+                     theta_guess=theta_0_all[0][0, :],
+                     theta_true=X_train[0, :],
+                     S=S)
     toolbox.register("evaluate_train",
                      eval_fitness,
                      X=X_train,
@@ -414,8 +437,7 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0_all=theta_0_all[0],
-                     penalty=penalty,
-                     tune_EI0=False)
+                     penalty=penalty)
     toolbox.register("evaluate_val_fit",
                      eval_fitness,
                      X=X_val,
@@ -423,16 +445,14 @@ def stgp_elastica(config_file):
                      toolbox=toolbox,
                      S=S,
                      theta_0_all=theta_0_all[1],
-                     penalty=penalty,
-                     tune_EI0=False)
+                     penalty=penalty)
     toolbox.register("evaluate_val_MSE",
                      eval_MSE,
                      X=X_val,
                      y=y_val,
                      toolbox=toolbox,
                      S=S,
-                     theta_0_all=theta_0_all[1],
-                     tune_EI0=False)
+                     theta_0_all=theta_0_all[1])
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
@@ -480,7 +500,7 @@ def stgp_elastica(config_file):
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
     # first tune EI0
-    EI0 = eval_MSE(best, X_train, y_train, toolbox, S, theta_0_all[0], tune_EI0=True)
+    EI0 = eval_MSE(best, X_train, y_train, toolbox, S, theta_0_all[0])
     best.EI0 = EI0
     score_test = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2])
     print(f"The best MSE on the test set is {score_test}")
@@ -509,7 +529,7 @@ def stgp_elastica(config_file):
     np.save("train_fit_history.npy", GPproblem.train_fit_history)
     np.save("val_fit_history.npy", GPproblem.val_fit_history)
 
-    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2], True, False)
+    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2], True)
     np.save("best_sol_test_0.npy", best_sol)
     np.save("true_sol_test_0.npy", X_test)
 
