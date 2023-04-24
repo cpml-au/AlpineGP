@@ -19,7 +19,7 @@ sys.path.append(parent_directory)
 def elastica_img_from_string(config_file: dict, string: str, X_train, y_train, X_val, y_val):
     from stgp_elastica import plot_sol, eval_MSE, eval_fitness, get_coords, get_theta_0
 
-    penalty = {"method": "length", "reg_param": 0.01}
+    penalty = {"method": "length", "reg_param": 0.05}
     # get normalized simplicial complex
     S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
     S = SimplicialComplex(S_1, x, is_well_centered=True)
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     # string = "Sub(InnP0(InvSt0(dD0(theta), InvSt0(dD0(theta))), InnD0(FL2_EI0, SinD0(theta))"
     # string = " SinF(CosF(InnD0(ExpD0(theta), FL2_EI0)))"
     # string = "InnD0(theta, SubD0(theta, theta))"
-    string = "Sub(InnD1(St0(int_coch), MulD1(CosD1(dD0(theta)), -1)), InnD0(SinD0(theta), FL2_EI0))"
+    string = "InnD0(SubD0(theta, MulD0(delD1(St0(delP1(InvSt1(theta)))), SquareF(ArcsinF(1/2)))), SubD0(theta, SubD0(AddD0(FL2_EI0, FL2_EI0), LogD0(CosD0(theta)))))"
     # string = "InnP0(ArccosP0(SubP0(SqrtP0(int_coch), int_coch)), SinP0(InvSt0(dD0(SqrtD0(CosD0(SubD0(FL2_EI0, theta)))))))"
     elastica_img_from_string(config_file, string=string,
                              X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
