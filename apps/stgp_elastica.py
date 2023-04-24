@@ -219,7 +219,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                     return (lb, ub)
                 prb.get_bounds = get_bounds
                 x0 = np.append(theta_0, FL2_EI0)
-                x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-6, ftol_rel=1e-6)
+                x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
                 theta = x[:-1]
                 FL2_EI0 = x[-1]
                 # update EI0 with the optimal result for the other evaluations of the
