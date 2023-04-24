@@ -78,19 +78,7 @@ def get_coords(X: tuple, transform: np.array) -> list:
     return x_all, y_all
 
 
-def get_theta_0(x: list, y: list) -> list:
-    """Routine to compute all the theta_0.
-
-    Args:
-        x (list): list in which each entry is the matrix of x-coordinates
-        of the dataset.
-        y (list): list in which each entry is the matrix of x-coordinates
-        of the dataset.
-
-    Returns:
-        (list): list of all the theta_0
-
-    """
+def theta_guesses(x: list, y: list) -> list:
     theta_0_all = []
     for i in range(3):
         x_current = x[i]
@@ -133,7 +121,6 @@ class Objectives():
         FL2_EI0_coch = C.CochainD0(
             self.S, FL2_EI0*np.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         energy = self.energy_func(theta, FL2_EI0_coch)
-        # jax.debug.print("{energy}", energy=energy)
         return energy
 
     # state function: stationarity conditions for the total energy
@@ -162,6 +149,7 @@ def tune_EI0(individual: gp.PrimitiveTree, toolbox: base.Toolbox, FL2: float,
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func, individual)
 
+    # prescribed angle at x=0
     theta_in = theta_true[0]
 
     # run parameter identification on the first sample of the training set
@@ -210,7 +198,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
-    # number of unknowns angles
+    # number of unknown angles
     dim = S.num_nodes-2
 
     total_err = 0.
@@ -231,11 +219,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
             # extract prescribed value of theta at x = 0 from the dataset
             theta_in = theta_true[0]
 
-            # get the right theta_0
             theta_0 = theta_0_all[i, :]
-            # extract value of FL^2
+
             FL2 = y[i]
-            # define value of the dimensionless parameter
             FL2_EI0 = FL2/EI0
 
             prb = oc.OptimizationProblem(
@@ -256,17 +242,15 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 # print("valid_energy = ", valid_energy)
                 fval = math.nan
 
-            # if fval is nan, the candidate can't be the solution
             if math.isnan(fval):
                 total_err = 10.
                 break
 
-            # update the error: it is the sum of the error w.r.t. theta and
-            # the error w.r.t. EI0
             total_err += fval
 
             # extend theta
             theta = np.insert(theta, 0, theta_in)
+
             # update best_theta
             best_theta[i, :] = theta
 
@@ -274,31 +258,16 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
         return best_theta
 
     total_err *= 1/(X_dim)
+
     # round total_err to 5 decimal digits
-    # NOTE: round doesn't work properly.
-    # See https://stackoverflow.com/questions/455612/limiting-floats-to-two-decimal-points
     total_err = float("{:.5f}".format(total_err))
+
     return 10*total_err
 
 
 def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
                  toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: np.array,
                  penalty: dict) -> tuple[float, ]:
-    """Evaluate total fitness over the dataset.
-
-    Args:
-        individual: individual to evaluate.
-        X: samples of the dataset.
-        y: targets of the dataset.
-        toolbox: toolbox used.
-        S: simplicial complex.
-        theta_0: initial theta.
-        penalty: dictionary containing the penalty method (regularization) and the
-        penalty multiplier.
-
-    Returns:
-        total fitness over the dataset.
-    """
 
     objval = 0.
 
@@ -366,7 +335,7 @@ def stgp_elastica(config_file):
     x_all, y_all = get_coords(X, transform)
 
     # get all theta_0
-    theta_0_all = get_theta_0(x_all, y_all)
+    theta_0_all = theta_guesses(x_all, y_all)
 
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
@@ -460,7 +429,7 @@ def stgp_elastica(config_file):
                                      individualCreator=createIndividual,
                                      toolbox=toolbox)
 
-    # opt_string = "Add(SinF(SqrtF(Add(ExpF(CosF(InvF(SinF(2)))), Add(CosF(InnD1(CosD1(CochMulD1(SinD1(SqrtD1(St0(int_coch))), dD0(theta))), SubD1(dD0(FL2_EI0), St0(int_coch)))), SqrtF(SinF(2)))))), CosF(InnD0(AddD0(FL2_EI0, theta), ExpD0(InvMulD0(theta, 1/2)))))"
+    # opt_string = ""
     # opt_individ = createIndividual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
