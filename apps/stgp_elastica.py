@@ -104,26 +104,11 @@ def get_theta_0(x: list, y: list) -> list:
     return theta_0_all
 
 
-def is_possible_energy(theta_0: np.array, theta: np.array, prb: oc.OptimizationProblem) -> bool:
-    """Check if a candidate energy is possible or not. To do it, we run the same opt problem with
-    a very slight change of theta_0. If the solution change it means that the candidate energy is
-    too unstable and we want to avoid it.
-
-    Args:
-        theta_0 (np.array): initial value of the starting opt problem.
-        theta (np.array): theta founded starting from theta_0.
-        prb (OptimizationProblem): opt problem class.
-
-    Returns:
-        (bool): True if it's stable, False otherwise.
-
-
-    """
+def is_valid_energy(theta_0: npt.NDArray, theta: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
     dim = len(theta_0)
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_0_noise = theta_0 + noise
-    theta_noise = prb.run(x0=theta_0_noise, algo="lbfgs", maxeval=500,
-                          ftol_abs=1e-12, ftol_rel=1e-12)
+    theta_noise = prb.run(x0=theta_0_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
 
     isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
     return isnt_constant
@@ -183,7 +168,7 @@ def tune_EI0(individual: gp.PrimitiveTree, toolbox: base.Toolbox, FL2: float,
     # set extra args for bilevel program
     constraint_args = {'theta_in': theta_in}
     obj_args = {'theta_true': theta_true}
-    # set bilevel problem
+
     prb = oc.OptimalControlProblem(objfun=obj.MSE_theta,
                                    statefun=obj.total_energy_grad,
                                    state_dim=dim,
@@ -257,17 +242,18 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_in': theta_in}
             prb.set_obj_args(args)
-            theta = prb.run(x0=theta_0, algo="lbfgs", maxeval=500,
-                            ftol_abs=1e-12, ftol_rel=1e-12)
+            theta = prb.run(x0=theta_0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
 
-            x = np.append(theta, FL2_EI0)
+            # check whether the energy is "admissible" (i.e. exclude constant energies
+            # and energies with minima that are too sensitive to the initial guess)
+            valid_energy = is_valid_energy(theta_0=theta_0, theta=theta, prb=prb)
 
-            # check if the solution is constant
-            isnt_constant = is_possible_energy(theta_0=theta_0, theta=theta, prb=prb)
-
-            if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and (isnt_constant):
+            if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and valid_energy:
+                x = np.append(theta, FL2_EI0)
                 fval = obj.MSE_theta(x, theta_true)
             else:
+                # print("prb.last_opt_result = ", prb.last_opt_result)
+                # print("valid_energy = ", valid_energy)
                 fval = math.nan
 
             # if fval is nan, the candidate can't be the solution
