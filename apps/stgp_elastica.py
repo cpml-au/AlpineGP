@@ -1,6 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
-from deap import base, gp
+from deap import base, gp, tools
 from scipy import sparse
 from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
@@ -21,7 +21,7 @@ from jax import grad, Array
 from dctkit.math.opt import optctrl as oc
 import numpy.typing as npt
 from typing import Callable
-
+from mpire.utils import make_single_arguments
 
 # choose precision and whether to use GPU or CPU
 dt.config(dt.FloatDtype.float64, dt.IntDtype.int64, dt.Backend.jax, dt.Platform.cpu)
@@ -436,6 +436,20 @@ def stgp_elastica(config_file):
     print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
+
+    def evaluate_EI0s(pop):
+        EI0s = GPproblem.toolbox.map(GPproblem.toolbox.evaluate_EI0,
+                                     make_single_arguments(pop),
+                                     iterable_len=len(pop),
+                                     n_splits=n_splits)
+
+        for ind, EI0 in zip(pop, EI0s):
+            ind.EI0 = EI0
+
+    def print_EI0(pop):
+        best = tools.selBest(pop, k=1)[0]
+        print("The best individual's EI0 is: ", best.EI0)
+
     GPproblem.run(plot_history=False,
                   print_log=True,
                   plot_best=plot_best,
@@ -444,7 +458,8 @@ def stgp_elastica(config_file):
                   n_splits=n_splits,
                   early_stopping=early_stopping,
                   plot_freq=1,
-                  is_elastica=True)
+                  preprocess_fun=evaluate_EI0s,
+                  callback_fun=print_EI0)
 
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)

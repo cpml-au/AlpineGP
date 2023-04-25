@@ -3,19 +3,19 @@ from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
 from mpire.utils import make_single_arguments
-import dctkit as dt
 import operator
+from typing import Tuple, List
 
 
-def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> list:
+def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
     """Extract a list containing the names of all the primitives.
 
     Args:
-        pset (gp.PrimitiveSetTyped): a PrimitiveSetTyped object.
-        types (list): list of all the types used in pset.
+        pset: a PrimitiveSetTyped object.
+        types: list of all the types used in pset.
 
     Returns:
-        (list): a list containing the names (str) of the primitives.
+        a list containing the names (str) of the primitives.
     """
     primitives_strings = []
     for type in types:
@@ -39,7 +39,7 @@ def mixedMutate(individual, expr, pset, prob):
         return gp.mutShrink(individual)
 
 
-def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> tuple[gp.PrimitiveTree, base.Toolbox]:
+def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
     # initialize toolbox and creator
     toolbox = base.Toolbox()
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
@@ -319,6 +319,50 @@ class GPSymbRegProblem():
             chosen.append(aspirants[chosen_index])
         return chosen
 
+    def __plot_history(self):
+        if not self.plot_initialized:
+            self.plot_initialized = True
+            # new figure number when starting with new evolution
+            self.fig_id = self.fig_id + 1
+            plt.figure(self.fig_id).show()
+            plt.pause(0.01)
+
+        plt.figure(self.fig_id)
+        fig = plt.gcf()
+
+        # Array of generations starts from 1
+        x = range(1, len(self.train_fit_history) + 1)
+        plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
+        plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
+        # fig.legend(loc='upper right')
+        plt.xlabel("Generation #")
+        plt.ylabel("Best Fitness")
+
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+        plt.pause(0.1)
+
+    def __plot_genealogy(self, best):
+        # Get genealogy of best individual
+        import networkx
+        gen_best = self.history.getGenealogy(best)
+        graph = networkx.DiGraph(gen_best)
+        graph = graph.reverse()
+        pos = networkx.nx_agraph.graphviz_layout(
+            graph, prog="dot", args="-Gsplines=True")
+        # Retrieve individual strings for graph node labels
+        labels = gen_best.copy()
+        for key in labels.keys():
+            labels[key] = str(self.history.genealogy_history[key])
+        plt.figure()
+        networkx.draw_networkx(graph, pos=pos)
+        label_options = {"ec": "k", "fc": "lightblue", "alpha": 1.0}
+        networkx.draw_networkx_labels(
+            graph, pos=pos, labels=labels, font_size=10, bbox=label_options)
+
+        # Save genealogy to file
+        # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
+
     def run(self,
             plot_history=False,
             print_log=False,
@@ -328,11 +372,17 @@ class GPSymbRegProblem():
             seed=None,
             n_splits=10,
             early_stopping={'enabled': False, 'max_overfit': 0},
-            is_elastica=False):
+            preprocess_fun=None,
+            callback_fun=None):
         """Runs symbolic regression.
 
             Args:
+                plot_history: whether to plot fitness vs generation number.
                 seed: list of individuals to seed in the initial population.
+                preprocess_fun: function to call before evaluating the fitness of the
+                    individuals of each generation.
+                callback_fun: function to call after evaluating the fitness of the
+                    individuals of each generation.
         """
         if plot_best_genealogy:
             # Decorators for history
@@ -358,19 +408,14 @@ class GPSymbRegProblem():
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population...", flush=True)
-        if is_elastica:
-            EI0s = self.toolbox.map(self.toolbox.evaluate_EI0,
-                                    make_single_arguments(self.pop),
-                                    iterable_len=len(self.pop),
-                                    n_splits=n_splits)
 
-            for ind, EI0 in zip(self.pop, EI0s):
-                ind.EI0 = EI0
+        if preprocess_fun is not None:
+            preprocess_fun(self.pop)
 
-        fitnesses = list(self.toolbox.map(self.toolbox.evaluate_train,
-                                          make_single_arguments(self.pop),
-                                          iterable_len=self.NINDIVIDUALS,
-                                          n_splits=n_splits))
+        fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
+                                     make_single_arguments(self.pop),
+                                     iterable_len=self.NINDIVIDUALS,
+                                     n_splits=n_splits)
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
@@ -393,9 +438,7 @@ class GPSymbRegProblem():
             cgen = gen + 1
 
             # Select and clone the next generation individuals
-            offspring = list(
-                map(self.toolbox.clone,
-                    self.toolbox.select(self.pop)))
+            offspring = list(map(self.toolbox.clone, self.toolbox.select(self.pop)))
 
             # Apply crossover and mutation to the offspring, except elite individuals
             elite_ind = tools.selBest(offspring, self.n_elitist)
@@ -407,14 +450,8 @@ class GPSymbRegProblem():
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
 
-            if is_elastica:
-                EI0s = self.toolbox.map(self.toolbox.evaluate_EI0,
-                                        make_single_arguments(invalid_ind),
-                                        iterable_len=len(invalid_ind),
-                                        n_splits=n_splits)
-
-                for ind, EI0 in zip(invalid_ind, EI0s):
-                    ind.EI0 = EI0
+            if preprocess_fun is not None:
+                preprocess_fun(invalid_ind)
 
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
                                          make_single_arguments(invalid_ind),
@@ -431,15 +468,20 @@ class GPSymbRegProblem():
                 # parents and offspring compete for survival (truncation selection)
                 self.pop = tools.selBest(self.pop + offspring, self.NINDIVIDUALS)
 
-            # Select the best individual in the current population
+            # select the best individual in the current population
             best = tools.selBest(self.pop, k=1)[0]
 
-            # Compute population statistics
+            # compute and print population statistics
             self.compute_statistics(self.pop,
                                     cgen,
                                     len(invalid_ind),
                                     overfit_measure=early_stopping['enabled'],
                                     print_log=print_log)
+
+            print(f"The best individual of this generation is: {best}")
+
+            if callback_fun is not None:
+                callback_fun(self.pop)
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
@@ -453,31 +495,10 @@ class GPSymbRegProblem():
                 self.min_valerr = min(self.logbook.select("valerr"))
 
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
-                if not self.plot_initialized:
-                    self.plot_initialized = True
-                    # new figure number when starting with new evolution
-                    self.fig_id = self.fig_id + 1
-                    plt.figure(self.fig_id).show()
-                    plt.pause(0.01)
-
-                plt.figure(self.fig_id)
-                fig = plt.gcf()
-
-                # Array of generations starts from 1
-                x = range(1, len(self.train_fit_history) + 1)
-                plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
-                plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
-                # fig.legend(loc='upper right')
-                plt.xlabel("Generation #")
-                plt.ylabel("Best Fitness")
-
-                fig.canvas.draw()
-                fig.canvas.flush_events()
-                plt.pause(0.1)
+                self.__plot_history()
 
             if plot_best and (self.toolbox.plot_best_func is not None) \
                     and (cgen % plot_freq == 0 or cgen == 1):
-                best = tools.selBest(self.pop, k=1)[0]
                 self.toolbox.plot_best_func(best)
                 if cgen != self.NGEN and m != early_stopping:
                     plt.clf()
@@ -494,11 +515,9 @@ class GPSymbRegProblem():
                                                        training_fit) >= 1e-1:
                     m += 1
 
-                self.last_improvement = training_fit
-                print(f"The best of this generation is: {best}")
                 print(f"The best until now is: {self.best}")
-                if is_elastica:
-                    print(f"Best individual's EI0: {best.EI0}")
+
+                self.last_improvement = training_fit
 
                 if m == early_stopping['max_overfit']:
                     # save number of generations when stopping for the last training run
@@ -510,22 +529,4 @@ class GPSymbRegProblem():
         print(" -= END OF EVOLUTION =- ", flush=True)
 
         if plot_best_genealogy:
-            # Get genealogy of best individual
-            import networkx
-            gen_best = self.history.getGenealogy(best)
-            graph = networkx.DiGraph(gen_best)
-            graph = graph.reverse()
-            pos = networkx.nx_agraph.graphviz_layout(
-                graph, prog="dot", args="-Gsplines=True")
-            # Retrieve individual strings for graph node labels
-            labels = gen_best.copy()
-            for key in labels.keys():
-                labels[key] = str(self.history.genealogy_history[key])
-            plt.figure()
-            networkx.draw_networkx(graph, pos=pos)
-            label_options = {"ec": "k", "fc": "lightblue", "alpha": 1.0}
-            networkx.draw_networkx_labels(
-                graph, pos=pos, labels=labels, font_size=10, bbox=label_options)
-
-            # Save genealogy to file
-            # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
+            self.__plot_genealogy(best)
