@@ -12,6 +12,7 @@ from alpine.models.elastica import pset
 from alpine.gp import gpsymbreg as gps
 import math
 import sys
+from os.path import join
 import yaml
 import time
 import mpire
@@ -92,7 +93,8 @@ def theta_guesses(x: list, y: list) -> list:
     return theta_0_all
 
 
-def is_valid_energy(theta_0: npt.NDArray, theta: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
+def is_valid_energy(theta_0: npt.NDArray, theta: npt.NDArray,
+                    prb: oc.OptimizationProblem) -> bool:
     dim = len(theta_0)
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_0_noise = theta_0 + noise
@@ -287,8 +289,9 @@ def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
     return objval,
 
 
-def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Toolbox,
-             S: SimplicialComplex, theta_0_all: np.array, transform: np.array, is_animated: bool = True) -> None:
+def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
+             toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
+             transform: npt.NDArray, is_animated: bool = True) -> None:
     best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
                             theta_0_all=theta_0_all, return_best_sol=True)
     plt.figure(1, figsize=(10, 4))
@@ -311,7 +314,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: np.array, y: np.array, toolbox: base.Tool
         plt.show()
 
 
-def stgp_elastica(config_file):
+def stgp_elastica(config_file, output_path=None):
     X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
 
     # get normalized simplicial complex
@@ -490,18 +493,19 @@ def stgp_elastica(config_file):
     plt.axis("off")
     plt.show()
 
-    # save graph in .txt file
-    file = open("graph.txt", "w")
-    a = file.write(str(best))
+    # save string of best individual in .txt file
+    file = open(join(output_path, "best_ind.txt"), "w")
+    file.write(str(best))
     file.close()
 
     # save data for plots to disk
-    np.save("train_fit_history.npy", GPproblem.train_fit_history)
-    np.save("val_fit_history.npy", GPproblem.val_fit_history)
+    np.save(join(output_path, "train_fit_history.npy"),
+            GPproblem.train_fit_history)
+    np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
 
     best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2], True)
-    np.save("best_sol_test_0.npy", best_sol)
-    np.save("true_sol_test_0.npy", X_test)
+    np.save(join(output_path, "best_sol_test_0.npy"), best_sol)
+    np.save(join(output_path, "true_sol_test_0.npy"), X_test)
 
 
 if __name__ == '__main__':
@@ -512,4 +516,11 @@ if __name__ == '__main__':
     with open(param_file) as file:
         config_file = yaml.safe_load(file)
         print(yaml.dump(config_file))
-    stgp_elastica(config_file)
+
+    # path for output data speficified
+    if n_args >= 3:
+        output_path = sys.argv[2]
+    else:
+        output_path = "."
+
+    stgp_elastica(config_file, output_path)
