@@ -376,6 +376,8 @@ class GPSymbRegProblem():
             self.toolbox.decorate("mate", self.history.decorator)
             self.toolbox.decorate("mutate", self.history.decorator)
 
+        print("> MODEL TRAINING/SELECTION STARTED", flush=True)
+
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
@@ -514,6 +516,8 @@ class GPSymbRegProblem():
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
+
+        print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
         if plot_best_genealogy:
             self.__plot_genealogy(best)

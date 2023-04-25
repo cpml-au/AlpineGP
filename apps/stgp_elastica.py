@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from jax import grad, Array
 from dctkit.math.opt import optctrl as oc
 import numpy.typing as npt
-from typing import Callable
+from typing import Callable, Dict, Tuple
 from mpire.utils import make_single_arguments
 
 # choose precision and whether to use GPU or CPU
@@ -267,9 +267,9 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     return 10*total_err
 
 
-def eval_fitness(individual: gp.PrimitiveTree, X: np.array, y: np.array,
-                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: np.array,
-                 penalty: dict) -> tuple[float, ]:
+def eval_fitness(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
+                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
+                 penalty: Dict) -> Tuple[float, ]:
 
     objval = 0.
 
@@ -436,7 +436,6 @@ def stgp_elastica(config_file, output_path=None):
     # opt_individ = createIndividual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    print("> MODEL TRAINING/SELECTION STARTED", flush=True)
     pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
     GPproblem.toolbox.register("map", pool.map)
 
@@ -470,11 +469,6 @@ def stgp_elastica(config_file, output_path=None):
     print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
     print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
-    print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
-
-    # first tune EI0
-    EI0 = eval_MSE(best, X_train, y_train, toolbox, S, theta_0_all[0])
-    best.EI0 = EI0
     score_test = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2])
     print(f"The best MSE on the test set is {score_test}")
 
