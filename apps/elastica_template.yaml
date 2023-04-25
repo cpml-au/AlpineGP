@@ -17,7 +17,7 @@ gp:
     stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
   mutate:
     # fun: gp.mutUniform
-    fun: mixedMutate
+    fun: gp.mixedMutate
     # kargs: "{'expr': toolbox.expr_mut, 'pset': pset}" # string is important
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.8, 0.1, 0.1]}" # string is important
     expr_mut: gp.genHalfAndHalf

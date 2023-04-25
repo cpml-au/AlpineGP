@@ -26,19 +26,6 @@ def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]
     return primitives_strings
 
 
-def mixedMutate(individual, expr, pset, prob):
-    """Implements a mixed mutation operator that randomly chooses among mutUniform,
-    mutNodeReplacement and mutShrink with given probabilities.
-    """
-    chosen_index = int(np.random.choice(range(3), 1, p=prob))
-    if chosen_index == 0:
-        return gp.mutUniform(individual, expr, pset)
-    elif chosen_index == 1:
-        return gp.mutNodeReplacement(individual, pset)
-    elif chosen_index == 2:
-        return gp.mutShrink(individual)
-
-
 def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
     # initialize toolbox and creator
     toolbox = base.Toolbox()
