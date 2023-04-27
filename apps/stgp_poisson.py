@@ -19,7 +19,8 @@ import time
 import sys
 import yaml
 import os
-from typing import Tuple
+from typing import Tuple, Callable
+import numpy.typing as npt
 
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -44,6 +45,26 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 primitives_strings = gps.get_primitives_strings(pset, types)
 
 
+class Objectives():
+    def __init__(self, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float) -> None:
+        self.S = S
+        self.bnodes = bnodes
+        self.gamma = gamma
+
+    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree) -> None:
+        """Set the energy function to be used for the computation of the objective
+        function."""
+        self.energy_func = func
+        self.individual = individual
+
+    def total_energy(self, x, vec_y, vec_bvalues):
+        penalty = 0.5*self.gamma*jnp.sum((x[self.bnodes] - vec_bvalues)**2)
+        c = C.CochainP0(self.S, x)
+        fk = C.CochainP0(self.S, vec_y)
+        total_energy = self.energy_func(c, fk) + penalty
+        return total_energy
+
+
 def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
              bvalues: dict, S: SimplicialComplex, bnodes: np.array,
              gamma: float, u_0: np.array, toolbox: base.Toolbox,
@@ -62,20 +83,15 @@ def eval_MSE(individual: gp.PrimitiveTree, X: np.array, y: np.array,
         total MSE over the dataset.
     """
     num_nodes = X.shape[1]
+
     # transform the individual expression into a callable function
     energy_func = toolbox.compile(expr=individual)
 
-    # create objective function and set its energy function
-
-    def total_energy(x, vec_y, vec_bvalues):
-        penalty = 0.5*gamma*jnp.sum((x[bnodes] - vec_bvalues)**2)
-        c = C.CochainP0(S, x)
-        fk = C.CochainP0(S, vec_y)
-        total_energy = energy_func(c, fk) + penalty
-        return total_energy
+    obj = Objectives(S=S, bnodes=bnodes, gamma=gamma)
+    obj.set_energy_func(energy_func, individual)
 
     prb = oc.OptimizationProblem(
-        dim=num_nodes, state_dim=num_nodes, objfun=total_energy)
+        dim=num_nodes, state_dim=num_nodes, objfun=obj.total_energy)
 
     total_err = 0.
 
