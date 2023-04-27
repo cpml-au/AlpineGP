@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpire.utils import make_single_arguments
 import operator
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 
 def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
@@ -24,6 +24,38 @@ def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]
                               for i in range(len(pset.primitives[type]))]
         primitives_strings.extend(current_primitives)
     return primitives_strings
+
+
+def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict]:
+    GPproblem_settings = dict()
+    GPproblem_extra = dict()
+    GPproblem_run = dict()
+    GPproblem_settings['NINDIVIDUALS'] = config_file_data["gp"]["NINDIVIDUALS"]
+    GPproblem_settings['NGEN'] = config_file_data["gp"]["NGEN"]
+    GPproblem_settings['CXPB'] = config_file_data["gp"]["CXPB"]
+    GPproblem_settings['MUTPB'] = config_file_data["gp"]["MUTPB"]
+    GPproblem_settings['frac_elitist'] = int(
+        config_file_data["gp"]["frac_elitist"]*GPproblem_settings['NINDIVIDUALS'])
+    GPproblem_settings['min_'] = config_file_data["gp"]["min_"]
+    GPproblem_settings['max_'] = config_file_data["gp"]["max_"]
+    GPproblem_settings['overlapping_generation'] = config_file_data["gp"]["overlapping_generation"]
+    GPproblem_settings['parsimony_pressure'] = config_file_data["gp"]["parsimony_pressure"]
+    GPproblem_settings['tournsize'] = config_file_data["gp"]["select"]["tournsize"]
+    GPproblem_settings['stochastic_tournament'] = config_file_data["gp"]["select"]["stochastic_tournament"]
+
+    individualCreator, toolbox = creator_toolbox_config(
+        config_file=config_file_data, pset=pset)
+    GPproblem_settings['toolbox'] = toolbox
+    GPproblem_settings['individualCreator'] = individualCreator
+
+    GPproblem_extra['penalty'] = config_file_data["gp"]["penalty"]
+    GPproblem_extra['n_jobs'] = config_file_data["mp"]["n_jobs"]
+
+    GPproblem_run['early_stopping'] = config_file_data["gp"]["early_stopping"]
+    GPproblem_run['plot_best'] = config_file_data["plot"]["plot_best"]
+    GPproblem_run['plot_best_genealogy'] = config_file_data["plot"]["plot_best_genealogy"]
+
+    return GPproblem_settings, GPproblem_run, GPproblem_extra
 
 
 def creator_toolbox_config(config_file: dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
@@ -220,12 +252,12 @@ class GPSymbRegProblem():
         return overfit
 
     def __compute_valid_stats(self, overfit_measure=False):
-        best = tools.selBest(self.pop, k=1)
-        valid_fit = self.toolbox.evaluate_val_fit(best[0])[0]
-        valid_err = self.toolbox.evaluate_val_MSE(best[0])
+        best = tools.selBest(self.pop, k=1)[0]
+        valid_fit = self.toolbox.evaluate_val_fit(best)[0]
+        valid_err = self.toolbox.evaluate_val_MSE(best)
         overfit = 0
         if overfit_measure:
-            training_fit = best[0].fitness.values[0]
+            training_fit = best.fitness.values[0]
             overfit = self.__overfit_measure(training_fit, valid_fit)
         return overfit, valid_fit, valid_err
 
