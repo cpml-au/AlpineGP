@@ -99,7 +99,6 @@ def is_valid_energy(theta_0: npt.NDArray, theta: npt.NDArray,
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_0_noise = theta_0 + noise
     theta_noise = prb.run(x0=theta_0_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
-
     isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
     return isnt_constant
 
@@ -215,7 +214,7 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     EI0 = individual.EI0
 
     if EI0 < 0:
-        total_err = 10.
+        total_err = 40.
     else:
         for i, theta_true in enumerate(X):
             # extract prescribed value of theta at x = 0 from the dataset
@@ -240,12 +239,10 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                 x = np.append(theta, FL2_EI0)
                 fval = obj.MSE_theta(x, theta_true)
             else:
-                # print("prb.last_opt_result = ", prb.last_opt_result)
-                # print("valid_energy = ", valid_energy)
                 fval = math.nan
 
             if math.isnan(fval):
-                total_err = 10.
+                total_err = 40.
                 break
 
             total_err += fval
@@ -380,37 +377,58 @@ def stgp_elastica(config_file, output_path=None):
 
     # add functions for fitness evaluation (value of the objective function) on training
     # set and MSE evaluation on validation set
-    toolbox.register("evaluate_EI0",
-                     tune_EI0,
-                     toolbox=toolbox,
-                     FL2=y_train[0],
-                     EI0_guess=1.,
-                     theta_guess=theta_0_all[0][0, :],
-                     theta_true=X_train[0, :],
-                     S=S)
-    toolbox.register("evaluate_train",
-                     eval_fitness,
-                     X=X_train,
-                     y=y_train,
-                     toolbox=toolbox,
-                     S=S,
-                     theta_0_all=theta_0_all[0],
-                     penalty=penalty)
-    toolbox.register("evaluate_val_fit",
-                     eval_fitness,
-                     X=X_val,
-                     y=y_val,
-                     toolbox=toolbox,
-                     S=S,
-                     theta_0_all=theta_0_all[1],
-                     penalty=penalty)
-    toolbox.register("evaluate_val_MSE",
-                     eval_MSE,
-                     X=X_val,
-                     y=y_val,
-                     toolbox=toolbox,
-                     S=S,
-                     theta_0_all=theta_0_all[1])
+    if early_stopping['enabled']:
+        toolbox.register("evaluate_EI0",
+                         tune_EI0,
+                         toolbox=toolbox,
+                         FL2=y_train[0],
+                         EI0_guess=1.,
+                         theta_guess=theta_0_all[0][0, :],
+                         theta_true=X_train[0, :],
+                         S=S)
+        toolbox.register("evaluate_train",
+                         eval_fitness,
+                         X=X_train,
+                         y=y_train,
+                         toolbox=toolbox,
+                         S=S,
+                         theta_0_all=theta_0_all[0],
+                         penalty=penalty)
+        toolbox.register("evaluate_val_fit",
+                         eval_fitness,
+                         X=X_val,
+                         y=y_val,
+                         toolbox=toolbox,
+                         S=S,
+                         theta_0_all=theta_0_all[1],
+                         penalty=penalty)
+        toolbox.register("evaluate_val_MSE",
+                         eval_MSE,
+                         X=X_val,
+                         y=y_val,
+                         toolbox=toolbox,
+                         S=S,
+                         theta_0_all=theta_0_all[1])
+    else:
+        X_tr = np.vstack((X_train, X_val))
+        y_tr = np.hstack((y_train, y_val))
+        theta_0_all_new = np.vstack((theta_0_all[0], theta_0_all[1]))
+        toolbox.register("evaluate_EI0",
+                         tune_EI0,
+                         toolbox=toolbox,
+                         FL2=y_tr[0],
+                         EI0_guess=1.,
+                         theta_guess=theta_0_all_new[0, :],
+                         theta_true=X_tr[0, :],
+                         S=S)
+        toolbox.register("evaluate_train",
+                         eval_fitness,
+                         X=X_tr,
+                         y=y_tr,
+                         toolbox=toolbox,
+                         S=S,
+                         theta_0_all=theta_0_all_new,
+                         penalty=penalty)
 
     if plot_best:
         toolbox.register("plot_best_func", plot_sol,
@@ -467,10 +485,8 @@ def stgp_elastica(config_file, output_path=None):
     print(f"The best individual is {str(best)}", flush=True)
 
     print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
-    print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
-
-    score_test = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2])
-    print(f"The best MSE on the test set is {score_test}")
+    if early_stopping['enabled']:
+        print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
@@ -495,11 +511,8 @@ def stgp_elastica(config_file, output_path=None):
     # save data for plots to disk
     np.save(join(output_path, "train_fit_history.npy"),
             GPproblem.train_fit_history)
-    np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
-
-    best_sol = eval_MSE(best, X_test, y_test, toolbox, S, theta_0_all[2], True)
-    np.save(join(output_path, "best_sol_test_0.npy"), best_sol)
-    np.save(join(output_path, "true_sol_test_0.npy"), X_test)
+    if early_stopping['enabled']:
+        np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
 
 
 if __name__ == '__main__':

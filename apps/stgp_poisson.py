@@ -180,19 +180,29 @@ def stgp_poisson(config_file, output_path=None):
     n_jobs = GPproblem_extra['n_jobs']
 
     # set arguments for evaluate functions
-    args_train = {'X': X_train, 'y': y_train, 'bvalues': bvalues_train,
-                  'penalty': penalty, 'S': S, 'bnodes': bnodes,
-                  'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
-    args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
-                    'penalty': penalty, 'S': S,
-                    'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
-    args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S,
-                    'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+    if GPproblem_run['early_stopping']['enabled']:
+        args_train = {'X': X_train, 'y': y_train, 'bvalues': bvalues_train,
+                      'penalty': penalty, 'S': S, 'bnodes': bnodes,
+                      'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+        args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
+                        'penalty': penalty, 'S': S,
+                        'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S,
+                        'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
 
-    # register functions for fitness/MSE evaluation on different datasets
+        # register functions for fitness/MSE evaluation on different datasets
+        toolbox.register("evaluate_val_fit", eval_fitness, **args_val_fit)
+        toolbox.register("evaluate_val_MSE", eval_MSE, **args_val_MSE)
+    else:
+        X_tr = np.vstack((X_train, X_val))
+        y_tr = np.vstack((y_train, y_val))
+        bvalues_tr = np.vstack((bvalues_train, bvalues_val))
+        args_train = {'X': X_tr, 'y': y_tr, 'bvalues': bvalues_tr,
+                      'penalty': penalty, 'S': S, 'bnodes': bnodes,
+                      'gamma': gamma, 'u_0': u_0, 'toolbox': toolbox}
+
+    # register functions for fitness evaluation on training dataset
     toolbox.register("evaluate_train", eval_fitness, **args_train)
-    toolbox.register("evaluate_val_fit", eval_fitness, **args_val_fit)
-    toolbox.register("evaluate_val_MSE", eval_MSE, **args_val_MSE)
 
     if GPproblem_run['plot_best']:
         toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
@@ -216,7 +226,8 @@ def stgp_poisson(config_file, output_path=None):
     print(f"The best individual is {str(best)}", flush=True)
 
     print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
-    print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
+    if GPproblem_run['early_stopping']['enabled']:
+        print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
@@ -249,7 +260,8 @@ def stgp_poisson(config_file, output_path=None):
     # save data for plots to disk
     np.save(join(output_path, "train_fit_history.npy"),
             GPproblem.train_fit_history)
-    np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
+    if GPproblem_run['early_stopping']['enabled']:
+        np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
 
     best_sols = eval_MSE(best, X=X_test, y=y_test,
                          bvalues=bvalues_test, S=S,

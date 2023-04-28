@@ -195,7 +195,7 @@ class GPSymbRegProblem():
             self.logbook.header = "gen", "evals", "fitness", "size", "valid"
             self.logbook.chapters["valid"].header = "overfit", "valid_fit", "valid_err"
         else:
-            self.logbook.header = "gen", "evals", "fitness", "size", "valerr"
+            self.logbook.header = "gen", "evals", "fitness", "size"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
@@ -268,18 +268,15 @@ class GPSymbRegProblem():
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
 
-        # Compute satistics related to the validation set
-        overfit, valid_fit, valid_err = self.__compute_valid_stats(
-            overfit_measure)
-
         # Record the statistics in the logbook
         if overfit_measure:
+            # Compute satistics related to the validation set
+            overfit, valid_fit, valid_err = self.__compute_valid_stats(overfit_measure)
             record["valid"] = {"overfit": overfit,
                                "valid_fit": valid_fit,
                                "valid_err": valid_err}
-            self.logbook.record(gen=gen, evals=evals, **record)
-        else:
-            self.logbook.record(gen=gen, evals=evals, valerr=valid_err, **record)
+
+        self.logbook.record(gen=gen, evals=evals, **record)
 
         if print_log:
             # Print statistics for the current population
@@ -491,7 +488,6 @@ class GPSymbRegProblem():
 
             # select the best individual in the current population
             best = tools.selBest(self.pop, k=1)[0]
-
             # compute and print population statistics
             self.compute_statistics(self.pop,
                                     cgen,
@@ -506,14 +502,12 @@ class GPSymbRegProblem():
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
-            self.val_fit_history = self.logbook.chapters["valid"].select("valid_fit")
             if early_stopping['enabled']:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
                     "valid_fit")
+                self.val_fit_history = self.logbook.chapters["valid"].select(
+                    "valid_fit")
                 self.min_valerr = min(self.val_fit_history)
-            else:
-                self.val_fit_history = self.logbook.select("valerr")
-                self.min_valerr = min(self.logbook.select("valerr"))
 
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
                 self.__plot_history()
@@ -545,6 +539,9 @@ class GPSymbRegProblem():
                     self.NGEN = self.last_gen_no_overfit
                     print("-= EARLY STOPPED =-")
                     break
+
+            else:
+                self.best = best
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
