@@ -290,7 +290,7 @@ class GPSymbRegProblem():
         valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0]
         overfit = 0
         if overfit_measure:
-            training_fit = best.fitness.values[0]
+            training_fit = best[0].fitness.values[0]
             overfit = self.__overfit_measure(training_fit, valid_fit)
         return overfit, valid_fit, valid_err
 

@@ -226,8 +226,6 @@ def stgp_poisson(config_file, output_path=None):
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
     # MULTIPROCESSING SETTINGS ---------------------------------------------------------
-    ray.init()
-
     pool = Pool()
 
     def ray_mapper(f, individuals, toolbox):
