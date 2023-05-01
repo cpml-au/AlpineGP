@@ -4,7 +4,7 @@ from dctkit.math.opt import optctrl as oc
 # import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import tri
-from deap import gp, base
+from deap import gp, base, creator
 from alpine.models.poisson import pset
 from alpine.data import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
@@ -42,6 +42,13 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 # extract list of names of primitives
 primitives_strings = gps.get_primitives_strings(pset, types)
 
+def is_valid_energy(u0: npt.NDArray, u: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
+    dim = len(u0)
+    noise = 0.0001*np.ones(dim).astype(dctkit.float_dtype)
+    u0_noise = u0 + noise
+    u_noise = prb.run(x0=u0_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+    is_valid = np.allclose(u, u_noise, rtol=1e-6, atol=1e-6)
+    return is_valid
 
 def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
              bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
@@ -78,17 +85,24 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.run(x0=u_0.coeffs)
+        x = prb.run(x0=X[i,:], ftol_abs=1e-12, ftol_rel=1e-12)
 
-        if return_best_sol:
-            best_sols.append(x)
+        # check whether the energy is "admissible" (i.e. exclude constant energies
+        # and energies with minima that are too sensitive to the initial guess)
+        valid_energy = is_valid_energy(u0=u_0.coeffs, u=x, prb=prb)
 
-        current_err = np.linalg.norm(x-X[i, :])**2
+        if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and valid_energy:
+            current_err = np.linalg.norm(x-X[i, :])**2
+        else:
+            current_err = math.nan
 
-        if current_err > 100 or math.isnan(current_err):
-            current_err = 100
+        if math.isnan(current_err):
+            total_err = 1000
+            break
 
         total_err += current_err
+
+        best_sols.append(x)
 
     if return_best_sol:
         return best_sols
@@ -167,7 +181,7 @@ def stgp_poisson(config_file, output_path=None):
     gamma = 1000.
 
     # initial guess for the solution of the Poisson problem
-    u_0_vec = 0.01*np.random.rand(num_nodes).astype(dctkit.float_dtype)
+    u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
     u_0 = C.CochainP0(S, u_0_vec)
 
     # set parameters from config file
@@ -240,6 +254,11 @@ def stgp_poisson(config_file, output_path=None):
     # ----------------------------------------------------------------------------------
 
     start = time.perf_counter()
+
+    # opt_string = "Sub(Inn1(dP0(u), dP0(u)), MulF(2, Inn0(fk, u)))"
+    # opt_string = "MulF(2, Inn0(fk, fk)))"
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
     GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run)
 
