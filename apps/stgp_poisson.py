@@ -44,10 +44,10 @@ primitives_strings = gps.get_primitives_strings(pset, types)
 
 def is_valid_energy(u0: npt.NDArray, u: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
     dim = len(u0)
-    noise = 0.0001*np.ones(dim).astype(dctkit.float_dtype)
+    noise = 0.1*np.ones(dim).astype(dctkit.float_dtype)
     u0_noise = u0 + noise
-    u_noise = prb.run(x0=u0_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
-    is_valid = np.allclose(u, u_noise, rtol=1e-6, atol=1e-6)
+    u_noise = prb.run(x0=u0_noise, maxeval=1000, ftol_abs=1e-12, ftol_rel=1e-12)
+    is_valid = np.allclose(u, u_noise, rtol=1e-8, atol=1e-8)
     return is_valid
 
 def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
@@ -75,6 +75,8 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
     best_sols = []
 
+    noise = 1.*np.random.rand(num_nodes).astype(dctkit.float_dtype)
+
     # TODO: parallelize
     for i, vec_y in enumerate(y):
         # extract current bvalues
@@ -84,20 +86,24 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         args = {'vec_y': vec_y, 'vec_bvalues': vec_bvalues}
         prb.set_obj_args(args)
 
+        u0_noise = X[i,:]+noise*np.mean(X[i,:])
+
         # minimize the objective
-        x = prb.run(x0=X[i,:], ftol_abs=1e-12, ftol_rel=1e-12)
+        x = prb.run(x0=u0_noise, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
-        # check whether the energy is "admissible" (i.e. exclude constant energies
-        # and energies with minima that are too sensitive to the initial guess)
-        valid_energy = is_valid_energy(u0=u_0.coeffs, u=x, prb=prb)
-
-        if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and valid_energy:
-            current_err = np.linalg.norm(x-X[i, :])**2
+        if (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4):
+            # check whether the energy is "admissible" (i.e. exclude constant energies
+            # and energies with minima that are too sensitive to the initial guess)
+            valid_energy = is_valid_energy(u0=u0_noise, u=x, prb=prb)
+            if valid_energy:
+                current_err = np.linalg.norm(x-X[i, :])**2
+            else:
+                current_err = math.nan
         else:
             current_err = math.nan
 
         if math.isnan(current_err):
-            total_err = 1000
+            total_err = 1e5
             break
 
         total_err += current_err
@@ -256,6 +262,8 @@ def stgp_poisson(config_file, output_path=None):
     start = time.perf_counter()
 
     # opt_string = "Sub(Inn1(dP0(u), dP0(u)), MulF(2, Inn0(fk, u)))"
+    # opt_string = "Inn1(MulP1(dP0(SqrtP0(u)), SquareF(LogF(CosF(1/2)))), dP0(SqrtP0(AddP0(AddP0(u, u), SquareP0(SquareP0(InvSt2(MulD2(CosD2(ArccosD2(SquareD2(SinD2(SqrtD2(St0(u)))))), 1/2))))))))"
+    # opt_string = "Inn1(ExpP1(ExpP1(SinP1(CosP1(dP0(fk))))), SquareP1(MulP1(dP0(u), -1)))"
     # opt_string = "MulF(2, Inn0(fk, fk)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
