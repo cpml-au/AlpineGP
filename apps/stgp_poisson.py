@@ -28,6 +28,16 @@ import numpy.typing as npt
 
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
+# reducing the number of threads launched by eval_fitness
+os.environ['MKL_NUM_THREADS']='1' 
+os.environ['OPENBLAS_NUM_THREADS']='1'
+
+os.environ["NUM_INTER_THREADS"]="1"
+os.environ["NUM_INTRA_THREADS"]="1"
+
+os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
+                           "intra_op_parallelism_threads=1")
+
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
@@ -117,7 +127,7 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
     return total_err
 
-
+@ray.remote(num_cpus=2)
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
                  u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
@@ -220,10 +230,8 @@ def stgp_poisson(config_file, output_path=None):
         args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S_ref,
                         'bnodes': bnodes_ref, 'gamma': gamma_ref, 'u_0': u_0_ref}
         # register functions for fitness/MSE evaluation on different datasets
-        toolbox.register("evaluate_val_fit", ray.remote(
-            eval_fitness).remote, **args_val_fit)
-        toolbox.register("evaluate_val_MSE", ray.remote(
-            eval_MSE).remote, **args_val_MSE)
+        toolbox.register("evaluate_val_fit", eval_fitness.remote, **args_val_fit)
+        toolbox.register("evaluate_val_MSE", eval_MSE, **args_val_MSE)
     else:
         X_tr = np.vstack((X_train, X_val))
         y_tr = np.vstack((y_train, y_val))
@@ -236,7 +244,7 @@ def stgp_poisson(config_file, output_path=None):
                       'gamma': gamma_ref, 'u_0': u_0_ref}
 
     # register functions for fitness/MSE evaluation on different datasets
-    toolbox.register("evaluate_train", ray.remote(eval_fitness).remote, **args_train)
+    toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
 
     if GPproblem_run['plot_best']:
         toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
@@ -262,8 +270,6 @@ def stgp_poisson(config_file, output_path=None):
     start = time.perf_counter()
 
     # opt_string = "Sub(Inn1(dP0(u), dP0(u)), MulF(2, Inn0(fk, u)))"
-    # opt_string = "Inn1(MulP1(dP0(SqrtP0(u)), SquareF(LogF(CosF(1/2)))), dP0(SqrtP0(AddP0(AddP0(u, u), SquareP0(SquareP0(InvSt2(MulD2(CosD2(ArccosD2(SquareD2(SinD2(SqrtD2(St0(u)))))), 1/2))))))))"
-    # opt_string = "Inn1(ExpP1(ExpP1(SinP1(CosP1(dP0(fk))))), SquareP1(MulP1(dP0(u), -1)))"
     # opt_string = "MulF(2, Inn0(fk, fk)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
