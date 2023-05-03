@@ -285,9 +285,10 @@ class GPSymbRegProblem():
 
     def __compute_valid_stats(self, overfit_measure=False):
         best = tools.selBest(self.pop, k=1)
-        # FIXME: ugly way of handling lists/tuples
+        # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
+        # single-valued tuple as eval_val_fit
         valid_fit = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
-        valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0]
+        valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0][0]
         overfit = 0
         if overfit_measure:
             training_fit = best[0].fitness.values[0]

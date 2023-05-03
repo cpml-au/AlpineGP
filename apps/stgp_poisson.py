@@ -130,18 +130,18 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 @ray.remote(num_cpus=2)
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
-                 u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
+                 u_0: npt.NDArray, penalty: dict, return_MSE=False) -> Tuple[float, ]:
 
     objval = 0.
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    # if penalty["method"] == "primitive":
+    # if penalty["method"] == "primitive" and not return_MSE:
     #     # penalty terms on primitives
     #     indstr = str(individual)
     #     objval = total_err + penalty["reg_param"] * \
     #         max([indstr.count(string) for string in primitives_strings])
-    if penalty["method"] == "length":
+    if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
     else:
@@ -223,15 +223,16 @@ def stgp_poisson(config_file, output_path=None):
     if GPproblem_run['early_stopping']['enabled']:
         args_train = {'X': X_train_ref, 'y': y_train_ref, 'bvalues': bvalues_train_ref,
                       'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                      'gamma': gamma_ref, 'u_0': u_0_ref}
+                      'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
         args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
-                        'penalty': penalty_ref, 'S': S_ref,
-                        'bnodes': bnodes_ref, 'gamma': gamma_ref, 'u_0': u_0_ref}
-        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val, 'S': S_ref,
-                        'bnodes': bnodes_ref, 'gamma': gamma_ref, 'u_0': u_0_ref}
+                        'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
+                        'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
+        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
+                        'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
+                        'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': True}
         # register functions for fitness/MSE evaluation on different datasets
         toolbox.register("evaluate_val_fit", eval_fitness.remote, **args_val_fit)
-        toolbox.register("evaluate_val_MSE", eval_MSE, **args_val_MSE)
+        toolbox.register("evaluate_val_MSE", eval_fitness.remote, **args_val_MSE)
     else:
         X_tr = np.vstack((X_train, X_val))
         y_tr = np.vstack((y_train, y_val))
@@ -241,7 +242,7 @@ def stgp_poisson(config_file, output_path=None):
         bvalues_tr_ref = ray.put(bvalues_tr)
         args_train = {'X': X_tr_ref, 'y': y_tr_ref, 'bvalues': bvalues_tr_ref,
                       'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                      'gamma': gamma_ref, 'u_0': u_0_ref}
+                      'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
 
     # register functions for fitness/MSE evaluation on different datasets
     toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
