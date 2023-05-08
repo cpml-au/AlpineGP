@@ -468,8 +468,6 @@ class GPSymbRegProblem():
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
-        print("DONE.", flush=True)
-
         if early_stopping['enabled']:
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)
@@ -482,6 +480,8 @@ class GPSymbRegProblem():
             m = 0
             # initialize last generation without overfitting
             self.last_gen_no_overfit = 0
+
+        print("DONE.", flush=True)
 
         for gen in range(self.NGEN):
             cgen = gen + 1
