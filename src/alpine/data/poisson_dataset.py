@@ -179,13 +179,23 @@ def load_dataset():
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
 
+def save_noise(num_nodes):
+    noise = 1.*np.random.rand(num_nodes)
+    np.save("noise_poisson.npy", noise)
+
+
+def load_noise():
+    return np.load(os.path.join(data_path, "noise_poisson.npy"))
+
+
 if __name__ == '__main__':
     # seet seed
     np.random.seed(42)
     S, bnodes, triang = generate_complex(0.08)
     num_nodes = S.num_nodes
-    save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
-    #data_X, _ = generate_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
+    # save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
+    save_noise(num_nodes)
+    # data_X, _ = generate_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
     # for i in range(12):
     #    plt.tricontourf(triang, data_X[i, :], cmap='RdBu', levels=20)
     #    plt.show()

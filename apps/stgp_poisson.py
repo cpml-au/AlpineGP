@@ -29,11 +29,11 @@ import numpy.typing as npt
 apps_path = os.path.dirname(os.path.realpath(__file__))
 
 # reducing the number of threads launched by eval_fitness
-os.environ['MKL_NUM_THREADS']='1' 
-os.environ['OPENBLAS_NUM_THREADS']='1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
-os.environ["NUM_INTER_THREADS"]="1"
-os.environ["NUM_INTRA_THREADS"]="1"
+os.environ["NUM_INTER_THREADS"] = "1"
+os.environ["NUM_INTRA_THREADS"] = "1"
 
 os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                            "intra_op_parallelism_threads=1")
@@ -52,13 +52,20 @@ types = [C.CochainP0, C.CochainP1, C.CochainP2,
 # extract list of names of primitives
 primitives_strings = gps.get_primitives_strings(pset, types)
 
-def is_valid_energy(u0: npt.NDArray, u: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
-    dim = len(u0)
-    noise = 0.1*np.ones(dim).astype(dctkit.float_dtype)
-    u0_noise = u0 + noise
-    u_noise = prb.run(x0=u0_noise, maxeval=1000, ftol_abs=1e-12, ftol_rel=1e-12)
-    is_valid = np.allclose(u, u_noise, rtol=1e-8, atol=1e-8)
+
+noise = d.load_noise()
+
+
+def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
+                    bnodes: npt.NDArray) -> bool:
+    # perturb solution and check whether the gradient still vanishes
+    # (i.e. constant energy)
+    u_noise = u + noise*np.mean(u)
+    u_noise[bnodes] = u[bnodes]
+    grad_u_noise = jnp.linalg.norm(prb.gradient(u_noise))
+    is_valid = grad_u_noise >= 1e-6
     return is_valid
+
 
 def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
              bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
@@ -85,8 +92,6 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
     best_sols = []
 
-    noise = 1.*np.random.rand(num_nodes).astype(dctkit.float_dtype)
-
     # TODO: parallelize
     for i, vec_y in enumerate(y):
         # extract current bvalues
@@ -96,15 +101,17 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         args = {'vec_y': vec_y, 'vec_bvalues': vec_bvalues}
         prb.set_obj_args(args)
 
-        u0_noise = X[i,:]+noise*np.mean(X[i,:])
+        u0_noise = X[i, :]+noise*np.mean(X[i, :])
+        u0_noise[bnodes] = vec_bvalues
 
         # minimize the objective
         x = prb.run(x0=u0_noise, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
-        if (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4):
-            # check whether the energy is "admissible" (i.e. exclude constant energies
-            # and energies with minima that are too sensitive to the initial guess)
-            valid_energy = is_valid_energy(u0=u0_noise, u=x, prb=prb)
+        if (prb.last_opt_result == 1 or prb.last_opt_result == 3
+                or prb.last_opt_result == 4):
+            # check whether the energy is "admissible" (i.e. exclude constant energies)
+            valid_energy = is_valid_energy(u=x, prb=prb, bnodes=bnodes)
+
             if valid_energy:
                 current_err = np.linalg.norm(x-X[i, :])**2
             else:
@@ -126,6 +133,7 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
     total_err *= 1/X.shape[0]
 
     return total_err
+
 
 @ray.remote(num_cpus=2)
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
@@ -218,16 +226,17 @@ def stgp_poisson(config_file, output_path=None):
     X_train_ref = ray.put(X_train)
     y_train_ref = ray.put(y_train)
     bvalues_train_ref = ray.put(bvalues_train)
+    bvalues_val_ref = ray.put(bvalues_val)
 
     # set arguments for evaluate functions
     if GPproblem_run['early_stopping']['enabled']:
         args_train = {'X': X_train_ref, 'y': y_train_ref, 'bvalues': bvalues_train_ref,
                       'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
                       'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
-        args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
+        args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val_ref,
                         'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
                         'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
-        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val,
+        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val_ref,
                         'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
                         'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': True}
         # register functions for fitness/MSE evaluation on different datasets
@@ -269,7 +278,7 @@ def stgp_poisson(config_file, output_path=None):
     # ----------------------------------------------------------------------------------
 
     start = time.perf_counter()
-
+    # opt_string = "Inn1(dP0(AddP0(SinP0(SqrtP0(u)), LogP0(u))), dP0(u))"
     # opt_string = "Sub(Inn1(dP0(u), dP0(u)), MulF(2, Inn0(fk, u)))"
     # opt_string = "MulF(2, Inn0(fk, fk)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
