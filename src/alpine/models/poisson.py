@@ -27,6 +27,18 @@ def protectedSqrt(x):
     except ValueError:
         return jnp.nan
 
+def inv_float(x):
+    try:
+        return 1/x
+    except ZeroDivisionError:
+        return jnp.nan
+
+
+def inv_scalar_mul(c, f):
+    try:
+        return C.scalar_mul(c, 1/f)
+    except ZeroDivisionError:
+        return C.scalar_mul(c, jnp.nan)
 
 # define primitive set
 pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
@@ -61,6 +73,8 @@ pset.addPrimitive(C.coboundary, [C.CochainD0], C.CochainD1, name="dD0")
 pset.addPrimitive(C.coboundary, [C.CochainD1], C.CochainD2, name="dD1")
 pset.addPrimitive(C.codifferential, [C.CochainP1], C.CochainP0, name="delP1")
 pset.addPrimitive(C.codifferential, [C.CochainP2], C.CochainP1, name="delP2")
+pset.addPrimitive(C.codifferential, [C.CochainD1], C.CochainD0, name="delD1")
+pset.addPrimitive(C.codifferential, [C.CochainD2], C.CochainD1, name="delD2")
 
 pset.addPrimitive(C.star, [C.CochainP0], C.CochainD2, name="St0")
 pset.addPrimitive(C.star, [C.CochainP1], C.CochainD1, name="St1")
@@ -75,10 +89,26 @@ pset.addPrimitive(C.scalar_mul, [C.CochainP2, float], C.CochainP2, "MulP2")
 pset.addPrimitive(C.scalar_mul, [C.CochainD0, float], C.CochainD0, "MulD0")
 pset.addPrimitive(C.scalar_mul, [C.CochainD1, float], C.CochainD1, "MulD1")
 pset.addPrimitive(C.scalar_mul, [C.CochainD2, float], C.CochainD2, "MulD2")
+pset.addPrimitive(inv_scalar_mul, [C.CochainP0, float], C.CochainP0, "InvMulP0")
+pset.addPrimitive(inv_scalar_mul, [C.CochainP1, float], C.CochainP1, "InvMulP1")
+pset.addPrimitive(inv_scalar_mul, [C.CochainP2, float], C.CochainP2, "InvMulP2")
+pset.addPrimitive(inv_scalar_mul, [C.CochainD0, float], C.CochainD0, "InvMulD0")
+pset.addPrimitive(inv_scalar_mul, [C.CochainD1, float], C.CochainD1, "InvMulD1")
+pset.addPrimitive(inv_scalar_mul, [C.CochainD2, float], C.CochainD2, "InvMulD2")
 
-pset.addPrimitive(C.inner_product, [C.CochainP0, C.CochainP0], float, "Inn0")
-pset.addPrimitive(C.inner_product, [C.CochainP1, C.CochainP1], float, "Inn1")
-pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "Inn2")
+pset.addPrimitive(C.inner_product, [C.CochainP0, C.CochainP0], float, "InnP0")
+pset.addPrimitive(C.inner_product, [C.CochainP1, C.CochainP1], float, "InnP1")
+pset.addPrimitive(C.inner_product, [C.CochainP2, C.CochainP2], float, "InnP2")
+pset.addPrimitive(C.inner_product, [C.CochainD0, C.CochainD0], float, "InnD0")
+pset.addPrimitive(C.inner_product, [C.CochainD1, C.CochainD1], float, "InnD1")
+pset.addPrimitive(C.inner_product, [C.CochainD2, C.CochainD2], float, "InnD2")
+
+pset.addPrimitive(C.cochain_mul, [C.CochainP0, C.CochainP0], C.CochainP0, "CochMulP0")
+pset.addPrimitive(C.cochain_mul, [C.CochainP1, C.CochainP1], C.CochainP1, "CochMulP1")
+pset.addPrimitive(C.cochain_mul, [C.CochainP2, C.CochainP2], C.CochainP2, "CochMulP2")
+pset.addPrimitive(C.cochain_mul, [C.CochainD0, C.CochainD0], C.CochainD0, "CochMulD0")
+pset.addPrimitive(C.cochain_mul, [C.CochainD1, C.CochainD1], C.CochainD1, "CochMulD1")
+pset.addPrimitive(C.cochain_mul, [C.CochainD2, C.CochainD2], C.CochainD2, "CochMulD2")
 
 
 pset.addPrimitive(C.sin, [C.CochainP0], C.CochainP0, "SinP0")
@@ -94,7 +124,6 @@ pset.addPrimitive(C.arcsin, [C.CochainP2], C.CochainP2, "ArcsinP2")
 pset.addPrimitive(C.arcsin, [C.CochainD0], C.CochainD0, "ArcsinD0")
 pset.addPrimitive(C.arcsin, [C.CochainD1], C.CochainD1, "ArcsinD1")
 pset.addPrimitive(C.arcsin, [C.CochainD2], C.CochainD2, "ArcsinD2")
-
 
 pset.addPrimitive(C.cos, [C.CochainP0], C.CochainP0, "CosP0")
 pset.addPrimitive(C.cos, [C.CochainP1], C.CochainP1, "CosP1")
