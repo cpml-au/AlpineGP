@@ -345,7 +345,9 @@ class GPSymbRegProblem():
                                                           prob=self.
                                                           stochastic_tournament['prob'])
         else:
-            return bestind + tools.selRandom(individuals, n_tournament)
+            return bestind + tools.selTournament(individuals, n_tournament,
+                                                 tournsize=self.tournsize)
+            # return bestind + tools.selRandom(individuals, n_tournament)
 
     def selStochasticTournament(self, individuals, k, tournsize, prob,
                                 fit_attr="fitness"):

@@ -2,6 +2,7 @@ import numpy as np
 # import multiprocessing
 import gmsh
 from dctkit.mesh import simplex, util
+from dctkit.dec import cochain as C
 import os
 from sklearn.model_selection import train_test_split
 from matplotlib import tri
@@ -69,9 +70,11 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
         if num_sources >= 1:
             # ith quadratic function
             u_i = (i+1)*np.exp(np.sin(x)) + ((i+1)**2)*np.exp(np.cos(y))
-            f_i = -(i+1)*(np.exp(np.sin(x))*(np.cos(x))
-                          ** 2 - np.exp(np.sin(x))*np.sin(x)) + ((i+1)**2)*(-np.exp(np.cos(y))*(np.sin(y))**2 +
-                                                                            np.exp(np.cos(y))*np.cos(y))
+            u_i_coch = C.CochainP0(S, u_i)
+            #f_i = -(i+1)*(np.exp(np.sin(x))*(np.cos(x))
+            #              ** 2 - np.exp(np.sin(x))*np.sin(x)) + ((i+1)**2)*(-np.exp(np.cos(y))*(np.sin(y))**2 +
+            #                                                                np.exp(np.cos(y))*np.cos(y))
+            f_i = C.laplacian(u_i_coch).coeffs
             data_X[num_sources*i, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i, :] = f_i
 
@@ -79,14 +82,18 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
             # ith exponential function
             u_i = (i+1)*np.log(1 + x) + \
                 1/(i+1)*np.log(1 + y)
-            f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
+            u_i_coch = C.CochainP0(S, u_i)
+            #f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
+            f_i = C.laplacian(u_i_coch).coeffs
             data_X[num_sources*i+1, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i+1, :] = f_i
 
         if num_sources >= 3:
             # ith power function
             u_i = x**(i+3) + y**(i+3)
+            u_i_coch = C.CochainP0(S, u_i)
             f_i = -(i+3)*(i+2)*(x**(i+1) + y**(i+1))
+            f_i = C.laplacian(u_i_coch).coeffs
             data_X[num_sources*i+2, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i+2, :] = f_i
 
@@ -193,8 +200,8 @@ if __name__ == '__main__':
     np.random.seed(42)
     S, bnodes, triang = generate_complex(0.08)
     num_nodes = S.num_nodes
-    # save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
-    save_noise(num_nodes)
+    save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
+    # save_noise(num_nodes)
     # data_X, _ = generate_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
     # for i in range(12):
     #    plt.tricontourf(triang, data_X[i, :], cmap='RdBu', levels=20)
