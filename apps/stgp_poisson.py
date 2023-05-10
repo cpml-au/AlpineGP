@@ -279,7 +279,7 @@ def stgp_poisson(config_file, output_path=None):
 
     start = time.perf_counter()
     # opt_string = "Inn1(dP0(AddP0(SinP0(SqrtP0(u)), LogP0(u))), dP0(u))"
-    # opt_string = "Sub(Inn1(dP0(u), dP0(u)), MulF(2, Inn0(fk, u)))"
+    # opt_string = "Sub(InnP1(dP0(u), dP0(u)), MulF(2, InnP0(fk, u)))"
     # opt_string = "MulF(2, Inn0(fk, fk)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
