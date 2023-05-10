@@ -101,11 +101,8 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         args = {'vec_y': vec_y, 'vec_bvalues': vec_bvalues}
         prb.set_obj_args(args)
 
-        u0_noise = X[i, :]+noise*np.mean(X[i, :])
-        u0_noise[bnodes] = vec_bvalues
-
         # minimize the objective
-        x = prb.run(x0=u0_noise, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
+        x = prb.run(x0=u_0.coeffs, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -278,6 +275,8 @@ def stgp_poisson(config_file, output_path=None):
     # ----------------------------------------------------------------------------------
 
     start = time.perf_counter()
+    # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
+    # opt_string = "SquareF(InnP0(InvMulP0(u, SquareF(InnP0(u, fk))), delP1(dP0(u))))"
     # opt_string = "Inn1(dP0(AddP0(SinP0(SqrtP0(u)), LogP0(u))), dP0(u))"
     # opt_string = "Sub(InnP1(dP0(u), dP0(u)), MulF(2, InnP0(fk, u)))"
     # opt_string = "MulF(2, Inn0(fk, fk)))"

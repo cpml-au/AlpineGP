@@ -57,38 +57,6 @@ def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tupl
     return GPproblem_settings, GPproblem_run, GPproblem_extra
 
 
-def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict]:
-    GPproblem_settings = dict()
-    GPproblem_extra = dict()
-    GPproblem_run = dict()
-    GPproblem_settings['NINDIVIDUALS'] = config_file_data["gp"]["NINDIVIDUALS"]
-    GPproblem_settings['NGEN'] = config_file_data["gp"]["NGEN"]
-    GPproblem_settings['CXPB'] = config_file_data["gp"]["CXPB"]
-    GPproblem_settings['MUTPB'] = config_file_data["gp"]["MUTPB"]
-    GPproblem_settings['frac_elitist'] = int(
-        config_file_data["gp"]["frac_elitist"]*GPproblem_settings['NINDIVIDUALS'])
-    GPproblem_settings['min_'] = config_file_data["gp"]["min_"]
-    GPproblem_settings['max_'] = config_file_data["gp"]["max_"]
-    GPproblem_settings['overlapping_generation'] = config_file_data["gp"]["overlapping_generation"]
-    GPproblem_settings['parsimony_pressure'] = config_file_data["gp"]["parsimony_pressure"]
-    GPproblem_settings['tournsize'] = config_file_data["gp"]["select"]["tournsize"]
-    GPproblem_settings['stochastic_tournament'] = config_file_data["gp"]["select"]["stochastic_tournament"]
-
-    individualCreator, toolbox = creator_toolbox_config(
-        config_file=config_file_data, pset=pset)
-    GPproblem_settings['toolbox'] = toolbox
-    GPproblem_settings['individualCreator'] = individualCreator
-
-    GPproblem_extra['penalty'] = config_file_data["gp"]["penalty"]
-    GPproblem_extra['n_jobs'] = config_file_data["mp"]["n_jobs"]
-
-    GPproblem_run['early_stopping'] = config_file_data["gp"]["early_stopping"]
-    GPproblem_run['plot_best'] = config_file_data["plot"]["plot_best"]
-    GPproblem_run['plot_best_genealogy'] = config_file_data["plot"]["plot_best_genealogy"]
-
-    return GPproblem_settings, GPproblem_run, GPproblem_extra
-
-
 def creator_toolbox_config(config_file: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
     # initialize toolbox and creator
     toolbox = base.Toolbox()
@@ -198,6 +166,7 @@ class GPSymbRegProblem():
             self.__default_toolbox(pset, min_, max_)
         else:
             self.toolbox = toolbox
+            # FIXME: move this instruction in the initialization of the toolbox
             self.toolbox.register("select", self.select_with_elitism)
 
         # Initialize variables for statistics
