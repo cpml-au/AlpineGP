@@ -291,24 +291,29 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
              transform: npt.NDArray, is_animated: bool = True) -> None:
     best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
                             theta_0_all=theta_0_all, return_best_sol=True)
-    plt.figure(1, figsize=(10, 4))
+    plt.figure(1, figsize=(4, 7))
     dim = X.shape[0]
     fig = plt.gcf()
-    _, axes = plt.subplots(1, dim, num=1)
+    _, axes = plt.subplots(dim, 1, num=1)
     # get the x,y coordinates LIST of the best and of the true
     x_curr, y_curr = get_coords((best_sol_all,), transform)
     x_true, y_true = get_coords((X,), transform)
     for i in range(dim):
         # plot the results
-        axes[i].plot(x_true[0][i, :], y_true[0][i, :], 'r')
-        axes[i].plot(x_curr[0][i, :], y_curr[0][i, :], 'b')
+        axes[i].plot(x_true[0][i, :], y_true[0][i, :], '#e41a1c', ls='None', marker = 'o')
+        axes[i].plot(x_curr[0][i, :], y_curr[0][i, :], '#377eb8')
+        axes[i].set_xlabel("x", fontsize = 12.5)
+        axes[i].set_ylabel("y", fontsize = 12.5)
+        axes[i].tick_params(axis="x", labelsize=12.5) 
+        axes[i].tick_params(axis="y", labelsize=12.5) 
 
     fig.canvas.draw()
     fig.canvas.flush_events()
     if is_animated:
         plt.pause(0.1)
     else:
-        plt.show()
+        plt.tight_layout()
+        plt.savefig("ela_best_plots.pdf", dpi=200)
 
 
 def stgp_elastica(config_file, output_path=None):
