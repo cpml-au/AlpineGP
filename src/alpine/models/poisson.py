@@ -73,6 +73,7 @@ def add_primitives(pset: gp.PrimitiveSetTyped) -> None:
     pset.addPrimitive(C.codifferential, [C.CochainP2], C.CochainP1, name="delP2")
     pset.addPrimitive(C.codifferential, [C.CochainD1], C.CochainD0, name="delD1")
     pset.addPrimitive(C.codifferential, [C.CochainD2], C.CochainD1, name="delD2")
+    pset.addPrimitive(C.laplacian, [C.CochainP0], C.CochainP0, name="LapP0")
 
     pset.addPrimitive(C.star, [C.CochainP0], C.CochainD2, name="St0")
     pset.addPrimitive(C.star, [C.CochainP1], C.CochainD1, name="St1")

@@ -1,31 +1,46 @@
 import numpy as np
+import numpy.typing as npt
+from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
+from jax import grad, Array
 from deap import base, gp, tools
 from scipy import sparse
 from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
 from dctkit.dec import cochain as C
+from dctkit import config, FloatDtype, IntDtype, Backend, Platform
+from dctkit.math.opt import optctrl as oc
 import dctkit as dt
 from alpine.data.elastica_data import elastica_dataset as ed
 from alpine.models.elastica import pset
 from alpine.gp import gpsymbreg as gps
+import matplotlib.pyplot as plt
 import math
 import sys
+import os
 from os.path import join
 import yaml
 import time
-import mpire
-import networkx as nx
-import matplotlib.pyplot as plt
-from jax import grad, Array
-from dctkit.math.opt import optctrl as oc
-import numpy.typing as npt
-from typing import Callable, Dict, Tuple
-from mpire.utils import make_single_arguments
+# import networkx as nx
+import ray
+from ray.util.multiprocessing import Pool
+
+apps_path = os.path.dirname(os.path.realpath(__file__))
+
+# reducing the number of threads launched by eval_fitness
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+os.environ["NUM_INTER_THREADS"] = "1"
+os.environ["NUM_INTRA_THREADS"] = "1"
+
+os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
+                           "intra_op_parallelism_threads=1")
 
 # choose precision and whether to use GPU or CPU
-dt.config(dt.FloatDtype.float64, dt.IntDtype.int64, dt.Backend.jax, dt.Platform.cpu)
+# needed for context of the plots at the end of the evolution
+config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
 # list of types
 types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
@@ -107,11 +122,10 @@ class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
 
-    def set_energy_func(self, func: Callable, individual: gp.PrimitiveTree) -> None:
+    def set_energy_func(self, func: Callable) -> None:
         """Set the energy function to be used for the computation of the objective
         function."""
         self.energy_func = func
-        self.individual = individual
 
     # elastic energy including Dirichlet BC by elimination of the prescribed dofs
     def total_energy(self, theta_vec: npt.NDArray, FL2_EI0: float,
@@ -120,7 +134,7 @@ class Objectives():
         theta_vec = jnp.insert(theta_vec, 0, theta_in)
         theta = C.CochainD0(self.S, theta_vec)
         FL2_EI0_coch = C.CochainD0(
-            self.S, FL2_EI0*np.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
+            self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         energy = self.energy_func(theta, FL2_EI0_coch)
         return energy
 
@@ -137,21 +151,23 @@ class Objectives():
         return jnp.sum(jnp.square(theta-theta_true))
 
 
-def tune_EI0(individual: gp.PrimitiveTree, toolbox: base.Toolbox, FL2: float,
-             EI0_guess: float, theta_guess: npt.NDArray, theta_true: npt.NDArray,
-             S: SimplicialComplex) -> float:
-
-    # transform the individual expression into a callable function
-    energy_func = toolbox.compile(expr=individual)
+@ray.remote(num_cpus=2)
+def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
+             EI0_guess: float, theta_guess: npt.NDArray,
+             theta_true: npt.NDArray, S: SimplicialComplex) -> float:
 
     # number of unknowns angles
     dim = S.num_nodes-2
 
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func, individual)
+    obj.set_energy_func(energy_func)
 
     # prescribed angle at x=0
     theta_in = theta_true[0]
+
+    # need to call config again before using JAX in energy evaluations to make sure that
+    # the current worker has initialized JAX
+    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
     # run parameter identification on the first sample of the training set
     # set extra args for bilevel program
@@ -192,12 +208,9 @@ def tune_EI0(individual: gp.PrimitiveTree, toolbox: base.Toolbox, FL2: float,
     return EI0
 
 
-def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
-             toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
+def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
+             y: npt.NDArray, S: SimplicialComplex, theta_0_all: npt.NDArray,
              return_best_sol: bool = False) -> float:
-
-    # transform the individual expression into a callable function
-    energy_func = toolbox.compile(expr=individual)
 
     # number of unknown angles
     dim = S.num_nodes-2
@@ -205,13 +218,15 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     total_err = 0.
 
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func, individual)
+    obj.set_energy_func(energy_func)
 
     # init X_dim and best_theta
     X_dim = X.shape[0]
     best_theta = np.zeros((X_dim, S.num_nodes-1), dtype=dt.float_dtype)
 
-    EI0 = individual.EI0
+    # need to call config again before using JAX in energy evaluations to make sure that
+    # the current worker has initialized JAX
+    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
     if EI0 < 0:
         total_err = 40.
@@ -264,25 +279,27 @@ def eval_MSE(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     return 10*total_err
 
 
-def eval_fitness(individual: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
-                 toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
-                 penalty: Dict) -> Tuple[float, ]:
+@ray.remote(num_cpus=2)
+def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
+                 y: npt.NDArray, S: SimplicialComplex, theta_0_all: npt.NDArray,
+                 penalty: Dict, return_MSE=False) -> Tuple[float, ]:
 
     objval = 0.
 
-    total_err = eval_MSE(individual, X, y, toolbox, S, theta_0_all)
+    total_err = eval_MSE(individual, EI0, indlen, X, y, S, theta_0_all)
 
-    if penalty["method"] == "primitive":
-        # penalty terms on primitives
-        indstr = str(individual)
-        objval = total_err + penalty["reg_param"] * \
-            max([indstr.count(string) for string in primitives_strings])
-    elif penalty["method"] == "length":
+    # if penalty["method"] == "primitive":
+    #     # penalty terms on primitives
+    #     indstr = str(individual)
+    #     objval = total_err + penalty["reg_param"] * \
+    #         max([indstr.count(string) for string in primitives_strings])
+    if penalty["method"] == "length":
         # penalty terms on length
-        objval = total_err + penalty["reg_param"]*len(individual)
+        objval = total_err + penalty["reg_param"]*indlen
     else:
         # no penalty
         objval = total_err
+
     return objval,
 
 
@@ -346,122 +363,79 @@ def stgp_elastica(config_file, output_path=None):
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
-    # initialize toolbox and creator
-    createIndividual, toolbox = gps.creator_toolbox_config(
-        config_file=config_file, pset=pset)
-
     # set parameters from config file
-    NINDIVIDUALS = config_file["gp"]["NINDIVIDUALS"]
-    NGEN = config_file["gp"]["NGEN"]
-    CXPB = config_file["gp"]["CXPB"]
-    MUTPB = config_file["gp"]["MUTPB"]
-    frac_elitist = int(config_file["gp"]["frac_elitist"]*NINDIVIDUALS)
-    min_ = config_file["gp"]["min_"]
-    max_ = config_file["gp"]["max_"]
-    overlapping_generation = config_file["gp"]["overlapping_generation"]
-    early_stopping = config_file["gp"]["early_stopping"]
-    parsimony_pressure = config_file["gp"]["parsimony_pressure"]
-    penalty = config_file["gp"]["penalty"]
+    GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
+        config_file_data=config_file, pset=pset)
+    toolbox = GPproblem_settings['toolbox']
+    penalty = GPproblem_extra['penalty']
 
-    tournsize = config_file["gp"]["select"]["tournsize"]
-    stochastic_tournament = config_file["gp"]["select"]["stochastic_tournament"]
+    ray.init()
 
-    plot_best = config_file["plot"]["plot_best"]
-    plot_best_genealogy = config_file["plot"]["plot_best_genealogy"]
+    # store shared objects refs
+    S_ref = ray.put(S)
+    penalty_ref = ray.put(penalty)
+    X_train_ref = ray.put(X_train)
+    y_train_ref = ray.put(y_train)
+    X_val_ref = ray.put(X_val)
+    y_val_ref = ray.put(y_val)
 
-    n_jobs = config_file["mp"]["n_jobs"]
-    n_splits = config_file["mp"]["n_splits"]
-    start_method = config_file["mp"]["start_method"]
-
-    start = time.perf_counter()
-
-    # add functions for fitness evaluation (value of the objective function) on training
-    # set and MSE evaluation on validation set
-    if early_stopping['enabled']:
-        toolbox.register("evaluate_EI0",
-                         tune_EI0,
-                         toolbox=toolbox,
-                         FL2=y_train[0],
-                         EI0_guess=1.,
-                         theta_guess=theta_0_all[0][0, :],
-                         theta_true=X_train[0, :],
-                         S=S)
-        toolbox.register("evaluate_train",
-                         eval_fitness,
-                         X=X_train,
-                         y=y_train,
-                         toolbox=toolbox,
-                         S=S,
-                         theta_0_all=theta_0_all[0],
-                         penalty=penalty)
-        toolbox.register("evaluate_val_fit",
-                         eval_fitness,
-                         X=X_val,
-                         y=y_val,
-                         toolbox=toolbox,
-                         S=S,
-                         theta_0_all=theta_0_all[1],
-                         penalty=penalty)
-        toolbox.register("evaluate_val_MSE",
-                         eval_MSE,
-                         X=X_val,
-                         y=y_val,
-                         toolbox=toolbox,
-                         S=S,
-                         theta_0_all=theta_0_all[1])
+    if GPproblem_run['early_stopping']['enabled']:
+        args_train = {'X': X_train_ref, 'y': y_train_ref, 'penalty': penalty_ref,
+                      'S': S_ref, 'theta_0_all': theta_0_all[0], 'return_MSE': False}
+        args_val_fit = {'X': X_val_ref, 'y': y_val_ref, 'penalty': penalty_ref,
+                        'S': S_ref, 'theta_0_all': theta_0_all[1], 'return_MSE': False}
+        args_val_MSE = {'X': X_val_ref, 'y': y_val_ref, 'penalty': penalty_ref,
+                        'S': S_ref, 'theta_0_all': theta_0_all[1], 'return_MSE': True}
+        # register functions for fitness/MSE evaluation on different datasets
+        toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=y_train[0],
+                         EI0_guess=1., theta_guess=theta_0_all[0][0, :],
+                         theta_true=X_train[0, :], S=S_ref)
+        toolbox.register("evaluate_val_fit", eval_fitness.remote, **args_val_fit)
+        toolbox.register("evaluate_val_MSE", eval_fitness.remote, **args_val_MSE)
     else:
         X_tr = np.vstack((X_train, X_val))
         y_tr = np.hstack((y_train, y_val))
         theta_0_all_new = np.vstack((theta_0_all[0], theta_0_all[1]))
-        toolbox.register("evaluate_EI0",
-                         tune_EI0,
-                         toolbox=toolbox,
-                         FL2=y_tr[0],
-                         EI0_guess=1.,
-                         theta_guess=theta_0_all_new[0, :],
-                         theta_true=X_tr[0, :],
-                         S=S)
-        toolbox.register("evaluate_train",
-                         eval_fitness,
-                         X=X_tr,
-                         y=y_tr,
-                         toolbox=toolbox,
-                         S=S,
-                         theta_0_all=theta_0_all_new,
-                         penalty=penalty)
+        args_train = {'X': X_train_ref, 'y': y_train_ref, 'penalty': penalty_ref,
+                      'S': S_ref, 'theta_0_all': theta_0_all_new[0],
+                      'return_MSE': False}
+        toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=y_tr[0],
+                         EI0_guess=1., theta_guess=theta_0_all_new[0, :],
+                         theta_true=X_tr[0, :], S=S_ref)
 
-    if plot_best:
-        toolbox.register("plot_best_func", plot_sol,
-                         X=X_val, y=y_val, toolbox=toolbox,
-                         S=S, theta_0_all=theta_0_all[1], transform=transform)
+    toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
 
-    GPproblem = gps.GPSymbRegProblem(pset=pset,
-                                     NINDIVIDUALS=NINDIVIDUALS,
-                                     NGEN=NGEN,
-                                     CXPB=CXPB,
-                                     MUTPB=MUTPB,
-                                     overlapping_generation=overlapping_generation,
-                                     frac_elitist=frac_elitist,
-                                     parsimony_pressure=parsimony_pressure,
-                                     tournsize=tournsize,
-                                     stochastic_tournament=stochastic_tournament,
-                                     min_=min_,
-                                     max_=max_,
-                                     individualCreator=createIndividual,
-                                     toolbox=toolbox)
+    if GPproblem_run['plot_best']:
+        toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
+                         toolbox=toolbox, transform=transform)
+
+    GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
     # opt_string = ""
     # opt_individ = createIndividual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    pool = mpire.WorkerPool(n_jobs=n_jobs, start_method=start_method)
-    GPproblem.toolbox.register("map", pool.map)
+    # MULTIPROCESSING SETTINGS ---------------------------------------------------------
+    pool = Pool()
+
+    def ray_mapper(f, individuals, toolbox):
+        # We are not duplicating global scope on workers so we need to use the toolbox
+        # Transform the tree expression in a callable function
+        runnables = [toolbox.compile(expr=ind) for ind in individuals]
+        lenghts = [len(ind) for ind in individuals]
+        EI0s = [ind.EI0 for ind in individuals]
+        fitnesses = ray.get([f(*args) for args in zip(runnables, EI0s, lenghts)])
+        return fitnesses
+
+    GPproblem.toolbox.register("map", ray_mapper, toolbox=GPproblem.toolbox)
+    # ----------------------------------------------------------------------------------
 
     def evaluate_EI0s(pop):
-        EI0s = GPproblem.toolbox.map(GPproblem.toolbox.evaluate_EI0,
-                                     make_single_arguments(pop),
-                                     iterable_len=len(pop),
-                                     n_splits=n_splits)
+        if not hasattr(pop[0], "EI0"):
+            for ind in pop:
+                ind.EI0 = 1.
+
+        EI0s = GPproblem.toolbox.map(GPproblem.toolbox.evaluate_EI0, pop)
 
         for ind, EI0 in zip(pop, EI0s):
             ind.EI0 = EI0
@@ -470,38 +444,42 @@ def stgp_elastica(config_file, output_path=None):
         best = tools.selBest(pop, k=1)[0]
         print("The best individual's EI0 is: ", best.EI0)
 
-    GPproblem.run(plot_history=False,
-                  print_log=True,
-                  plot_best=plot_best,
-                  plot_best_genealogy=plot_best_genealogy,
-                  seed=None,
-                  n_splits=n_splits,
-                  early_stopping=early_stopping,
-                  plot_freq=1,
-                  preprocess_fun=evaluate_EI0s,
-                  callback_fun=print_EI0)
+    start = time.perf_counter()
 
+    GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run,
+                  preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
+
+    # print stats on best individual at the end of the evolution
     best = GPproblem.best
     print(f"The best individual is {str(best)}", flush=True)
-
     print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
-    if early_stopping['enabled']:
+
+    if GPproblem_run['early_stopping']['enabled']:
         print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
+
+    score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), best.EI0,
+                          len(str(best)), X_test, y_test, S=S,
+                          theta_0_all=theta_0_all[2])
+
+    print(f"The best MSE on the test set is {score_test}")
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
+    pool.close()
+    ray.shutdown()
+
     # plot the tree of the best individual
-    nodes, edges, labels = gp.graph(best)
-    graph = nx.Graph()
-    graph.add_nodes_from(nodes)
-    graph.add_edges_from(edges)
-    pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-    plt.figure(figsize=(7, 7))
-    nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-    nx.draw_networkx_edges(graph, pos)
-    nx.draw_networkx_labels(graph, pos, labels)
-    plt.axis("off")
-    plt.show()
+    # nodes, edges, labels = gp.graph(best)
+    # graph = nx.Graph()
+    # graph.add_nodes_from(nodes)
+    # graph.add_edges_from(edges)
+    # pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
+    # plt.figure(figsize=(7, 7))
+    # nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
+    # nx.draw_networkx_edges(graph, pos)
+    # nx.draw_networkx_labels(graph, pos, labels)
+    # plt.axis("off")
+    # plt.show()
 
     # save string of best individual in .txt file
     file = open(join(output_path, "best_ind.txt"), "w")
@@ -511,7 +489,7 @@ def stgp_elastica(config_file, output_path=None):
     # save data for plots to disk
     np.save(join(output_path, "train_fit_history.npy"),
             GPproblem.train_fit_history)
-    if early_stopping['enabled']:
+    if GPproblem_run['early_stopping']['enabled']:
         np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
 
 
