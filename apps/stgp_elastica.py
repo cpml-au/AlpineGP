@@ -305,9 +305,17 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
 
 def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
              toolbox: base.Toolbox, S: SimplicialComplex, theta_0_all: npt.NDArray,
-             transform: npt.NDArray, is_animated: bool = True) -> None:
-    best_sol_all = eval_MSE(ind, X=X, y=y, toolbox=toolbox, S=S,
+             transform: npt.NDArray) -> None:
+
+    # the refs of these objects are not automatically converted to objects
+    # (because we are not calling plot_sol via .remote())
+    X = ray.get(X)
+    S = ray.get(S)
+    indfun = toolbox.compile(expr=ind)
+
+    best_sol_all = eval_MSE(indfun, ind.EI0, indlen=0, X=X, y=y,  S=S,
                             theta_0_all=theta_0_all, return_best_sol=True)
+
     plt.figure(1, figsize=(10, 4))
     dim = X.shape[0]
     fig = plt.gcf()
@@ -322,10 +330,8 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
     fig.canvas.draw()
     fig.canvas.flush_events()
-    if is_animated:
-        plt.pause(0.1)
-    else:
-        plt.show()
+
+    plt.pause(0.1)
 
 
 def stgp_elastica(config_file, output_path=None):
@@ -406,8 +412,9 @@ def stgp_elastica(config_file, output_path=None):
     toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
 
     if GPproblem_run['plot_best']:
-        toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
-                         toolbox=toolbox, transform=transform)
+        toolbox.register("plot_best_func", plot_sol, X=X_val_ref, y=y_val_ref,
+                         toolbox=toolbox, S=S_ref, theta_0_all=theta_0_all[1],
+                         transform=transform)
 
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 

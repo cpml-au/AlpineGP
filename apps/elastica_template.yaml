@@ -1,25 +1,29 @@
 # template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 1000
-  NGEN: 100
+  NINDIVIDUALS: 10
+  NGEN: 10
   CXPB: 0
   MUTPB: 1.0
   frac_elitist: 0
-  min_: 1
-  max_: 3
+  min_: 2
+  max_: 5
   overlapping_generation: True
-  early_stopping: { "enabled": True, "max_overfit": 4}
+  early_stopping: { "enabled": True, "max_overfit": 10 }
   parsimony_pressure:
     { "enabled": False, "fitness_first": True, "parsimony_size": 1.5 }
-  penalty: { "method": "length", "reg_param": 0.1 }
+  penalty: { "method": "length", "reg_param": 0.01 }
   select:
     tournsize: 2
     stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
   mutate:
     # fun: gp.mutUniform
     fun: gp.mixedMutate
-    # kargs: "{'expr': toolbox.expr_mut, 'pset': pset}" # string is important
-    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.8, 0.1, 0.1]}" # string is important
+    # fun: gp.mutNodeReplacement
+    # fun: gp.mutInsert
+    # fun: gp.mutShrink
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.8, 0.2, 0.]}" # string is important
+    # kargs: "{'pset': pset}"
+    # kargs: "{}"
     expr_mut: gp.genHalfAndHalf
     # expr_mut: gp.genFull
     expr_mut_kargs: "{'min_': 1, 'max_': 3}"
@@ -30,10 +34,8 @@ gp:
     #kargs: "{'termpb' : 0.1}"
 
 plot:
-  plot_best: True
+  plot_best: False
   plot_best_genealogy: False
 
 mp:
-  n_splits: 2
   n_jobs: 2
-  start_method: "fork"
