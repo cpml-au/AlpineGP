@@ -46,7 +46,7 @@ config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 warnings.filterwarnings('ignore')
 
 # define primitive set and add primitives and terminals
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], C.Cochain)
 add_primitives(pset=pset)
 
 # list of types
@@ -71,7 +71,7 @@ def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
     return is_valid
 
 
-def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+def eval_MSE(residual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
              bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
              gamma: float, u_0: C.CochainP0, return_best_sol: bool = False) -> float:
 
@@ -86,7 +86,7 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         penalty = 0.5*gamma*jnp.sum((x[bnodes] - vec_bvalues)**2)
         c = C.CochainP0(S, x)
         fk = C.CochainP0(S, vec_y)
-        total_energy = energy_func(c, fk) + penalty
+        total_energy = C.inner_product(residual(c, fk), residual(c, fk)) + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(
@@ -196,6 +196,8 @@ def stgp_poisson(config_file, output_path=None):
     S, bnodes, triang = d.generate_complex(0.08)
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
+
+    pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(S.num_nodes, dtype = dctkit.float_dtype)), C.Cochain, name="ones")
 
     # extract boundary values
     bvalues_train = X_train[:, bnodes]
