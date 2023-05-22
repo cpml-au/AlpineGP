@@ -43,7 +43,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.Cochain)
 add_primitives(pset)
 
 # list of types
@@ -126,10 +126,10 @@ class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
 
-    def set_energy_func(self, func: Callable) -> None:
+    def set_residual(self, func: Callable) -> None:
         """Set the energy function to be used for the computation of the objective
         function."""
-        self.energy_func = func
+        self.residual = func
 
     # elastic energy including Dirichlet BC by elimination of the prescribed dofs
     def total_energy(self, theta_vec: npt.NDArray, FL2_EI0: float,
@@ -139,7 +139,8 @@ class Objectives():
         theta = C.CochainD0(self.S, theta_vec)
         FL2_EI0_coch = C.CochainD0(
             self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
-        energy = self.energy_func(theta, FL2_EI0_coch)
+        residual = self.residual(theta, FL2_EI0_coch)
+        energy = C.inner_product(residual, residual)
         return energy
 
     # state function: stationarity conditions for the total energy
@@ -156,7 +157,7 @@ class Objectives():
 
 
 @ray.remote(num_cpus=2)
-def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
+def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
              EI0_guess: float, theta_guess: npt.NDArray,
              theta_true: npt.NDArray, S: SimplicialComplex) -> float:
 
@@ -164,7 +165,7 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
     dim = S.num_nodes-2
 
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func)
+    obj.set_residual(residual)
 
     # prescribed angle at x=0
     theta_in = theta_true[0]
@@ -222,7 +223,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
     total_err = 0.
 
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func)
+    obj.set_residual(energy_func)
 
     # init X_dim and best_theta
     X_dim = X.shape[0]
@@ -366,6 +367,8 @@ def stgp_elastica(config_file, output_path=None):
 
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
+    dummy_coch = C.Cochain(dim=0, is_primal=True, complex=S, coeffs=100*internal_vec)
+    pset.addTerminal(dummy_coch, C.Cochain, name="dummy")
     internal_vec[0] = 0.
     internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
