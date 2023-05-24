@@ -3,7 +3,7 @@ import numpy.typing as npt
 from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
 from jax import grad, Array
-from deap import base, gp, tools
+from deap import base, gp, tools, creator
 from scipy import sparse
 from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
@@ -140,14 +140,24 @@ class Objectives():
         FL2_EI0_coch = C.CochainD0(
             self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         residual = self.residual(theta, FL2_EI0_coch)
-        energy = C.inner_product(residual, residual)
+        # cochain to zero residual on elements where BC is prescribed
+        mask = np.ones(self.S.num_nodes-1, dtype=dt.float_dtype)
+        mask[0] = 0.
+        mask_coch = C.CochainD0(self.S, mask)
+        # energy = jnp.linalg.norm(residual.coeffs[1:])**2
+        mask_residual = C.cochain_mul(mask_coch, residual)
+        energy = C.inner_product(mask_residual, mask_residual)
         return energy
 
     # state function: stationarity conditions for the total energy
     def total_energy_grad(self, x: npt.NDArray, theta_in: float) -> Array:
-        theta = x[:-1]
+        theta_vec = x[:-1]
         FL2_EI0 = x[-1]
-        return grad(self.total_energy)(theta, FL2_EI0, theta_in)
+        theta_vec = jnp.insert(theta_vec, 0, theta_in)
+        theta = C.CochainD0(self.S, theta_vec)
+        FL2_EI0_coch = C.CochainD0(
+            self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
+        return self.residual(theta, FL2_EI0_coch).coeffs[1:]
 
     # objective function for the parameter EI0 identification problem
     def MSE_theta(self, x: npt.NDArray, theta_true: npt.NDArray) -> Array:
@@ -199,7 +209,8 @@ def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
 
     x0 = np.append(theta_guess, FL2_EI0)
 
-    x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+    x = prb.run(x0=x0, maxeval=500)
+    # print(x[:-1], theta_true)
 
     # theta = x[:-1]
     FL2_EI0 = x[-1]
@@ -207,7 +218,7 @@ def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
     EI0 = FL2/FL2_EI0
 
     # if optimization failed, set negative EI0
-    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
+    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4):
         EI0 = -1
 
     return EI0
@@ -255,7 +266,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
             # and energies with minima that are too sensitive to the initial guess)
             valid_energy = is_valid_energy(theta_0=theta_0, theta=theta, prb=prb)
 
-            if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and valid_energy:
+            if (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4) and valid_energy:
                 x = np.append(theta, FL2_EI0)
                 fval = obj.MSE_theta(x, theta_true)
             else:
@@ -425,9 +436,9 @@ def stgp_elastica(config_file, output_path=None):
 
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
-    # opt_string = ""
-    # opt_individ = createIndividual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_string = "SubD0(delD1(St0(CochMulP0(int_coch, InvSt0(dD0(theta))))), CochMulD0(FL2_EI0, CosD0(theta)))"
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
     # MULTIPROCESSING SETTINGS ---------------------------------------------------------
     pool = Pool()
@@ -460,7 +471,7 @@ def stgp_elastica(config_file, output_path=None):
 
     start = time.perf_counter()
 
-    GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run,
+    GPproblem.run(plot_history=False, print_log=True, seed=seed, **GPproblem_run,
                   preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
 
     # print stats on best individual at the end of the evolution
