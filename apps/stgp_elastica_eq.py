@@ -43,7 +43,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
 # define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.Cochain)
+pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.CochainD0)
 add_primitives(pset)
 
 # list of types
@@ -141,12 +141,12 @@ class Objectives():
             self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
         residual = self.residual(theta, FL2_EI0_coch)
         # cochain to zero residual on elements where BC is prescribed
-        mask = np.ones(self.S.num_nodes-1, dtype=dt.float_dtype)
-        mask[0] = 0.
-        mask_coch = C.CochainD0(self.S, mask)
-        # energy = jnp.linalg.norm(residual.coeffs[1:])**2
-        mask_residual = C.cochain_mul(mask_coch, residual)
-        energy = C.inner_product(mask_residual, mask_residual)
+        # mask = np.ones(self.S.num_nodes-1, dtype=dt.float_dtype)
+        # mask[0] = 0.
+        # mask_coch = C.CochainD0(self.S, mask)
+        energy = jnp.linalg.norm(residual.coeffs[1:])**2
+        # mask_residual = C.cochain_mul(mask_coch, residual)
+        # energy = C.inner_product(mask_residual, mask_residual)
         return energy
 
     # state function: stationarity conditions for the total energy
@@ -166,7 +166,7 @@ class Objectives():
         return jnp.sum(jnp.square(theta-theta_true))
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
              EI0_guess: float, theta_guess: npt.NDArray,
              theta_true: npt.NDArray, S: SimplicialComplex) -> float:
@@ -295,7 +295,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
     return 10*total_err
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
                  y: npt.NDArray, S: SimplicialComplex, theta_0_all: npt.NDArray,
                  penalty: Dict, return_MSE=False) -> Tuple[float, ]:
@@ -378,8 +378,8 @@ def stgp_elastica(config_file, output_path=None):
 
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
-    dummy_coch = C.Cochain(dim=0, is_primal=True, complex=S, coeffs=100*internal_vec)
-    pset.addTerminal(dummy_coch, C.Cochain, name="dummy")
+    # dummy_coch = C.Cochain(dim=0, is_primal=True, complex=S, coeffs=100*internal_vec)
+    # pset.addTerminal(dummy_coch, C.Cochain, name="dummy")
     internal_vec[0] = 0.
     internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
@@ -436,9 +436,9 @@ def stgp_elastica(config_file, output_path=None):
 
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
-    opt_string = "SubD0(delD1(St0(CochMulP0(int_coch, InvSt0(dD0(theta))))), CochMulD0(FL2_EI0, CosD0(theta)))"
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_string = "SubD0(delD1(St0(CochMulP0(int_coch, InvSt0(dD0(theta))))), CochMulD0(FL2_EI0, CosD0(theta)))"
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
     # MULTIPROCESSING SETTINGS ---------------------------------------------------------
     pool = Pool()
@@ -471,7 +471,7 @@ def stgp_elastica(config_file, output_path=None):
 
     start = time.perf_counter()
 
-    GPproblem.run(plot_history=False, print_log=True, seed=seed, **GPproblem_run,
+    GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run,
                   preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
 
     # print stats on best individual at the end of the evolution
