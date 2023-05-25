@@ -297,7 +297,7 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
     #     indstr = str(individual)
     #     objval = total_err + penalty["reg_param"] * \
     #         max([indstr.count(string) for string in primitives_strings])
-    if penalty["method"] == "length":
+    if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
     else:

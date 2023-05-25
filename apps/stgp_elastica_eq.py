@@ -166,7 +166,7 @@ class Objectives():
         return jnp.sum(jnp.square(theta-theta_true))
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=2)
 def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
              EI0_guess: float, theta_guess: npt.NDArray,
              theta_true: npt.NDArray, S: SimplicialComplex) -> float:
@@ -295,7 +295,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
     return 10*total_err
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=2)
 def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
                  y: npt.NDArray, S: SimplicialComplex, theta_0_all: npt.NDArray,
                  penalty: Dict, return_MSE=False) -> Tuple[float, ]:
@@ -309,7 +309,7 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
     #     indstr = str(individual)
     #     objval = total_err + penalty["reg_param"] * \
     #         max([indstr.count(string) for string in primitives_strings])
-    if penalty["method"] == "length":
+    if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
     else:
