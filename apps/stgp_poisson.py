@@ -192,7 +192,7 @@ def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
     S, bnodes, triang = pd.generate_complex(0.08)
     num_nodes = S.num_nodes
-    X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
+    X_train, X_val, X_test, y_train, y_val, y_test = pd.load_dataset()
 
     # extract boundary values
     bvalues_train = X_train[:, bnodes]

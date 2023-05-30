@@ -110,6 +110,8 @@ def creator_toolbox_config(config_file: Dict, pset: gp.PrimitiveSetTyped) -> Tup
 class GPSymbRegProblem():
     def __init__(self,
                  pset,
+                 toolbox,
+                 individualCreator,
                  NINDIVIDUALS=10,
                  NGEN=1,
                  CXPB=0.5,
@@ -122,9 +124,7 @@ class GPSymbRegProblem():
                  tournsize=3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  min_=1,
-                 max_=2,
-                 individualCreator=None,
-                 toolbox=None):
+                 max_=2):
         """Symbolic regression problem via GP.
 
             Args:
@@ -157,18 +157,11 @@ class GPSymbRegProblem():
         # Elitism settings
         self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
 
-        if individualCreator is None:
-            self.__default_creator()
-        else:
-            self.createIndividual = individualCreator
+        self.createIndividual = individualCreator
 
-        # If toolbox is not provided, initialize it with default values
-        if toolbox is None:
-            self.__default_toolbox(pset, min_, max_)
-        else:
-            self.toolbox = toolbox
-            # FIXME: move this instruction in the initialization of the toolbox
-            self.toolbox.register("select", self.select_with_elitism)
+        self.toolbox = toolbox
+        # FIXME: move this instruction in the initialization of the toolbox
+        self.toolbox.register("select", self.select_with_elitism)
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
@@ -199,47 +192,6 @@ class GPSymbRegProblem():
             self.logbook.header = "gen", "evals", "fitness", "size"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.logbook.chapters["size"].header = "min", "avg", "max", "std"
-
-    def __default_creator(self):
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
-        creator.create("Individual",
-                       gp.PrimitiveTree,
-                       fitness=creator.FitnessMin)
-        self.createIndividual = creator.Individual
-
-    def __default_toolbox(self, pset, min_, max_):
-        # Register functions to create individuals and initialize population
-        self.toolbox = base.Toolbox()
-        self.toolbox.register("expr",
-                              gp.genHalfAndHalf,
-                              pset=pset,
-                              min_=min_,
-                              max_=max_)
-        self.toolbox.register("expr_pop",
-                              gp.genHalfAndHalf,
-                              pset=pset,
-                              min_=min_,
-                              max_=max_,
-                              is_pop=True)
-        self.toolbox.register("individual", tools.initIterate,
-                              self.createIndividual, self.toolbox.expr)
-        self.toolbox.register("individual_pop", tools.initIterate,
-                              self.createIndividual, self.toolbox.expr_pop)
-        self.toolbox.register("population", tools.initRepeat,
-                              list, self.toolbox.individual_pop)
-        self.toolbox.register("compile", gp.compile, pset=pset)
-
-        # Register selection with elitism operator
-        self.toolbox.register("select", self.select_with_elitism)
-
-        # Register mate and mutate operators
-        self.toolbox.register("mate", gp.cxOnePoint)
-        self.toolbox.register("expr_mut", gp.genGrow, min_=1, max_=3)
-        self.toolbox.register("mutate",
-                              gp.mutUniform,
-                              expr=self.toolbox.expr_mut,
-                              pset=pset)
-        self.toolbox.register("map", map)
 
     def __overfit_measure(self, training_fit, validation_fit):
         if (training_fit > validation_fit):
