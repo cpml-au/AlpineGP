@@ -5,7 +5,7 @@ from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
-from alpine.data.poisson import poisson_dataset as d
+from alpine.data.poisson import poisson_dataset as pd
 from alpine.gp import gpsymbreg as gps
 from alpine.gp import primitives
 from dctkit import config, FloatDtype, IntDtype, Backend, Platform
@@ -53,7 +53,7 @@ warnings.filterwarnings('ignore')
 # primitives_strings = gps.get_primitives_strings(pset, types)
 
 
-noise = d.load_noise()
+noise = pd.load_noise()
 
 
 def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
@@ -190,7 +190,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
-    S, bnodes, triang = d.generate_complex(0.08)
+    S, bnodes, triang = pd.generate_complex(0.08)
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
 

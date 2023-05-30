@@ -1,0 +1,30 @@
+name: Linting and testing
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        sudo apt-get -y install libglu1
+        python -m pip install --upgrade pip
+        python -m pip install tox-conda
+        python -m pip install flake8
+    - name: Linting with flake8
+      run: |
+        flake8
+    - name: Running tests with tox
+      run: tox

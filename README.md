@@ -16,13 +16,21 @@
 _Alpine_ is a Python library that helps to build algorithms that learn *symbolic* models
 of _physical systems_ starting from data. It combines the _Discrete Calculus_ framework
 implemented in the library [`dctkit`](https://github.com/alucantonio/dctkit) with the
-Genetic Programming approach to symbolic regression via the
+Strongly-Typed Genetic Programming approach to symbolic regression _via_ the
 [`DEAP`](https://github.com/alucantonio/DEAP) library.
 
 ## Installation
 
-Clone the git repository and install the required libraries listed in the file
-`requirements.txt`. Then, launch the following command
+Dependencies should be installed within a `conda` environment. To create a suitable
+environment based on the provided `.yaml` file, use the command
+
+```bash
+$ conda env create -f environment.yaml
+```
+
+Otherwise, update an existing environment using the same `.yaml` file.
+
+After activating the environment, clone the git repository and launch the following command
 
 ```bash
 $ pip install -e .
@@ -43,5 +51,7 @@ $ tox -e docs
 ```
 
 ## Usage
+```python
 
+```
 

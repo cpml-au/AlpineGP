@@ -1,12 +1,10 @@
 import numpy as np
-# import multiprocessing
 import gmsh
 from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
 import os
 from sklearn.model_selection import train_test_split
 from matplotlib import tri
-import matplotlib.pyplot as plt
 
 
 cwd = os.path.dirname(simplex.__file__)
@@ -71,9 +69,6 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
             # ith quadratic function
             u_i = (i+1)*np.exp(np.sin(x)) + ((i+1)**2)*np.exp(np.cos(y))
             u_i_coch = C.CochainP0(S, u_i)
-            #f_i = -(i+1)*(np.exp(np.sin(x))*(np.cos(x))
-            #              ** 2 - np.exp(np.sin(x))*np.sin(x)) + ((i+1)**2)*(-np.exp(np.cos(y))*(np.sin(y))**2 +
-            #                                                                np.exp(np.cos(y))*np.cos(y))
             f_i = C.laplacian(u_i_coch).coeffs
             data_X[num_sources*i, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i, :] = f_i
@@ -83,7 +78,7 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
             u_i = (i+1)*np.log(1 + x) + \
                 1/(i+1)*np.log(1 + y)
             u_i_coch = C.CochainP0(S, u_i)
-            #f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
+            # f_i = (i+1)/((1 + x)**2) + 1/((i+1)*(1+y)**2)
             f_i = C.laplacian(u_i_coch).coeffs
             data_X[num_sources*i+1, :] = u_i + (max(u_i) - min(u_i))*noise
             data_y[num_sources*i+1, :] = f_i
