@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
 from alpine.models.poisson import add_primitives
-from alpine.data import poisson_dataset as d
+from alpine.data.poisson import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
 from dctkit import config, FloatDtype, IntDtype, Backend, Platform
 import dctkit
@@ -169,6 +169,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     # the refs of these objects are not automatically converted to objects
     # (because we are not calling plot_sol via .remote())
     bnodes = ray.get(bnodes)
+    bvalues = ray.get(bvalues)
     gamma = ray.get(gamma)
     u_0 = ray.get(u_0)
     S = ray.get(S)
@@ -258,8 +259,9 @@ def stgp_poisson(config_file, output_path=None):
     toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
 
     if GPproblem_run['plot_best']:
-        toolbox.register("plot_best_func", plot_sol, **args_val_MSE,
-                         toolbox=toolbox, triang=triang)
+        toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
+                         bvalues=bvalues_val_ref, S=S_ref, bnodes=bnodes_ref,
+                         gamma=gamma_ref, u_0=u_0_ref, toolbox=toolbox, triang=triang)
 
     # create symbolic regression problem instance
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)

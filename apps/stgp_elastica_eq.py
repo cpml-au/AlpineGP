@@ -12,7 +12,7 @@ from dctkit.dec import cochain as C
 from dctkit import config, FloatDtype, IntDtype, Backend, Platform
 from dctkit.math.opt import optctrl as oc
 import dctkit as dt
-from alpine.data.elastica_data import elastica_dataset as ed
+from alpine.data.elastica import elastica_dataset as ed
 from alpine.models.elastica import add_primitives
 from alpine.gp import gpsymbreg as gps
 import matplotlib.pyplot as plt
@@ -326,6 +326,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
     # the refs of these objects are not automatically converted to objects
     # (because we are not calling plot_sol via .remote())
     X = ray.get(X)
+    y = ray.get(y)
     S = ray.get(S)
     indfun = toolbox.compile(expr=ind)
 

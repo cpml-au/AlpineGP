@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import dctkit as dt
-from alpine.data.poisson_dataset import split_dataset
+from alpine.data.poisson.poisson_dataset import split_dataset
 
 data_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -32,12 +32,12 @@ def save_data(noise):
     X, y = split_dataset(data_X, data_y, 0.3, 0.2, True)
     X_train, X_valid, X_test = X
     y_train, y_valid, y_test = y
-    np.savetxt("X_train_elastica.csv", X_train, delimiter=",")
-    np.savetxt("X_valid_elastica.csv", X_valid, delimiter=",")
-    np.savetxt("X_test_elastica.csv", X_test, delimiter=",")
-    np.savetxt("y_train_elastica.csv", y_train, delimiter=",")
-    np.savetxt("y_valid_elastica.csv", y_valid, delimiter=",")
-    np.savetxt("y_test_elastica.csv", y_test, delimiter=",")
+    np.savetxt("X_train.csv", X_train, delimiter=",")
+    np.savetxt("X_valid.csv", X_valid, delimiter=",")
+    np.savetxt("X_test.csv", X_test, delimiter=",")
+    np.savetxt("y_train.csv", y_train, delimiter=",")
+    np.savetxt("y_valid.csv", y_valid, delimiter=",")
+    np.savetxt("y_test.csv", y_test, delimiter=",")
 
 
 def load_dataset():
@@ -53,17 +53,17 @@ def load_dataset():
 
 
     """
-    X_train = np.loadtxt(os.path.join(data_path, "X_train_elastica.csv"),
+    X_train = np.loadtxt(os.path.join(data_path, "X_train.csv"),
                          dtype=float, delimiter=",")
-    X_valid = np.loadtxt(os.path.join(data_path, "X_valid_elastica.csv"),
+    X_valid = np.loadtxt(os.path.join(data_path, "X_valid.csv"),
                          dtype=float, delimiter=",")
-    X_test = np.loadtxt(os.path.join(data_path, "X_test_elastica.csv"),
+    X_test = np.loadtxt(os.path.join(data_path, "X_test.csv"),
                         dtype=float, delimiter=",")
-    y_train = np.loadtxt(os.path.join(data_path, "y_train_elastica.csv"),
+    y_train = np.loadtxt(os.path.join(data_path, "y_train.csv"),
                          dtype=float, delimiter=",")
-    y_valid = np.loadtxt(os.path.join(data_path, "y_valid_elastica.csv"),
+    y_valid = np.loadtxt(os.path.join(data_path, "y_valid.csv"),
                          dtype=float, delimiter=",")
-    y_test = np.loadtxt(os.path.join(data_path, "y_test_elastica.csv"),
+    y_test = np.loadtxt(os.path.join(data_path, "y_test.csv"),
                         dtype=float, delimiter=",")
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
