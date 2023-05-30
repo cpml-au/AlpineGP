@@ -41,6 +41,7 @@ def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tupl
     GPproblem_settings['parsimony_pressure'] = config_file_data["gp"]["parsimony_pressure"]
     GPproblem_settings['tournsize'] = config_file_data["gp"]["select"]["tournsize"]
     GPproblem_settings['stochastic_tournament'] = config_file_data["gp"]["select"]["stochastic_tournament"]
+    GPproblem_settings['primitives'] = config_file_data["gp"]["primitives"]
 
     individualCreator, toolbox = creator_toolbox_config(
         config_file=config_file_data, pset=pset)

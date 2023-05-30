@@ -5,9 +5,9 @@ from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
-from alpine.models.poisson import add_primitives
 from alpine.data.poisson import poisson_dataset as d
 from alpine.gp import gpsymbreg as gps
+from alpine.gp import primitives
 from dctkit import config, FloatDtype, IntDtype, Backend, Platform
 import dctkit
 
@@ -45,16 +45,12 @@ config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 # suppress warnings
 warnings.filterwarnings('ignore')
 
-# define primitive set and add primitives and terminals
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
-add_primitives(pset=pset)
-
 # list of types
-types = [C.CochainP0, C.CochainP1, C.CochainP2,
-         C.CochainD0, C.CochainD1, C.CochainD2, float]
+# types = [C.CochainP0, C.CochainP1, C.CochainP2,
+#          C.CochainD0, C.CochainD1, C.CochainD2, float]
 
-# extract list of names of primitives
-primitives_strings = gps.get_primitives_strings(pset, types)
+# # extract list of names of primitives
+# primitives_strings = gps.get_primitives_strings(pset, types)
 
 
 noise = d.load_noise()
@@ -210,12 +206,28 @@ def stgp_poisson(config_file, output_path=None):
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
     u_0 = C.CochainP0(S, u_0_vec)
 
+    # define primitive set and add primitives and terminals
+    pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
+
     # set parameters from config file
     GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
         config_file_data=config_file, pset=pset)
     toolbox = GPproblem_settings['toolbox']
     penalty = GPproblem_extra['penalty']
-    n_jobs = GPproblem_extra['n_jobs']
+    # n_jobs = GPproblem_extra['n_jobs']
+
+    primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
+
+    # add constants
+    pset.addTerminal(0.5, float, name="1/2")
+    pset.addTerminal(-1., float, name="-1")
+    pset.addTerminal(2., float, name="2")
+
+    # rename arguments
+    pset.renameArguments(ARG0="u")
+    pset.renameArguments(ARG1="fk")
+
+    GPproblem_settings.pop('primitives')
 
     ray.init()
 

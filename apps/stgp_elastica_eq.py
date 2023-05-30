@@ -2,8 +2,8 @@ import numpy as np
 import numpy.typing as npt
 from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
-from jax import grad, Array
-from deap import base, gp, tools, creator
+from jax import Array
+from deap import base, gp, tools
 from scipy import sparse
 from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
@@ -13,8 +13,8 @@ from dctkit import config, FloatDtype, IntDtype, Backend, Platform
 from dctkit.math.opt import optctrl as oc
 import dctkit as dt
 from alpine.data.elastica import elastica_dataset as ed
-from alpine.models.elastica import add_primitives
 from alpine.gp import gpsymbreg as gps
+from alpine.gp import primitives
 import matplotlib.pyplot as plt
 import math
 import sys
@@ -41,16 +41,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
-
-# define primitive set
-pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.CochainD0)
-add_primitives(pset)
-
-# list of types
-types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
-
-# extract list of names of primitives
-primitives_strings = gps.get_primitives_strings(pset, types)
 
 
 def get_coords(X: tuple, transform: np.array) -> list:
@@ -377,10 +367,17 @@ def stgp_elastica(config_file, output_path=None):
     # get all theta_0
     theta_0_all = theta_guesses(x_all, y_all)
 
+    # define primitive set
+    pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.CochainD0)
+
+    # set parameters from config file
+    GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
+        config_file_data=config_file, pset=pset)
+    toolbox = GPproblem_settings['toolbox']
+    penalty = GPproblem_extra['penalty']
+
     # define internal cochain
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
-    # dummy_coch = C.Cochain(dim=0, is_primal=True, complex=S, coeffs=100*internal_vec)
-    # pset.addTerminal(dummy_coch, C.Cochain, name="dummy")
     internal_vec[0] = 0.
     internal_vec[-1] = 0.
     internal_coch = C.CochainP0(complex=S, coeffs=internal_vec)
@@ -388,11 +385,18 @@ def stgp_elastica(config_file, output_path=None):
     # add it as a terminal
     pset.addTerminal(internal_coch, C.CochainP0, name="int_coch")
 
-    # set parameters from config file
-    GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
-        config_file_data=config_file, pset=pset)
-    toolbox = GPproblem_settings['toolbox']
-    penalty = GPproblem_extra['penalty']
+    primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
+
+    # add constants
+    pset.addTerminal(0.5, float, name="1/2")
+    pset.addTerminal(-1., float, name="-1")
+    pset.addTerminal(2., float, name="2")
+
+    # rename arguments
+    pset.renameArguments(ARG0="theta")
+    pset.renameArguments(ARG1="FL2_EI0")
+
+    GPproblem_settings.pop('primitives')
 
     ray.init()
 
