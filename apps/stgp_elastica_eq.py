@@ -9,7 +9,7 @@ from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
 from dctkit.dec import cochain as C
-from dctkit import config, FloatDtype, IntDtype, Backend, Platform
+from dctkit import config
 from dctkit.math.opt import optctrl as oc
 import dctkit as dt
 from alpine.data.elastica import elastica_dataset as ed
@@ -40,7 +40,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
-config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+config()
 
 
 def get_coords(X: tuple, transform: np.array) -> list:
@@ -172,7 +172,7 @@ def tune_EI0(residual: Callable, EI0: float, indlen: int, FL2: float,
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
-    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+    config()
 
     # run parameter identification on the first sample of the training set
     # set extra args for bilevel program
@@ -232,7 +232,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
-    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+    config()
 
     if EI0 < 0:
         total_err = 40.

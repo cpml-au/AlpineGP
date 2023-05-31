@@ -8,7 +8,7 @@ from deap import gp, base
 from alpine.data.poisson import poisson_dataset as pd
 from alpine.gp import gpsymbreg as gps
 from alpine.gp import primitives
-from dctkit import config, FloatDtype, IntDtype, Backend, Platform
+from dctkit import config
 import dctkit
 
 from ray.util.multiprocessing import Pool
@@ -40,7 +40,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
-config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+config()
 
 # suppress warnings
 warnings.filterwarnings('ignore')
@@ -75,7 +75,7 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
-    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+    config()
 
     # create objective function and set its energy function
     def total_energy(x, vec_y, vec_bvalues):

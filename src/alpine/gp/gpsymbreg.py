@@ -61,7 +61,7 @@ def load_config_data(config_file_data: Dict,
 def creator_toolbox_config(config_file: Dict,
                            pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree,
                                                                 base.Toolbox]:
-    # initialize toolbox and creator
+    # initialize toolbox and individual creator
     toolbox = base.Toolbox()
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
     creator.create("Individual",
@@ -111,19 +111,19 @@ def creator_toolbox_config(config_file: Dict,
 
 class GPSymbRegProblem():
     def __init__(self,
-                 pset,
-                 toolbox,
-                 individualCreator,
+                 pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
+                 toolbox: base.Toolbox,
+                 individualCreator: gp.PrimitiveTree,
                  NINDIVIDUALS=10,
-                 NGEN=1,
-                 CXPB=0.5,
-                 MUTPB=0.2,
-                 frac_elitist=0.,
-                 overlapping_generation=False,
+                 NGEN: int = 1,
+                 CXPB: float = 0.5,
+                 MUTPB: float = 0.2,
+                 frac_elitist: float = 0.,
+                 overlapping_generation: bool = False,
                  parsimony_pressure={'enabled': False,
                                      'fitness_first': True,
                                      'parsimony_size': 1.5},
-                 tournsize=3,
+                 tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  min_=1,
                  max_=2):

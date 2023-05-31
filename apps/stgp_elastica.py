@@ -9,7 +9,7 @@ from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_1_D_mesh
 from dctkit.dec import cochain as C
-from dctkit import config, FloatDtype, IntDtype, Backend, Platform
+from dctkit import config
 from dctkit.math.opt import optctrl as oc
 import dctkit as dt
 from alpine.data.elastica import elastica_dataset as ed
@@ -40,7 +40,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
-config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+config()
 
 
 # list of types
@@ -51,8 +51,8 @@ config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
 
 
 def get_coords(X: tuple, transform: np.array) -> list:
-    """Get x,y coordinates given a tuple containing all theta matrices. 
-    To do it, we have to solve two linear systems Ax = b_x, Ay = b_y, 
+    """Get x,y coordinates given a tuple containing all theta matrices.
+    To do it, we have to solve two linear systems Ax = b_x, Ay = b_y,
     where A is a block diagonal matrix where each block is bidiagonal.
 
     Args:
@@ -115,8 +115,8 @@ def is_valid_energy(theta_0: npt.NDArray, theta: npt.NDArray,
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_0_noise = theta_0 + noise
     theta_noise = prb.run(x0=theta_0_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
-    isnt_constant = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
-    return isnt_constant
+    is_valid = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
+    return is_valid
 
 
 class Objectives():
@@ -168,7 +168,7 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
-    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+    config()
 
     # run parameter identification on the first sample of the training set
     # set extra args for bilevel program
@@ -227,7 +227,7 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
-    config(FloatDtype.float64, IntDtype.int64, Backend.jax, Platform.cpu)
+    config()
 
     if EI0 < 0:
         total_err = 40.
