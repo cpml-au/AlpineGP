@@ -479,13 +479,7 @@ def stgp_elastica(config_file, output_path=None):
     GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run,
                   preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
 
-    # print stats on best individual at the end of the evolution
     best = GPproblem.best
-    print(f"The best individual is {str(best)}", flush=True)
-    print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
-
-    if GPproblem_run['early_stopping']['enabled']:
-        print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), best.EI0,
                           len(str(best)), X_test, y_test, S=S,

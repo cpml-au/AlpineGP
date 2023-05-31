@@ -15,7 +15,6 @@ from ray.util.multiprocessing import Pool
 import ray
 
 import numpy as np
-import warnings
 import jax.numpy as jnp
 import math
 import time
@@ -25,8 +24,6 @@ import os
 from os.path import join
 from typing import Tuple, Callable
 import numpy.typing as npt
-
-apps_path = os.path.dirname(os.path.realpath(__file__))
 
 # reducing the number of threads launched by eval_fitness
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -41,17 +38,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config()
-
-# suppress warnings
-warnings.filterwarnings('ignore')
-
-# list of types
-# types = [C.CochainP0, C.CochainP1, C.CochainP2,
-#          C.CochainD0, C.CochainD1, C.CochainD2, float]
-
-# # extract list of names of primitives
-# primitives_strings = gps.get_primitives_strings(pset, types)
-
 
 noise = pd.load_noise()
 
@@ -141,11 +127,6 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    # if penalty["method"] == "primitive" and not return_MSE:
-    #     # penalty terms on primitives
-    #     indstr = str(individual)
-    #     objval = total_err + penalty["reg_param"] * \
-    #         max([indstr.count(string) for string in primitives_strings])
     if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
@@ -214,7 +195,6 @@ def stgp_poisson(config_file, output_path=None):
         config_file_data=config_file, pset=pset)
     toolbox = GPproblem_settings['toolbox']
     penalty = GPproblem_extra['penalty']
-    # n_jobs = GPproblem_extra['n_jobs']
 
     primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
 
@@ -303,13 +283,7 @@ def stgp_poisson(config_file, output_path=None):
 
     GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run)
 
-    # print stats on best individual at the end of the evolution
     best = GPproblem.best
-    print(f"The best individual is {str(best)}", flush=True)
-    print(f"The best fitness on the training set is {GPproblem.train_fit_history[-1]}")
-
-    if GPproblem_run['early_stopping']['enabled']:
-        print(f"The best fitness on the validation set is {GPproblem.min_valerr}")
 
     score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)),
                           X_test, y_test, bvalues_test, S=S,

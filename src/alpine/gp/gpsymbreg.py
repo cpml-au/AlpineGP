@@ -486,5 +486,11 @@ class GPSymbRegProblem():
 
         print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
+        print(f"The best individual is {str(best)}", flush=True)
+        print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
+
+        if early_stopping['enabled']:
+            print(f"The best fitness on the validation set is {self.min_valerr}")
+
         if plot_best_genealogy:
             self.__plot_genealogy(best)
