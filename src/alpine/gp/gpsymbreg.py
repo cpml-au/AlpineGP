@@ -1,5 +1,4 @@
 from deap import algorithms, tools, gp, base, creator
-from operator import attrgetter
 import matplotlib.pyplot as plt
 import numpy as np
 import operator
@@ -25,7 +24,8 @@ def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]
     return primitives_strings
 
 
-def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict]:
+def load_config_data(config_file_data: Dict,
+                     pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict, Dict]:
     GPproblem_settings = dict()
     GPproblem_extra = dict()
     GPproblem_run = dict()
@@ -58,7 +58,9 @@ def load_config_data(config_file_data: Dict, pset: gp.PrimitiveSetTyped) -> Tupl
     return GPproblem_settings, GPproblem_run, GPproblem_extra
 
 
-def creator_toolbox_config(config_file: Dict, pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree, base.Toolbox]:
+def creator_toolbox_config(config_file: Dict,
+                           pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree,
+                                                                base.Toolbox]:
     # initialize toolbox and creator
     toolbox = base.Toolbox()
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
@@ -262,35 +264,14 @@ class GPSymbRegProblem():
                                                        ['parsimony_size'])
 
         if self.stochastic_tournament['enabled']:
-            return bestind + self.selStochasticTournament(individuals, n_tournament,
-                                                          tournsize=self.tournsize,
-                                                          prob=self.
-                                                          stochastic_tournament['prob'])
+            return bestind + tools.selStochasticTournament(individuals, n_tournament,
+                                                           tournsize=self.tournsize,
+                                                           prob=self.
+                                                           stochastic_tournament['prob']
+                                                           )
         else:
             return bestind + tools.selTournament(individuals, n_tournament,
                                                  tournsize=self.tournsize)
-            # return bestind + tools.selRandom(individuals, n_tournament)
-
-    def selStochasticTournament(self, individuals, k, tournsize, prob,
-                                fit_attr="fitness"):
-        """Select the best individual among *tournsize* randomly chosen individuals, *k*
-        times. The list returned contains references to the input *individuals*.
-
-        Args:
-            individuals: A list of individuals to select from.
-            k: The number of individuals to select.
-            tournsize: The number of individuals participating in each tournament.
-            fit_attr: The attribute of individuals to use as selection criterion
-        Returns:
-            A list of selected individuals.
-        """
-        chosen = []
-        for _ in range(k):
-            aspirants = tools.selection.selRandom(individuals, tournsize)
-            aspirants.sort(key=attrgetter(fit_attr), reverse=True)
-            chosen_index = int(np.random.choice(range(tournsize), 1, p=prob))
-            chosen.append(aspirants[chosen_index])
-        return chosen
 
     def __plot_history(self):
         if not self.plot_initialized:
@@ -350,6 +331,12 @@ class GPSymbRegProblem():
 
             Args:
                 plot_history: whether to plot fitness vs generation number.
+                print_log: whether to print the log containing the population statistics
+                    during the run.
+                plot_best: whether to show the plot of the solution corresponding to the
+                    best individual every plot_freq generations.
+                plot_freq: frequency (number of generations) of the plot of the best
+                    individual.
                 seed: list of individuals to seed in the initial population.
                 preprocess_fun: function to call before evaluating the fitness of the
                     individuals of each generation.

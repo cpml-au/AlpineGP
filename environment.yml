@@ -1,0 +1,19 @@
+name: alpine
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - gmsh=4.11.1
+  - jax
+  - jaxopt
+  - numpy=1.24.2
+  - pygmo=2.19.5
+  - python=3.11.0
+  - python-gmsh
+  - scipy=1.10.0
+  - typeguard
+  - yaml=0.2.5
+  - pip:
+      - sphinx_rtd_theme
+      - myst-parser[linkify]
+      - sphinx>=3.2.1
