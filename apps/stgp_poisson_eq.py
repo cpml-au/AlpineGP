@@ -15,7 +15,6 @@ from ray.util.multiprocessing import Pool
 import ray
 
 import numpy as np
-import warnings
 import jax.numpy as jnp
 import math
 import time
@@ -25,8 +24,6 @@ import os
 from os.path import join
 from typing import Tuple, Callable
 import numpy.typing as npt
-
-apps_path = os.path.dirname(os.path.realpath(__file__))
 
 # reducing the number of threads launched by eval_fitness
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -41,10 +38,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config()
-
-# suppress warnings
-warnings.filterwarnings('ignore')
-
 
 noise = d.load_noise()
 

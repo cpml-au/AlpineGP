@@ -29,7 +29,7 @@ def load_config_data(config_file_data: Dict,
     GPproblem_settings = dict()
     GPproblem_extra = dict()
     GPproblem_run = dict()
-    GPproblem_settings['NINDIVIDUALS'] = config_file_data["gp"]["NINDIVIDUALS"]
+    GPproblem_settings["NINDIVIDUALS"] = config_file_data["gp"]["NINDIVIDUALS"]
     GPproblem_settings['NGEN'] = config_file_data["gp"]["NGEN"]
     GPproblem_settings['CXPB'] = config_file_data["gp"]["CXPB"]
     GPproblem_settings['MUTPB'] = config_file_data["gp"]["MUTPB"]
