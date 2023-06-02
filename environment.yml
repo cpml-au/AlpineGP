@@ -15,5 +15,6 @@ dependencies:
   - yaml=0.2.5
   - pip:
       - sphinx_rtd_theme
+      - git+https://github.com/alucantonio/dctkit
       - myst-parser[linkify]
       - sphinx>=3.2.1

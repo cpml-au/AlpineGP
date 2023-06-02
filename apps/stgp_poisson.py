@@ -296,23 +296,9 @@ def stgp_poisson(config_file, output_path=None):
     pool.close()
     ray.shutdown()
 
-    # plot the tree of the best individual
-    # nodes, edges, labels = gp.graph(best)
-    # graph = nx.Graph()
-    # graph.add_nodes_from(nodes)
-    # graph.add_edges_from(edges)
-    # pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-    # plt.figure(figsize=(7, 7))
-    # nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-    # nx.draw_networkx_edges(graph, pos)
-    # nx.draw_networkx_labels(graph, pos, labels)
-    # plt.axis("off")
-    # plt.show()
+    GPproblem.save_best_individual(output_path)
 
-    # save string of best individual in .txt file
-    file = open(join(output_path, "best_ind.txt"), "w")
-    file.write(str(best))
-    file.close()
+    GPproblem.plot_best_individual_tree()
 
     # save data for plots to disk
     np.save(join(output_path, "train_fit_history.npy"),

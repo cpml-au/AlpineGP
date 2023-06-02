@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import operator
 from typing import Tuple, List, Dict
+from os.path import join
+import networkx as nx
 
 
 def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
@@ -107,6 +109,20 @@ def creator_toolbox_config(config_file: Dict,
     toolbox.register("compile", gp.compile, pset=pset)
 
     return createIndividual, toolbox
+
+    # # save data for plots to disk
+    # np.save(join(output_path, "train_fit_history.npy"),
+    #         GPproblem.train_fit_history)
+    # if GPproblem_run['early_stopping']['enabled']:
+    #     np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
+
+    # best_sols = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)), X=X_test,
+    #                      y=y_test, bvalues=bvalues_test, S=S, bnodes=bnodes,
+    #                      gamma=gamma, u_0=u_0, return_best_sol=True)
+
+    # for i, sol in enumerate(best_sols):
+    #     np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
+    #     np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
 
 
 class GPSymbRegProblem():
@@ -494,3 +510,25 @@ class GPSymbRegProblem():
 
         if plot_best_genealogy:
             self.__plot_genealogy(best)
+
+    def plot_best_individual_tree(self):
+        """Plots the tree of the best individual."""
+        nodes, edges, labels = gp.graph(self.best)
+        graph = nx.Graph()
+        graph.add_nodes_from(nodes)
+        graph.add_edges_from(edges)
+        pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
+        plt.figure(figsize=(7, 7))
+        nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
+        nx.draw_networkx_edges(graph, pos)
+        nx.draw_networkx_labels(graph, pos, labels)
+        plt.axis("off")
+        plt.show()
+
+    def save_best_individual(self, output_path: str):
+        """Saves the string of the best individual of the population
+            in a .txt file.
+        """
+        file = open(join(output_path, "best_ind.txt"), "w")
+        file.write(str(self.best))
+        file.close()
