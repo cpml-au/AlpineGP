@@ -78,7 +78,6 @@ def eval_MSE(residual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
     best_sols = []
 
-    # TODO: parallelize
     for i, vec_y in enumerate(y):
         # extract current bvalues
         vec_bvalues = bvalues[i, :]
@@ -127,11 +126,6 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    # if penalty["method"] == "primitive" and not return_MSE:
-    #     # penalty terms on primitives
-    #     indstr = str(individual)
-    #     objval = total_err + penalty["reg_param"] * \
-    #         max([indstr.count(string) for string in primitives_strings])
     if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
@@ -161,6 +155,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                  bnodes=bnodes, gamma=gamma, u_0=u_0, return_best_sol=True)
 
     plt.figure(10, figsize=(8, 4))
+    plt.clf()
     fig = plt.gcf()
     _, axes = plt.subplots(2, 3, num=10)
     for i in range(0, 3):
@@ -176,7 +171,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
-    S, bnodes, triang = d.generate_complex(0.08)
+    S, bnodes, triang = d.generate_square_complex(0.08)
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = d.load_dataset()
 
@@ -194,6 +189,7 @@ def stgp_poisson(config_file, output_path=None):
 
     # define primitive set and add primitives and terminals
     pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], C.Cochain)
+    # ones cochain
     pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(
         S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="ones")
 
@@ -202,18 +198,17 @@ def stgp_poisson(config_file, output_path=None):
         config_file_data=config_file, pset=pset)
     toolbox = GPproblem_settings['toolbox']
     penalty = GPproblem_extra['penalty']
-    # n_jobs = GPproblem_extra['n_jobs']
 
     primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
 
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
-    pset.addTerminal(-1., float, name="-1")
-    pset.addTerminal(2., float, name="2")
+    pset.addTerminal(-1., float, name="-1.")
+    pset.addTerminal(2., float, name="2.")
 
     # rename arguments
     pset.renameArguments(ARG0="u")
-    pset.renameArguments(ARG1="fk")
+    pset.renameArguments(ARG1="f")
 
     GPproblem_settings.pop('primitives')
 
@@ -241,7 +236,7 @@ def stgp_poisson(config_file, output_path=None):
         args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val_ref,
                         'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
                         'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': True}
-        # register functions for fitness/MSE evaluation on different datasets
+
         toolbox.register("evaluate_val_fit", eval_fitness.remote, **args_val_fit)
         toolbox.register("evaluate_val_MSE", eval_fitness.remote, **args_val_MSE)
     else:
@@ -257,6 +252,11 @@ def stgp_poisson(config_file, output_path=None):
 
     # register functions for fitness/MSE evaluation on different datasets
     toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
+    args_test_MSE = {'X': X_test, 'y': y_test, 'indlen': 0, 'bvalues': bvalues_test,
+                     'S': S, 'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0}
+    toolbox.register("evaluate_test_MSE", eval_MSE, **args_test_MSE)
+    args_test_MSE['return_best_sol'] = True
+    toolbox.register("evaluate_test_sols", eval_MSE, **args_test_MSE)
 
     if GPproblem_run['plot_best']:
         toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
@@ -266,7 +266,7 @@ def stgp_poisson(config_file, output_path=None):
     # create symbolic regression problem instance
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
-    # MULTIPROCESSING SETTINGS ---------------------------------------------------------
+    # MULTIPROCESSING ------------------------------------------------------------------
     pool = Pool()
 
     def ray_mapper(f, individuals, toolbox):
@@ -293,9 +293,7 @@ def stgp_poisson(config_file, output_path=None):
 
     best = GPproblem.best
 
-    score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)),
-                          X_test, y_test, bvalues_test, S=S,
-                          bnodes=bnodes, gamma=gamma, u_0=u_0)
+    score_test = toolbox.evaluate_test_MSE(toolbox.compile(expr=best))
 
     print(f"The best MSE on the test set is {score_test}")
 
@@ -304,37 +302,14 @@ def stgp_poisson(config_file, output_path=None):
     pool.close()
     ray.shutdown()
 
-    # plot the tree of the best individual
-    # nodes, edges, labels = gp.graph(best)
-    # graph = nx.Graph()
-    # graph.add_nodes_from(nodes)
-    # graph.add_edges_from(edges)
-    # pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-    # plt.figure(figsize=(7, 7))
-    # nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-    # nx.draw_networkx_edges(graph, pos)
-    # nx.draw_networkx_labels(graph, pos, labels)
-    # plt.axis("off")
-    # plt.show()
+    GPproblem.save_best_individual(output_path)
 
-    # save string of best individual in .txt file
-    file = open(join(output_path, "best_ind.txt"), "w")
-    file.write(str(best))
-    file.close()
+    GPproblem.plot_best_individual_tree()
 
     # save data for plots to disk
-    np.save(join(output_path, "train_fit_history.npy"),
-            GPproblem.train_fit_history)
-    if GPproblem_run['early_stopping']['enabled']:
-        np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
+    GPproblem.save_train_fit_history(output_path)
 
-    best_sols = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)), X=X_test,
-                         y=y_test, bvalues=bvalues_test, S=S, bnodes=bnodes,
-                         gamma=gamma, u_0=u_0, return_best_sol=True)
-
-    for i, sol in enumerate(best_sols):
-        np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
-        np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
+    GPproblem.save_best_test_sols(output_path, X_test)
 
 
 if __name__ == '__main__':

@@ -19,10 +19,8 @@ import matplotlib.pyplot as plt
 import math
 import sys
 import os
-from os.path import join
 import yaml
 import time
-# import networkx as nx
 import ray
 from ray.util.multiprocessing import Pool
 
@@ -41,13 +39,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config()
-
-
-# list of types
-# types = [C.CochainP0, C.CochainP1, C.CochainD0, C.CochainD1, float]
-
-# extract list of names of primitives
-# primitives_strings = gps.get_primitives_strings(pset, types)
 
 
 def get_coords(X: Tuple, transform: npt.NDArray) -> List:
@@ -159,7 +150,6 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
 
     # number of unknowns angles
     dim = S.num_nodes-2
-
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func)
 
@@ -204,7 +194,7 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
 
     # if optimization failed, set negative EI0
     if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
-        EI0 = -1
+        EI0 = -1.
 
     return EI0
 
@@ -289,11 +279,6 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
 
     total_err = eval_MSE(individual, EI0, indlen, X, y, S, theta_0_all)
 
-    # if penalty["method"] == "primitive":
-    #     # penalty terms on primitives
-    #     indstr = str(individual)
-    #     objval = total_err + penalty["reg_param"] * \
-    #         max([indstr.count(string) for string in primitives_strings])
     if penalty["method"] == "length" and not return_MSE:
         # penalty terms on length
         objval = total_err + penalty["reg_param"]*indlen
@@ -317,6 +302,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
                             theta_0_all=theta_0_all, return_best_sol=True)
 
     plt.figure(1, figsize=(10, 4))
+    plt.clf()
     dim = X.shape[0]
     fig = plt.gcf()
     _, axes = plt.subplots(1, dim, num=1)
@@ -382,8 +368,8 @@ def stgp_elastica(config_file, output_path=None):
 
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
-    pset.addTerminal(-1., float, name="-1")
-    pset.addTerminal(2., float, name="2")
+    pset.addTerminal(-1., float, name="-1.")
+    pset.addTerminal(2., float, name="2.")
 
     # rename arguments
     pset.renameArguments(ARG0="theta")
@@ -426,6 +412,9 @@ def stgp_elastica(config_file, output_path=None):
                          theta_true=X_tr[0, :], S=S_ref)
 
     toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
+    args_test_MSE = {'X': X_test, 'y': y_test, 'S': S, 'theta_0_all': theta_0_all[2],
+                     'indlen': 0}
+    toolbox.register("evaluate_test_MSE", eval_MSE, **args_test_MSE)
 
     if GPproblem_run['plot_best']:
         toolbox.register("plot_best_func", plot_sol, X=X_val_ref, y=y_val_ref,
@@ -435,10 +424,10 @@ def stgp_elastica(config_file, output_path=None):
     GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
 
     # opt_string = ""
-    # opt_individ = createIndividual.from_string(opt_string, pset)
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    # MULTIPROCESSING SETTINGS ---------------------------------------------------------
+    # MULTIPROCESSING ------------------------------------------------------------------
     pool = Pool()
 
     def ray_mapper(f, individuals, toolbox):
@@ -474,9 +463,7 @@ def stgp_elastica(config_file, output_path=None):
 
     best = GPproblem.best
 
-    score_test = eval_MSE(GPproblem.toolbox.compile(expr=best), best.EI0,
-                          len(str(best)), X_test, y_test, S=S,
-                          theta_0_all=theta_0_all[2])
+    score_test = toolbox.evaluate_test_MSE(toolbox.compile(expr=best), EI0=best.EI0)
 
     print(f"The best MSE on the test set is {score_test}")
 
@@ -485,29 +472,17 @@ def stgp_elastica(config_file, output_path=None):
     pool.close()
     ray.shutdown()
 
-    # plot the tree of the best individual
-    # nodes, edges, labels = gp.graph(best)
-    # graph = nx.Graph()
-    # graph.add_nodes_from(nodes)
-    # graph.add_edges_from(edges)
-    # pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-    # plt.figure(figsize=(7, 7))
-    # nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-    # nx.draw_networkx_edges(graph, pos)
-    # nx.draw_networkx_labels(graph, pos, labels)
-    # plt.axis("off")
-    # plt.show()
+    GPproblem.save_best_individual(output_path)
 
-    # save string of best individual in .txt file
-    file = open(join(output_path, "best_ind.txt"), "w")
-    file.write(str(best))
-    file.close()
+    GPproblem.plot_best_individual_tree()
 
     # save data for plots to disk
-    np.save(join(output_path, "train_fit_history.npy"),
-            GPproblem.train_fit_history)
-    if GPproblem_run['early_stopping']['enabled']:
-        np.save(join(output_path, "val_fit_history.npy"), GPproblem.val_fit_history)
+    GPproblem.save_train_fit_history(output_path)
+
+    args_test_MSE['return_best_sol'] = True
+    args_test_MSE['EI0'] = best.EI0
+    toolbox.register("evaluate_test_sols", eval_MSE, **args_test_MSE)
+    GPproblem.save_best_test_sols(output_path, X_test)
 
 
 if __name__ == '__main__':

@@ -11,7 +11,7 @@ cwd = os.path.dirname(simplex.__file__)
 data_path = os.path.dirname(os.path.realpath(__file__))
 
 
-def generate_complex(lc):
+def generate_square_complex(lc):
     """Generate a Simplicial complex and its boundary nodes from a msh file.
 
     Args:
@@ -22,7 +22,7 @@ def generate_complex(lc):
         (np.array): np.array containing the positions of the boundary nodes.
     """
 
-    _, _, S_2, node_coords = util.generate_square_mesh(lc)
+    _, _, S_2, node_coords, _ = util.generate_square_mesh(lc)
 
     triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
     S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
@@ -193,7 +193,7 @@ def load_noise():
 if __name__ == '__main__':
     # seet seed
     np.random.seed(42)
-    S, bnodes, triang = generate_complex(0.08)
+    S, bnodes, triang = generate_square_complex(0.08)
     num_nodes = S.num_nodes
     save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
     # save_noise(num_nodes)

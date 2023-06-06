@@ -9,9 +9,9 @@ from typing import List
 
 def protectedDiv(left, right):
     try:
-        return left / right
+        return jnp.divide(left, right)
     except ZeroDivisionError:
-        return math.nan
+        return jnp.nan
 
 
 def protectedLog(x):
@@ -29,10 +29,7 @@ def protectedSqrt(x):
 
 
 def inv_float(x):
-    try:
-        return 1/x
-    except ZeroDivisionError:
-        return jnp.nan
+    return protectedDiv(1., x)
 
 
 def inv_scalar_mul(c, f):
@@ -55,9 +52,9 @@ class PrimitiveParams:
 
 primitives = {
     # scalar operations
-    'Add': PrimitiveParams(operator.add, [float, float], float),
-    'Sub': PrimitiveParams(operator.sub, [float, float], float),
-    'MulF': PrimitiveParams(operator.mul, [float, float], float),
+    'Add': PrimitiveParams(jnp.add, [float, float], float),
+    'Sub': PrimitiveParams(jnp.subtract, [float, float], float),
+    'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
     'Div': PrimitiveParams(protectedDiv, [float, float], float),
     'SinF': PrimitiveParams(jnp.sin, [float], float),
     'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
