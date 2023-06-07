@@ -2,122 +2,50 @@ from deap import algorithms, tools, gp, base, creator
 import matplotlib.pyplot as plt
 import numpy as np
 import operator
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Callable
 from os.path import join
 import networkx as nx
 import numpy.typing as npt
+from .primitives import addPrimitivesToPset
+import os
+import ray
+
+# reducing the number of threads launched by fitness evaluations
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+os.environ["NUM_INTER_THREADS"] = "1"
+os.environ["NUM_INTRA_THREADS"] = "1"
+
+os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
+                           "intra_op_parallelism_threads=1")
 
 
-def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
-    """Extract a list containing the names of all the primitives.
+# def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
+#     """Extract a list containing the names of all the primitives.
 
-    Args:
-        pset: a PrimitiveSetTyped object.
-        types: list of all the types used in pset.
+#     Args:
+#         pset: a PrimitiveSetTyped object.
+#         types: list of all the types used in pset.
 
-    Returns:
-        a list containing the names (str) of the primitives.
-    """
-    primitives_strings = []
-    for type in types:
-        # NOTE: pset.primitives is a dictionary
-        current_primitives = [str(pset.primitives[type][i].name)
-                              for i in range(len(pset.primitives[type]))]
-        primitives_strings.extend(current_primitives)
-    return primitives_strings
-
-
-def load_config_data(config_file_data: Dict,
-                     pset: gp.PrimitiveSetTyped) -> Tuple[Dict, Dict, Dict]:
-    prb_sets = dict()
-    prb_extra = dict()
-    prb_run = dict()
-    prb_sets["NINDIVIDUALS"] = config_file_data["gp"]["NINDIVIDUALS"]
-    prb_sets['NGEN'] = config_file_data["gp"]["NGEN"]
-    prb_sets['CXPB'] = config_file_data["gp"]["CXPB"]
-    prb_sets['MUTPB'] = config_file_data["gp"]["MUTPB"]
-    prb_sets['frac_elitist'] = int(
-        config_file_data["gp"]["frac_elitist"]*prb_sets['NINDIVIDUALS'])
-    # prb_sets['min_'] = config_file_data["gp"]["min_"]
-    # prb_sets['max_'] = config_file_data["gp"]["max_"]
-    prb_sets['overlapping_generation'] = config_file_data["gp"]["overlapping_generation"]
-    prb_sets['parsimony_pressure'] = config_file_data["gp"]["parsimony_pressure"]
-    prb_sets['tournsize'] = config_file_data["gp"]["select"]["tournsize"]
-    prb_sets['stochastic_tournament'] = config_file_data["gp"]["select"]["stochastic_tournament"]
-    prb_sets['primitives'] = config_file_data["gp"]["primitives"]
-
-    individualCreator, toolbox = creator_toolbox_config(
-        config_file_data=config_file_data, pset=pset)
-    prb_sets['toolbox'] = toolbox
-    prb_sets['individualCreator'] = individualCreator
-
-    prb_extra['penalty'] = config_file_data["gp"]["penalty"]
-    prb_extra['n_jobs'] = config_file_data["mp"]["n_jobs"]
-
-    prb_run['early_stopping'] = config_file_data["gp"]["early_stopping"]
-    prb_run['plot_best'] = config_file_data["plot"]["plot_best"]
-    prb_run['plot_best_genealogy'] = config_file_data["plot"]["plot_best_genealogy"]
-
-    return prb_sets, prb_run, prb_extra
-
-
-def creator_toolbox_config(config_file_data: Dict,
-                           pset: gp.PrimitiveSetTyped) -> Tuple[gp.PrimitiveTree,
-                                                                base.Toolbox]:
-    # initialize toolbox and individual creator
-    toolbox = base.Toolbox()
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
-    creator.create("Individual",
-                   gp.PrimitiveTree,
-                   fitness=creator.FitnessMin)
-    createIndividual = creator.Individual
-
-    min_ = config_file_data["gp"]["min_"]
-    max_ = config_file_data["gp"]["max_"]
-
-    expr_mut_fun = config_file_data["gp"]["mutate"]["expr_mut"]
-    expr_mut_kargs = eval(config_file_data["gp"]["mutate"]["expr_mut_kargs"])
-
-    toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-
-    crossover_fun = config_file_data["gp"]["crossover"]["fun"]
-    crossover_kargs = eval(config_file_data["gp"]["crossover"]["kargs"])
-
-    mutate_fun = config_file_data["gp"]["mutate"]["fun"]
-    mutate_kargs = eval(config_file_data["gp"]["mutate"]["kargs"])
-    toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
-    toolbox.register("mutate",
-                     eval(mutate_fun), **mutate_kargs)
-    toolbox.decorate(
-        "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-    toolbox.decorate(
-        "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-
-    toolbox.register("expr", gp.genHalfAndHalf,
-                     pset=pset, min_=min_, max_=max_)
-    toolbox.register("expr_pop",
-                     gp.genHalfAndHalf,
-                     pset=pset,
-                     min_=min_,
-                     max_=max_,
-                     is_pop=True)
-    toolbox.register("individual", tools.initIterate,
-                     createIndividual, toolbox.expr)
-    toolbox.register("individual_pop", tools.initIterate,
-                     createIndividual, toolbox.expr_pop)
-    toolbox.register("population", tools.initRepeat,
-                     list, toolbox.individual_pop)
-    toolbox.register("compile", gp.compile, pset=pset)
-
-    return createIndividual, toolbox
+#     Returns:
+#         a list containing the names (str) of the primitives.
+#     """
+#     primitives_strings = []
+#     for type in types:
+#         # NOTE: pset.primitives is a dictionary
+#         current_primitives = [str(pset.primitives[type][i].name)
+#                               for i in range(len(pset.primitives[type]))]
+#         primitives_strings.extend(current_primitives)
+#     return primitives_strings
 
 
 class GPSymbRegProblem():
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
-                 toolbox: base.Toolbox,
-                 individualCreator: gp.PrimitiveTree,
-                 NINDIVIDUALS=10,
+                 toolbox: base.Toolbox = None,
+                 individualCreator: gp.PrimitiveTree = None,
+                 NINDIVIDUALS: int = 10,
                  NGEN: int = 1,
                  CXPB: float = 0.5,
                  MUTPB: float = 0.2,
@@ -127,11 +55,15 @@ class GPSymbRegProblem():
                                      'fitness_first': True,
                                      'parsimony_size': 1.5},
                  tournsize: int = 3,
-                 stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]}):
-        """Symbolic regression problem via GP.
+                 stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
+                 config_file_data: Dict | None = None,
+                 use_ray=True):
+        """Symbolic regression problem via Genetic Programming.
 
             Args:
                 pset: set of primitives and terminals.
+                toolbox: Set to None if `config_file_data` is provided.
+                individualCreator: Set to None if `config_file_data` is provided.
                 NINDIVIDUALS: number of individuals in the parent population.
                 NGEN: number of generations.
                 CXPB: cross-over probability.
@@ -142,28 +74,29 @@ class GPSymbRegProblem():
                     for survival.
         """
         self.pset = pset
-        self.NINDIVIDUALS = NINDIVIDUALS
-        self.NGEN = NGEN
-        self.train_fit_history = []
-        self.CXPB = CXPB
-        self.MUTPB = MUTPB
-        self.pop = None
-        # best validation score among all the populations
-        self.bvp = None
-        # best training score among all the populations
-        self.tbtp = None
 
-        self.overlapping_generation = overlapping_generation
-        self.parsimony_pressure = parsimony_pressure
-        self.tournsize = tournsize
-        self.stochastic_tournament = stochastic_tournament
+        if config_file_data is not None:
+            self.load_config_data(config_file_data)
+        else:
+            self.NINDIVIDUALS = NINDIVIDUALS
+            self.NGEN = NGEN
+            self.CXPB = CXPB
+            self.MUTPB = MUTPB
+            self.pop = None
 
-        # Elitism settings
-        self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
+            self.overlapping_generation = overlapping_generation
+            self.parsimony_pressure = parsimony_pressure
+            self.tournsize = tournsize
+            self.stochastic_tournament = stochastic_tournament
+            self.early_stopping = {'enabled': False, 'max_overfit': 0}
 
-        self.createIndividual = individualCreator
+            # Elitism settings
+            self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
 
-        self.toolbox = toolbox
+            self.createIndividual = individualCreator
+
+            self.toolbox = toolbox
+
         # FIXME: move this instruction in the initialization of the toolbox
         self.toolbox.register("select", self.select_with_elitism)
 
@@ -179,11 +112,122 @@ class GPSymbRegProblem():
 
         self.__init_logbook()
 
+        self.train_fit_history = []
+
+        self.data_store = dict()
+
+        # best validation score among all the populations
+        self.bvp = None
+        # best training score among all the populations
+        self.tbtp = None
+
         # Create history object to build the genealogy tree
         self.history = tools.History()
 
+        self.use_ray = use_ray
+        if use_ray:
+            ray.init()
+
         self.plot_initialized = False
         self.fig_id = 0
+
+    def __creator_toolbox_config(self, config_file_data: Dict):
+        """Initialize toolbox and individual creator based on config file."""
+        toolbox = base.Toolbox()
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
+        creator.create("Individual",
+                       gp.PrimitiveTree,
+                       fitness=creator.FitnessMin)
+        createIndividual = creator.Individual
+
+        min_ = config_file_data["gp"]["min_"]
+        max_ = config_file_data["gp"]["max_"]
+
+        expr_mut_fun = config_file_data["gp"]["mutate"]["expr_mut"]
+        expr_mut_kargs = eval(config_file_data["gp"]["mutate"]["expr_mut_kargs"])
+
+        toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
+
+        crossover_fun = config_file_data["gp"]["crossover"]["fun"]
+        crossover_kargs = eval(config_file_data["gp"]["crossover"]["kargs"])
+
+        mutate_fun = config_file_data["gp"]["mutate"]["fun"]
+        mutate_kargs = eval(config_file_data["gp"]["mutate"]["kargs"])
+        toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
+        toolbox.register("mutate",
+                         eval(mutate_fun), **mutate_kargs)
+        toolbox.decorate(
+            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+        toolbox.decorate(
+            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+
+        toolbox.register("expr", gp.genHalfAndHalf,
+                         pset=self.pset, min_=min_, max_=max_)
+        toolbox.register("expr_pop",
+                         gp.genHalfAndHalf,
+                         pset=self.pset,
+                         min_=min_,
+                         max_=max_,
+                         is_pop=True)
+        toolbox.register("individual", tools.initIterate,
+                         createIndividual, toolbox.expr)
+        toolbox.register("individual_pop", tools.initIterate,
+                         createIndividual, toolbox.expr_pop)
+        toolbox.register("population", tools.initRepeat,
+                         list, toolbox.individual_pop)
+        toolbox.register("compile", gp.compile, pset=self.pset)
+
+        self.toolbox = toolbox
+        self.createIndividual = createIndividual
+
+    def load_config_data(self, config_file_data: Dict):
+        """Load problem settings from YAML file."""
+        self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
+        self.NGEN = config_file_data["gp"]["NGEN"]
+        self.CXPB = config_file_data["gp"]["CXPB"]
+        self.MUTPB = config_file_data["gp"]["MUTPB"]
+        self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
+        self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
+        self.parsimony_pressure = config_file_data["gp"]["parsimony_pressure"]
+        self.tournsize = config_file_data["gp"]["select"]["tournsize"]
+        self.stochastic_tournament = config_file_data["gp"]["select"]["stochastic_tournament"]
+
+        addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
+
+        self.__creator_toolbox_config(config_file_data=config_file_data)
+
+        self.early_stopping = config_file_data["gp"]["early_stopping"]
+        self.plot_best = config_file_data["plot"]["plot_best"]
+        self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
+
+    def store_data(self, label: str, data: Dict):
+        for key, value in data.items():
+            data[key] = ray.put(value)
+        self.data_store[label] = data
+
+    def register_eval_funcs(self, train_fit: Callable, args_train: dict,
+                            val_fit=None, val_MSE=None, args_val: dict | None = None,
+                            test_MSE=None, args_test_MSE: dict | None = None,
+                            test_sols: Callable | None = None,
+                            args_test_sols: dict | None = None):
+        """Register functions for the evaluation of the fitness of the individuals over
+        the datasets.
+
+        Args:
+            val_MSE: must have the same arguments as val_fit.
+        """
+        # set arguments for evaluate functions
+        if self.early_stopping['enabled']:
+            self.toolbox.register(
+                "evaluate_val_fit", val_fit, **args_val)
+            self.toolbox.register(
+                "evaluate_val_MSE", val_MSE, **args_val)
+
+        # register functions for fitness/MSE evaluation on different datasets
+        self.toolbox.register("evaluate_train", train_fit, **args_train)
+
+        self.toolbox.register("evaluate_test_MSE", test_MSE, **args_test_MSE)
+        self.toolbox.register("evaluate_test_sols", test_sols, **args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -276,6 +320,7 @@ class GPSymbRegProblem():
                                                  tournsize=self.tournsize)
 
     def __plot_history(self):
+        """Plots the fitness of the best individual vs generation number."""
         if not self.plot_initialized:
             self.plot_initialized = True
             # new figure number when starting with new evolution
@@ -289,8 +334,10 @@ class GPSymbRegProblem():
         # Array of generations starts from 1
         x = range(1, len(self.train_fit_history) + 1)
         plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
-        plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
-        # fig.legend(loc='upper right')
+        if self.early_stopping['enabled']:
+            plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
+            fig.legend(loc='upper right')
+
         plt.xlabel("Generation #")
         plt.ylabel("Best Fitness")
 
@@ -320,15 +367,21 @@ class GPSymbRegProblem():
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def run(self,
-            plot_history=False,
-            print_log=False,
-            plot_best=False,
-            plot_freq=5,
-            plot_best_genealogy=False,
-            seed=None,
-            early_stopping={'enabled': False, 'max_overfit': 0},
-            preprocess_fun=None,
-            callback_fun=None):
+            plot_history: bool = False,
+            print_log: bool = False,
+            plot_best: bool | None = None,
+            plot_freq: int = 5,
+            plot_best_genealogy: bool | None = None,
+            seed: List | None = None,
+            preprocess_fun: Callable | None = None,
+            callback_fun: Callable | None = None,
+            plot_best_individual_tree: bool = True,
+            print_best_test_MSE: bool = True,
+            save_best_individual: bool = False,
+            save_train_fit_history: bool = False,
+            save_best_test_sols: bool = False,
+            X_test: npt.NDArray | None = None,
+            output_path: str | None = None):
         """Runs symbolic regression.
 
             Args:
@@ -345,10 +398,13 @@ class GPSymbRegProblem():
                 callback_fun: function to call after evaluating the fitness of the
                     individuals of each generation.
         """
+        if plot_best is not None:
+            self.plot_best = plot_best
 
-        self.early_stopping = early_stopping
+        if plot_best_genealogy is not None:
+            self.plot_best_genealogy = plot_best_genealogy
 
-        if plot_best_genealogy:
+        if self.plot_best_genealogy:
             # Decorators for history
             self.toolbox.decorate("mate", self.history.decorator)
             self.toolbox.decorate("mutate", self.history.decorator)
@@ -359,12 +415,14 @@ class GPSymbRegProblem():
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
 
-        if plot_best_genealogy:
+        print("DONE.", flush=True)
+
+        if self.plot_best_genealogy:
             # Populate the history and the Hall Of Fame
             self.history.update(self.pop)
 
         # Initialize logbook for statistics
-        self.__init_logbook(overfit_measure=early_stopping['enabled'])
+        self.__init_logbook(overfit_measure=self.early_stopping['enabled'])
 
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
@@ -383,7 +441,7 @@ class GPSymbRegProblem():
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
-        if early_stopping['enabled']:
+        if self.early_stopping['enabled']:
             print("Using early-stopping.")
             best = tools.selBest(self.pop, k=1)
             self.tbtp = best[0].fitness.values[0]
@@ -435,7 +493,7 @@ class GPSymbRegProblem():
             self.compute_statistics(self.pop,
                                     cgen,
                                     len(invalid_ind),
-                                    overfit_measure=early_stopping['enabled'],
+                                    overfit_measure=self.early_stopping['enabled'],
                                     print_log=print_log)
 
             print(f"The best individual of this generation is: {best}")
@@ -445,7 +503,7 @@ class GPSymbRegProblem():
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
-            if early_stopping['enabled']:
+            if self.early_stopping['enabled']:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
                     "valid_fit")
                 self.val_fit_history = self.logbook.chapters["valid"].select(
@@ -455,11 +513,11 @@ class GPSymbRegProblem():
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
                 self.__plot_history()
 
-            if plot_best and (self.toolbox.plot_best_func is not None) \
+            if self.plot_best and (self.toolbox.plot_best_func is not None) \
                     and (cgen % plot_freq == 0 or cgen == 1 or cgen == self.NGEN):
                 self.toolbox.plot_best_func(best)
 
-            if early_stopping['enabled']:
+            if self.early_stopping['enabled']:
                 training_fit = best.fitness.values[0]
                 # Retrieve last overtfit value
                 overfit = self.logbook.chapters["valid"].select("overfit")[-1]
@@ -475,7 +533,7 @@ class GPSymbRegProblem():
 
                 self.last_improvement = training_fit
 
-                if m == early_stopping['max_overfit']:
+                if m == self.early_stopping['max_overfit']:
                     # save number of generations when stopping for the last training run
                     self.NGEN = self.last_gen_no_overfit
                     print("-= EARLY STOPPED =-")
@@ -492,11 +550,32 @@ class GPSymbRegProblem():
         print(f"The best individual is {best}", flush=True)
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
-        if early_stopping['enabled']:
+        if self.early_stopping['enabled']:
             print(f"The best fitness on the validation set is {self.min_valerr}")
 
-        if plot_best_genealogy:
+        if self.plot_best_genealogy:
             self.__plot_genealogy(best)
+
+        if plot_best_individual_tree:
+            self.plot_best_individual_tree()
+
+        if print_best_test_MSE:
+            self.print_best_test_MSE()
+
+        if save_best_individual and output_path is not None:
+            self.save_best_individual(output_path)
+            print("String of the best individual saved to disk.")
+
+        if save_train_fit_history and output_path is not None:
+            self.save_train_fit_history(output_path)
+            print("Training fitness history saved to disk.")
+
+        if save_best_test_sols and output_path is not None and X_test is not None:
+            self.save_best_test_sols(output_path, X_test)
+            print("Best individual solution evaluated over the test set saved to disk.")
+
+        if self.use_ray:
+            ray.shutdown()
 
     def plot_best_individual_tree(self):
         """Plots the tree of the best individual."""
@@ -535,3 +614,9 @@ class GPSymbRegProblem():
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
             np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
+
+    def print_best_test_MSE(self):
+        score_test = self.toolbox.evaluate_test_MSE(
+            self.toolbox.compile(expr=self.best))
+
+        print(f"The best MSE on the test set is {score_test}")

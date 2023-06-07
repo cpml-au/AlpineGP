@@ -1,13 +1,11 @@
 from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.math.opt import optctrl as oc
-# import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
 from alpine.data.poisson import poisson_dataset as pd
 from alpine.gp import gpsymbreg as gps
-from alpine.gp import primitives
 from dctkit import config
 import dctkit
 
@@ -20,19 +18,9 @@ import math
 import time
 import sys
 import yaml
-import os
 from typing import Tuple, Callable
 import numpy.typing as npt
 
-# reducing the number of threads launched by eval_fitness
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
-
-os.environ["NUM_INTER_THREADS"] = "1"
-os.environ["NUM_INTRA_THREADS"] = "1"
-
-os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
-                           "intra_op_parallelism_threads=1")
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
@@ -117,20 +105,26 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
 
 @ray.remote(num_cpus=2)
+def eval_MSE_remote(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+                    bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
+                    u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
+
+    total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+
+    return total_err,
+
+
+@ray.remote(num_cpus=2)
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
-                 u_0: npt.NDArray, penalty: dict, return_MSE=False) -> Tuple[float, ]:
+                 u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
 
     objval = 0.
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    if penalty["method"] == "length" and not return_MSE:
-        # penalty terms on length
-        objval = total_err + penalty["reg_param"]*indlen
-    else:
-        # no penalty
-        objval = total_err
+    # penalty terms on length
+    objval = total_err + penalty["reg_param"]*indlen
 
     return objval,
 
@@ -141,13 +135,6 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
              gamma: float, u_0: C.CochainP0, toolbox: base.Toolbox,
              triang: tri.Triangulation):
 
-    # the refs of these objects are not automatically converted to objects
-    # (because we are not calling plot_sol via .remote())
-    bnodes = ray.get(bnodes)
-    bvalues = ray.get(bvalues)
-    gamma = ray.get(gamma)
-    u_0 = ray.get(u_0)
-    S = ray.get(S)
     indfun = toolbox.compile(expr=ind)
 
     u = eval_MSE(indfun, indlen=0, X=X, y=y, bvalues=bvalues, S=S,
@@ -188,83 +175,56 @@ def stgp_poisson(config_file, output_path=None):
 
     # define primitive set and add primitives and terminals
     pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
-
-    # set parameters from config file
-    GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
-        config_file_data=config_file, pset=pset)
-    toolbox = GPproblem_settings['toolbox']
-    penalty = GPproblem_extra['penalty']
-
-    primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
-
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
     pset.addTerminal(2., float, name="2.")
-
     # rename arguments
     pset.renameArguments(ARG0="u")
     pset.renameArguments(ARG1="f")
 
-    GPproblem_settings.pop('primitives')
+    # create symbolic regression problem instance
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
 
-    ray.init()
+    penalty = config_file["gp"]["penalty"]
 
     # store shared objects refs
-    S_ref = ray.put(S)
-    penalty_ref = ray.put(penalty)
-    bnodes_ref = ray.put(bnodes)
-    gamma_ref = ray.put(gamma)
-    u_0_ref = ray.put(u_0)
-    X_train_ref = ray.put(X_train)
-    y_train_ref = ray.put(y_train)
-    bvalues_train_ref = ray.put(bvalues_train)
-    bvalues_val_ref = ray.put(bvalues_val)
+    GPprb.store_data('common', {'S': S, 'penalty': penalty, 'bnodes': bnodes,
+                                'gamma': gamma, 'u_0': u_0})
 
-    # set arguments for evaluate functions
-    if GPproblem_run['early_stopping']['enabled']:
-        args_train = {'X': X_train_ref, 'y': y_train_ref, 'bvalues': bvalues_train_ref,
-                      'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                      'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
-        args_val_fit = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val_ref,
-                        'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                        'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
-        args_val_MSE = {'X': X_val, 'y': y_val, 'bvalues': bvalues_val_ref,
-                        'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                        'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': True}
+    store = GPprb.data_store
 
-        toolbox.register("evaluate_val_fit", eval_fitness.remote, **args_val_fit)
-        toolbox.register("evaluate_val_MSE", eval_fitness.remote, **args_val_MSE)
+    if GPprb.early_stopping['enabled']:
+        GPprb.store_data('val', {'X': X_val, 'y': y_val, 'bvalues': bvalues_val})
+        args_val = store['common'] | store['val']
     else:
-        X_tr = np.vstack((X_train, X_val))
-        y_tr = np.vstack((y_train, y_val))
-        X_tr_ref = ray.put(X_tr)
-        y_tr_ref = ray.put(y_tr)
-        bvalues_tr = np.vstack((bvalues_train, bvalues_val))
-        bvalues_tr_ref = ray.put(bvalues_tr)
-        args_train = {'X': X_tr_ref, 'y': y_tr_ref, 'bvalues': bvalues_tr_ref,
-                      'penalty': penalty_ref, 'S': S_ref, 'bnodes': bnodes_ref,
-                      'gamma': gamma_ref, 'u_0': u_0_ref, 'return_MSE': False}
+        X_train = np.vstack((X_train, X_val))
+        y_train = np.vstack((y_train, y_val))
+        bvalues_train = np.vstack((bvalues_train, bvalues_val))
+        args_val = None
 
-    # register functions for fitness/MSE evaluation on different datasets
-    toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
+    GPprb.store_data('train', {'X': X_train, 'y': y_train, 'bvalues': bvalues_train})
+
+    args_train = store['common'] | store['train']
     args_test_MSE = {'X': X_test, 'y': y_test, 'indlen': 0, 'bvalues': bvalues_test,
                      'S': S, 'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0}
-    toolbox.register("evaluate_test_MSE", eval_MSE, **args_test_MSE)
-    args_test_MSE['return_best_sol'] = True
-    toolbox.register("evaluate_test_sols", eval_MSE, **args_test_MSE)
+    args_test_sols = args_test_MSE.copy()
+    args_test_sols['return_best_sol'] = True
 
-    if GPproblem_run['plot_best']:
-        toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
-                         bvalues=bvalues_val_ref, S=S_ref, bnodes=bnodes_ref,
-                         gamma=gamma_ref, u_0=u_0_ref, toolbox=toolbox, triang=triang)
+    GPprb.register_eval_funcs(train_fit=eval_fitness.remote, args_train=args_train,
+                              val_fit=eval_fitness.remote,
+                              val_MSE=eval_MSE_remote.remote,
+                              args_val=args_val, test_MSE=eval_MSE,
+                              args_test_MSE=args_test_MSE, test_sols=eval_MSE,
+                              args_test_sols=args_test_sols)
 
-    # create symbolic regression problem instance
-    GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
+    if GPprb.plot_best:
+        GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
+                               bvalues=bvalues_val, S=S, bnodes=bnodes,
+                               gamma=gamma, u_0=u_0,
+                               toolbox=GPprb.toolbox, triang=triang)
 
     # MULTIPROCESSING ------------------------------------------------------------------
-    pool = Pool()
-
     def ray_mapper(f, individuals, toolbox):
         # We are not duplicating global scope on workers so we need to use the toolbox
         # Transform the tree expression in a callable function
@@ -273,39 +233,21 @@ def stgp_poisson(config_file, output_path=None):
         fitnesses = ray.get([f(*args) for args in zip(runnables, lenghts)])
         return fitnesses
 
-    GPproblem.toolbox.register("map", ray_mapper, toolbox=GPproblem.toolbox)
+    GPprb.toolbox.register("map", ray_mapper, toolbox=GPprb.toolbox)
     # ----------------------------------------------------------------------------------
 
     start = time.perf_counter()
     # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
-    # opt_string = "SquareF(InnP0(InvMulP0(u, SquareF(InnP0(u, fk))), delP1(dP0(u))))"
-    # opt_string = "Inn1(dP0(AddP0(SinP0(SqrtP0(u)), LogP0(u))), dP0(u))"
     # opt_string = "Sub(InnP1(dP0(u), dP0(u)), MulF(2, InnP0(fk, u)))"
-    # opt_string = "MulF(2, Inn0(fk, fk)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run)
-
-    best = GPproblem.best
-
-    score_test = toolbox.evaluate_test_MSE(toolbox.compile(expr=best))
-
-    print(f"The best MSE on the test set is {score_test}")
+    GPprb.run(print_log=True, seed=None,
+              save_best_individual=True, save_train_fit_history=True,
+              save_best_test_sols=True, X_test=X_test,
+              output_path=output_path)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
-
-    pool.close()
-    ray.shutdown()
-
-    GPproblem.save_best_individual(output_path)
-
-    GPproblem.plot_best_individual_tree()
-
-    # save data for plots to disk
-    GPproblem.save_train_fit_history(output_path)
-
-    GPproblem.save_best_test_sols(output_path, X_test)
 
 
 if __name__ == '__main__':
