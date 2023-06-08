@@ -9,7 +9,6 @@ from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit
 
-from ray.util.multiprocessing import Pool
 import ray
 
 import numpy as np
@@ -106,8 +105,8 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
 @ray.remote(num_cpus=2)
 def eval_MSE_remote(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-                    bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
-                    u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
+                    bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+                    gamma: float, u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
@@ -118,8 +117,6 @@ def eval_MSE_remote(individual: Callable, indlen: int, X: npt.NDArray, y: npt.ND
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
                  u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
-
-    objval = 0.
 
     total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
