@@ -200,7 +200,7 @@ class GPSymbRegProblem():
         self.plot_best = config_file_data["plot"]["plot_best"]
         self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
-    def store_data(self, label: str, data: Dict):
+    def store_eval_funcs_params_values(self, label: str, data: Dict):
         for key, value in data.items():
             data[key] = ray.put(value)
         self.data_store[label] = data
@@ -365,6 +365,19 @@ class GPSymbRegProblem():
 
         # Save genealogy to file
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
+
+    def register_map(self, individ_feature_extractors: List[Callable] | None = None):
+        def ray_mapper(f, individuals, toolbox):
+            # We are not duplicating global scope on workers so we need to use the
+            # toolbox
+            # Transform the tree expression in a callable function
+            runnables = [toolbox.compile(expr=ind) for ind in individuals]
+            feature_values = [[fe(i) for i in individuals]
+                              for fe in individ_feature_extractors]
+            fitnesses = ray.get([f(*args) for args in zip(runnables, *feature_values)])
+            return fitnesses
+
+        self.toolbox.register("map", ray_mapper, toolbox=self.toolbox)
 
     def run(self,
             plot_history: bool = False,

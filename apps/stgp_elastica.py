@@ -7,7 +7,7 @@ from deap import base, gp, tools
 from scipy import sparse
 from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
-from dctkit.mesh.util import generate_1_D_mesh
+from alpine.util import get_1D_complex
 from dctkit.dec import cochain as C
 from dctkit import config
 from dctkit.math.opt import optctrl as oc
@@ -74,7 +74,7 @@ def get_positions_from_angles(angles: Tuple, transform: npt.NDArray) -> Tuple:
     return x_all, y_all
 
 
-def theta_in_guesses(x: list, y: list) -> Dict:
+def get_angles_initial_guesses(x: list, y: list) -> Dict:
     theta_in_all_list = []
     for i in range(3):
         x_current = x[i]
@@ -191,8 +191,8 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
     return EI0
 
 
-def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
-             y: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
+def eval_MSE(energy_func: Callable, EI0: float, indlen: int, thetas_true: npt.NDArray,
+             Fs: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
              return_best_sol: bool = False) -> float:
 
     # number of unknown angles
@@ -203,24 +203,26 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
     obj = Objectives(S=S)
     obj.set_energy_func(energy_func)
 
-    # init X_dim and best_theta
-    X_dim = X.shape[0]
+    X_dim = thetas_true.shape[0]
     best_theta = np.zeros((X_dim, S.num_nodes-1), dtype=dt.float_dtype)
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
     config()
 
-    if EI0 < 0:
+    if isinstance(EI0, Callable):
+        EI0 = EI0()
+
+    if EI0 < 0.:
         total_err = 40.
     else:
-        for i, theta_true in enumerate(X):
+        for i, theta_true in enumerate(thetas_true):
             # extract prescribed value of theta at x = 0 from the dataset
             theta_0 = theta_true[0]
 
             theta_in = theta_in_all[i, :]
 
-            FL2 = y[i]
+            FL2 = Fs[i]
             FL2_EI0 = FL2/EI0
 
             prb = oc.OptimizationProblem(
@@ -263,21 +265,21 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, X: npt.NDArray,
 
 
 @ray.remote(num_cpus=2)
-def eval_MSE_remote(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
-                    y: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
-                    penalty: Dict) -> Tuple[float, ]:
+def eval_MSE_remote(individual: Callable, EI0: float, indlen: int,
+                    thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
+                    theta_in_all: npt.NDArray, penalty: Dict) -> Tuple[float, ]:
 
-    total_err = eval_MSE(individual, EI0, indlen, X, y, S, theta_in_all)
+    total_err = eval_MSE(individual, EI0, indlen, thetas_true, Fs, S, theta_in_all)
 
     return total_err,
 
 
 @ray.remote(num_cpus=2)
-def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
-                 y: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
-                 penalty: Dict) -> Tuple[float, ]:
+def eval_fitness(individual: Callable, EI0: float, indlen: int,
+                 thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
+                 theta_in_all: npt.NDArray, penalty: Dict) -> Tuple[float, ]:
 
-    total_err = eval_MSE(individual, EI0, indlen, X, y, S, theta_in_all)
+    total_err = eval_MSE(individual, EI0, indlen, thetas_true, Fs, S, theta_in_all)
 
     # penalty terms on length
     objval = total_err + penalty["reg_param"]*indlen
@@ -285,23 +287,24 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int, X: npt.NDArray,
     return objval,
 
 
-def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
+def plot_sol(ind: gp.PrimitiveTree, thetas_true: npt.NDArray, Fs: npt.NDArray,
              toolbox: base.Toolbox, S: SimplicialComplex, theta_in_all: npt.NDArray,
              transform: npt.NDArray) -> None:
 
     indfun = toolbox.compile(expr=ind)
 
-    best_sol_all = eval_MSE(indfun, ind.EI0, indlen=0, X=X, y=y,  S=S,
-                            theta_in_all=theta_in_all, return_best_sol=True)
+    best_sol_all = eval_MSE(indfun, ind.EI0, indlen=0, thetas_true=thetas_true,
+                            Fs=Fs,  S=S, theta_in_all=theta_in_all,
+                            return_best_sol=True)
 
     plt.figure(1, figsize=(10, 4))
     plt.clf()
-    dim = X.shape[0]
+    dim = thetas_true.shape[0]
     fig = plt.gcf()
     _, axes = plt.subplots(1, dim, num=1)
     # get the x,y coordinates LIST of the best and of the true
     x_curr, y_curr = get_positions_from_angles((best_sol_all,), transform)
-    x_true, y_true = get_positions_from_angles((X,), transform)
+    x_true, y_true = get_positions_from_angles((thetas_true,), transform)
     for i in range(dim):
         # plot the results
         axes[i].plot(x_true[0][i, :], y_true[0][i, :], 'r')
@@ -314,15 +317,10 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 
 def stgp_elastica(config_file_data, output_path=None):
-    X_train, X_val, X_test, y_train, y_val, y_test = ed.load_dataset()
+    thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = ed.load_dataset()
 
-    # get normalized simplicial complex
-    S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
-    S = SimplicialComplex(S_1, x, is_well_centered=True)
-    S.get_circumcenters()
-    S.get_primal_volumes()
-    S.get_dual_volumes()
-    S.get_hodge_star()
+    # TODO: how can we extract these numbers from the dataset (especially length)?
+    S = get_1D_complex(num_nodes=11, length=1.)
 
     # bidiagonal matrix to transform theta in (x,y)
     diag = [1]*(S.num_nodes)
@@ -332,14 +330,13 @@ def stgp_elastica(config_file_data, output_path=None):
     transform = sparse.diags(diags, [0, -1]).toarray()
     transform[1, 0] = -1
 
-    # get (x,y) coordinates for the dataset
-    X = X_train, X_val, X_test
-    x_all, y_all = get_positions_from_angles(X, transform)
+    # TODO: find a way to remove transform among paramters (encapsulate this function
+    # within a class)
+    x_all, y_all = get_positions_from_angles(
+        (thetas_train, thetas_val, thetas_test), transform)
 
-    # compute all initial guesses fot the angles
-    theta_in_all = theta_in_guesses(x_all, y_all)
+    theta_in_all = get_angles_initial_guesses(x_all, y_all)
 
-    # define primitive set
     pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
 
     # add internal cochain as a terminal
@@ -352,7 +349,7 @@ def stgp_elastica(config_file_data, output_path=None):
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
     pset.addTerminal(2., float, name="2.")
-    # rename arguments
+
     pset.renameArguments(ARG0="theta")
     pset.renameArguments(ARG1="FL2_EI0")
 
@@ -360,33 +357,47 @@ def stgp_elastica(config_file_data, output_path=None):
 
     penalty = config_file_data["gp"]['penalty']
 
+    # TODO: Define eval functions with standard names (eval_fitness, eval_error)
+    # as "virtual functions" within the GP problem class. Then call
+    # store_eval_funcs_params_values to define their parameters. Finally,
+    # call register_eval_funcs only with args lists: it should work without
+    # the need of specifying function names, since they are standard within
+    # the class.
+
     # store shared objects refs
-    GPprb.store_data('common', {'S': S, 'penalty': penalty})
+    # TODO: make three functions for store_eval_train_params_values, etc.
+    # within the one for train, handle the case with or without validation
+    GPprb.store_eval_funcs_params_values('common', {'S': S, 'penalty': penalty})
 
     store = GPprb.data_store
 
     if GPprb.early_stopping['enabled']:
-        GPprb.store_data('val', {'X': X_val, 'y': y_val,
-                         'theta_in_all': theta_in_all['val']})
+        GPprb.store_eval_funcs_params_values('val', {'thetas_true': thetas_val,
+                                                     'Fs': Fs_val,
+                                                     'theta_in_all': theta_in_all['val']})
         args_val = store['common'] | store['val']
     else:
-        X_train = np.vstack((X_train, X_val))
-        y_train = np.hstack((y_train, y_val))
+        thetas_train = np.vstack((thetas_train, thetas_val))
+        Fs_train = np.hstack((Fs_train, Fs_val))
         theta_in_all['train'] = np.vstack((theta_in_all['train'], theta_in_all['val']))
         args_val = None
 
-    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=y_train[0],
+    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0],
                            EI0_guess=1., theta_guess=theta_in_all['train'][0, :],
-                           theta_true=X_train[0, :], S=store['common']['S'])
+                           theta_true=thetas_train[0, :], S=store['common']['S'])
 
-    GPprb.store_data('train', {'X': X_train, 'y': y_train,
-                     'theta_in_all': theta_in_all['train']})
+    GPprb.store_eval_funcs_params_values('train', {'thetas_true': thetas_train,
+                                                   'Fs': Fs_train,
+                                                   'theta_in_all': theta_in_all['train']})
     args_train = store['common'] | store['train']
 
-    # FIXME: defer computation of EI0
-    args_test_MSE = {'X': X_test, 'y': y_test, 'S': S,
+    # defer computation of EI0 so that it has the value of the best indivdual at the end
+    # of the run
+    # TODO: make a wrapper for eval_MSE that handles deferred parameters before passing
+    # them to functions
+    args_test_MSE = {'thetas_true': thetas_test, 'Fs': Fs_test, 'S': S,
                      'theta_in_all': theta_in_all['test'],
-                     'EI0': GPprb.best.EI0 if hasattr(GPprb, "best") else 1.0,
+                     'EI0': lambda: GPprb.best.EI0,
                      'indlen': 0}
     args_test_sols = args_test_MSE.copy()
     args_test_sols['return_best_sol'] = True
@@ -398,8 +409,8 @@ def stgp_elastica(config_file_data, output_path=None):
                               test_sols=eval_MSE, args_test_sols=args_test_sols)
 
     if GPprb.plot_best:
-        GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
-                               toolbox=GPprb.toolbox, S=S,
+        GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val,
+                               Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
                                theta_in_all=theta_in_all['val'],
                                transform=transform)
 
@@ -407,18 +418,9 @@ def stgp_elastica(config_file_data, output_path=None):
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    # MULTIPROCESSING ------------------------------------------------------------------
-    def ray_mapper(f, individuals, toolbox):
-        # We are not duplicating global scope on workers so we need to use the toolbox
-        # Transform the tree expression in a callable function
-        runnables = [toolbox.compile(expr=ind) for ind in individuals]
-        lenghts = [len(ind) for ind in individuals]
-        EI0s = [ind.EI0 for ind in individuals]
-        fitnesses = ray.get([f(*args) for args in zip(runnables, EI0s, lenghts)])
-        return fitnesses
+    feature_extractors = [len, lambda ind: ind.EI0]
 
-    GPprb.toolbox.register("map", ray_mapper, toolbox=GPprb.toolbox)
-    # ----------------------------------------------------------------------------------
+    GPprb.register_map(feature_extractors)
 
     def evaluate_EI0s(pop):
         if not hasattr(pop[0], "EI0"):
@@ -437,7 +439,7 @@ def stgp_elastica(config_file_data, output_path=None):
     start = time.perf_counter()
 
     GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
-              save_best_individual=True, save_best_test_sols=True, X_test=X_test,
+              save_best_individual=True, save_best_test_sols=True, X_test=thetas_test,
               output_path=output_path, preprocess_fun=evaluate_EI0s,
               callback_fun=print_EI0)
 
