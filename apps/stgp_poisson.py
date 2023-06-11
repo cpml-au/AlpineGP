@@ -186,13 +186,13 @@ def stgp_poisson(config_file, output_path=None):
     penalty = config_file["gp"]["penalty"]
 
     # store shared objects refs
-    GPprb.store_eval_funcs_params_values('common', {'S': S, 'penalty': penalty, 'bnodes': bnodes,
-                                                    'gamma': gamma, 'u_0': u_0})
+    GPprb.store_eval_train_params('common', {'S': S, 'penalty': penalty, 'bnodes': bnodes,
+                                             'gamma': gamma, 'u_0': u_0})
 
     store = GPprb.data_store
 
     if GPprb.early_stopping['enabled']:
-        GPprb.store_eval_funcs_params_values(
+        GPprb.store_eval_train_params(
             'val', {'X': X_val, 'y': y_val, 'bvalues': bvalues_val})
         args_val = store['common'] | store['val']
     else:
@@ -201,7 +201,7 @@ def stgp_poisson(config_file, output_path=None):
         bvalues_train = np.vstack((bvalues_train, bvalues_val))
         args_val = None
 
-    GPprb.store_eval_funcs_params_values(
+    GPprb.store_eval_train_params(
         'train', {'X': X_train, 'y': y_train, 'bvalues': bvalues_train})
 
     args_train = store['common'] | store['train']

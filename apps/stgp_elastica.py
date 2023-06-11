@@ -1,11 +1,9 @@
 import numpy as np
 import numpy.typing as npt
-from typing import Callable, Dict, Tuple, List
+from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
 from jax import grad, Array
 from deap import base, gp, tools
-from scipy import sparse
-from scipy.linalg import block_diag
 from dctkit.mesh.simplex import SimplicialComplex
 from alpine.util import get_1D_complex
 from dctkit.dec import cochain as C
@@ -14,6 +12,7 @@ from dctkit.math.opt import optctrl as oc
 import dctkit as dt
 from alpine.data.elastica import elastica_dataset as ed
 from alpine.gp import gpsymbreg as gps
+from alpine.util import get_positions_from_angles
 import matplotlib.pyplot as plt
 import math
 import sys
@@ -26,52 +25,8 @@ import ray
 # needed for context of the plots at the end of the evolution
 config()
 
-# TODO: move to dctkit-elastica
-
-
-def get_positions_from_angles(angles: Tuple, transform: npt.NDArray) -> Tuple:
-    """Get x,y coordinates given a tuple containing all theta matrices.
-    To do it, we have to solve two linear systems Ax = b_x, Ay = b_y,
-    where A is a block diagonal matrix where each block is bidiagonal.
-
-    Args:
-        X (tuple): tuple containing theta to transform in coordinates.
-        transform (np.array): matrix of the linear system.
-
-    Returns:
-        (list): list of x-coordinates
-        (list): list of y-coordinates
-    """
-    x_all = []
-    y_all = []
-    h = 1/angles[0].shape[1]
-    for i in range(len(angles)):
-        theta = angles[i]
-        dim = theta.shape[0]
-
-        # compute cos and sin theta
-        cos_theta = h*jnp.cos(theta)
-        sin_theta = h*jnp.sin(theta)
-        b_x = np.zeros((theta.shape[0], theta.shape[1]+1), dtype=dt.float_dtype)
-        b_y = np.zeros((theta.shape[0], theta.shape[1]+1), dtype=dt.float_dtype)
-        b_x[:, 1:] = cos_theta
-        b_y[:, 1:] = sin_theta
-        # reshape to a vector
-        b_x = b_x.reshape(theta.shape[0]*(theta.shape[1]+1))
-        b_y = b_y.reshape(theta.shape[0]*(theta.shape[1]+1))
-        transform_list = [transform]*dim
-        T = block_diag(*transform_list)
-        # solve the system. In this way we find the solution but
-        # as a vector and not as a matrix.
-        x_i = jnp.linalg.solve(T, b_x)
-        y_i = jnp.linalg.solve(T, b_y)
-        # reshape again to have a matrix
-        x_i = x_i.reshape((theta.shape[0], theta.shape[1]+1))
-        y_i = y_i.reshape((theta.shape[0], theta.shape[1]+1))
-        # update the list
-        x_all.append(x_i)
-        y_all.append(y_i)
-    return x_all, y_all
+NUM_NODES = 11
+LENGTH = 1.
 
 
 def get_angles_initial_guesses(x: list, y: list) -> Dict:
@@ -288,8 +243,8 @@ def eval_fitness(individual: Callable, EI0: float, indlen: int,
 
 
 def plot_sol(ind: gp.PrimitiveTree, thetas_true: npt.NDArray, Fs: npt.NDArray,
-             toolbox: base.Toolbox, S: SimplicialComplex, theta_in_all: npt.NDArray,
-             transform: npt.NDArray) -> None:
+             toolbox: base.Toolbox, S: SimplicialComplex,
+             theta_in_all: npt.NDArray):
 
     indfun = toolbox.compile(expr=ind)
 
@@ -303,8 +258,8 @@ def plot_sol(ind: gp.PrimitiveTree, thetas_true: npt.NDArray, Fs: npt.NDArray,
     fig = plt.gcf()
     _, axes = plt.subplots(1, dim, num=1)
     # get the x,y coordinates LIST of the best and of the true
-    x_curr, y_curr = get_positions_from_angles((best_sol_all,), transform)
-    x_true, y_true = get_positions_from_angles((thetas_true,), transform)
+    x_curr, y_curr = get_positions_from_angles((best_sol_all,))
+    x_true, y_true = get_positions_from_angles((thetas_true,))
     for i in range(dim):
         # plot the results
         axes[i].plot(x_true[0][i, :], y_true[0][i, :], 'r')
@@ -320,20 +275,10 @@ def stgp_elastica(config_file_data, output_path=None):
     thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = ed.load_dataset()
 
     # TODO: how can we extract these numbers from the dataset (especially length)?
-    S = get_1D_complex(num_nodes=11, length=1.)
+    S = get_1D_complex(num_nodes=NUM_NODES, length=LENGTH)
 
-    # bidiagonal matrix to transform theta in (x,y)
-    diag = [1]*(S.num_nodes)
-    upper_diag = [-1]*(S.num_nodes-1)
-    upper_diag[0] = 0
-    diags = [diag, upper_diag]
-    transform = sparse.diags(diags, [0, -1]).toarray()
-    transform[1, 0] = -1
-
-    # TODO: find a way to remove transform among paramters (encapsulate this function
-    # within a class)
     x_all, y_all = get_positions_from_angles(
-        (thetas_train, thetas_val, thetas_test), transform)
+        (thetas_train, thetas_val, thetas_test))
 
     theta_in_all = get_angles_initial_guesses(x_all, y_all)
 
@@ -357,62 +302,33 @@ def stgp_elastica(config_file_data, output_path=None):
 
     penalty = config_file_data["gp"]['penalty']
 
-    # TODO: Define eval functions with standard names (eval_fitness, eval_error)
-    # as "virtual functions" within the GP problem class. Then call
-    # store_eval_funcs_params_values to define their parameters. Finally,
-    # call register_eval_funcs only with args lists: it should work without
-    # the need of specifying function names, since they are standard within
-    # the class.
+    # store shared objects refs: does it work without ray?
+    GPprb.store_eval_common_params({'S': S, 'penalty': penalty})
+    param_names = ('thetas_true', 'Fs', 'theta_in_all')
+    datasets = {'train': [thetas_train, Fs_train, theta_in_all['train']], 'val': [
+        thetas_val, Fs_val, theta_in_all['val']],
+        'test': [thetas_test, Fs_test, theta_in_all['test']]}
+    GPprb.store_eval_dataset_params(param_names, datasets)
 
-    # store shared objects refs
-    # TODO: make three functions for store_eval_train_params_values, etc.
-    # within the one for train, handle the case with or without validation
-    GPprb.store_eval_funcs_params_values('common', {'S': S, 'penalty': penalty})
-
-    store = GPprb.data_store
-
-    if GPprb.early_stopping['enabled']:
-        GPprb.store_eval_funcs_params_values('val', {'thetas_true': thetas_val,
-                                                     'Fs': Fs_val,
-                                                     'theta_in_all': theta_in_all['val']})
-        args_val = store['common'] | store['val']
-    else:
-        thetas_train = np.vstack((thetas_train, thetas_val))
-        Fs_train = np.hstack((Fs_train, Fs_val))
-        theta_in_all['train'] = np.vstack((theta_in_all['train'], theta_in_all['val']))
-        args_val = None
-
-    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0],
-                           EI0_guess=1., theta_guess=theta_in_all['train'][0, :],
-                           theta_true=thetas_train[0, :], S=store['common']['S'])
-
-    GPprb.store_eval_funcs_params_values('train', {'thetas_true': thetas_train,
-                                                   'Fs': Fs_train,
-                                                   'theta_in_all': theta_in_all['train']})
-    args_train = store['common'] | store['train']
-
-    # defer computation of EI0 so that it has the value of the best indivdual at the end
-    # of the run
-    # TODO: make a wrapper for eval_MSE that handles deferred parameters before passing
-    # them to functions
-    args_test_MSE = {'thetas_true': thetas_test, 'Fs': Fs_test, 'S': S,
-                     'theta_in_all': theta_in_all['test'],
-                     'EI0': lambda: GPprb.best.EI0,
-                     'indlen': 0}
-    args_test_sols = args_test_MSE.copy()
+    # TODO: separate function for test sols instead of setting a flag
+    GPprb.set_eval_args()
+    args_test_sols = GPprb.args_test_MSE.copy()
     args_test_sols['return_best_sol'] = True
 
-    GPprb.register_eval_funcs(train_fit=eval_fitness.remote, args_train=args_train,
-                              val_fit=eval_fitness.remote,
-                              val_MSE=eval_MSE_remote.remote, args_val=args_val,
-                              test_MSE=eval_MSE, args_test_MSE=args_test_MSE,
+    GPprb.register_eval_funcs(fitness=eval_fitness.remote,
+                              error_metric=eval_MSE_remote.remote,
                               test_sols=eval_MSE, args_test_sols=args_test_sols)
+
+    # register custom functions
+    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0],
+                           EI0_guess=1., theta_guess=theta_in_all['train'][0, :],
+                           theta_true=thetas_train[0, :],
+                           S=GPprb.data_store['common']['S'])
 
     if GPprb.plot_best:
         GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val,
                                Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
-                               theta_in_all=theta_in_all['val'],
-                               transform=transform)
+                               theta_in_all=theta_in_all['val'])
 
     # opt_string = ""
     # opt_individ = creator.Individual.from_string(opt_string, pset)
@@ -439,7 +355,7 @@ def stgp_elastica(config_file_data, output_path=None):
     start = time.perf_counter()
 
     GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
-              save_best_individual=True, save_best_test_sols=True, X_test=thetas_test,
+              save_best_individual=True, save_best_test_sols=False, X_test=thetas_test,
               output_path=output_path, preprocess_fun=evaluate_EI0s,
               callback_fun=print_EI0)
 

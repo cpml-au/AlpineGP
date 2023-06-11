@@ -200,14 +200,40 @@ class GPSymbRegProblem():
         self.plot_best = config_file_data["plot"]["plot_best"]
         self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
-    def store_eval_funcs_params_values(self, label: str, data: Dict):
+    def store_eval_common_params(self, data: Dict):
+        self.__store_eval_params('common', data)
+
+    def store_eval_dataset_params(self, params_names: List[str],
+                                  datasets: Dict):
+
+        if not self.early_stopping['enabled']:
+            for i, _ in enumerate(datasets['train']):
+                try:
+                    datasets['train'][i] = \
+                        np.vstack((datasets['train'][i], datasets['val'][i]))
+                except ValueError:
+                    datasets['train'][i] = \
+                        np.hstack((datasets['train'][i], datasets['val'][i]))
+
+        for dataset_label in ('train', 'val', 'test'):
+            keys_values = dict(zip(params_names, datasets[dataset_label]))
+            self.__store_eval_params(dataset_label, keys_values)
+
+    def __store_eval_params(self, label: str, data: Dict):
         for key, value in data.items():
             data[key] = ray.put(value)
         self.data_store[label] = data
 
-    def register_eval_funcs(self, train_fit: Callable, args_train: dict,
-                            val_fit=None, val_MSE=None, args_val: dict | None = None,
-                            test_MSE=None, args_test_MSE: dict | None = None,
+    def set_eval_args(self):
+        store = self.data_store
+        if self.early_stopping['enabled']:
+            self.args_val = store['common'] | store['val']
+        self.args_train = store['common'] | store['train']
+        self.args_test_MSE = store['common'] | store['test']
+        self.args_set = True
+
+    def register_eval_funcs(self, fitness: Callable,
+                            error_metric: Callable | None = None,
                             test_sols: Callable | None = None,
                             args_test_sols: dict | None = None):
         """Register functions for the evaluation of the fitness of the individuals over
@@ -216,17 +242,20 @@ class GPSymbRegProblem():
         Args:
             val_MSE: must have the same arguments as val_fit.
         """
-        # set arguments for evaluate functions
+        if not self.args_set or not hasattr(self, "args_set"):
+            print("setting args")
+            self.set_eval_args()
+
         if self.early_stopping['enabled']:
             self.toolbox.register(
-                "evaluate_val_fit", val_fit, **args_val)
+                "evaluate_val_fit", fitness, **self.args_val)
             self.toolbox.register(
-                "evaluate_val_MSE", val_MSE, **args_val)
+                "evaluate_val_MSE", error_metric, **self.args_val)
 
         # register functions for fitness/MSE evaluation on different datasets
-        self.toolbox.register("evaluate_train", train_fit, **args_train)
+        self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
-        self.toolbox.register("evaluate_test_MSE", test_MSE, **args_test_MSE)
+        self.toolbox.register("evaluate_test_MSE", error_metric, **self.args_test_MSE)
         self.toolbox.register("evaluate_test_sols", test_sols, **args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
@@ -456,6 +485,7 @@ class GPSymbRegProblem():
 
         if self.early_stopping['enabled']:
             print("Using early-stopping.")
+            # TODO: these calculations seem to be repeating and could be grouped in a function
             best = tools.selBest(self.pop, k=1)
             self.tbtp = best[0].fitness.values[0]
             # Evaluate fitness on the validation set
@@ -629,7 +659,7 @@ class GPSymbRegProblem():
             np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
 
     def print_best_test_MSE(self):
-        score_test = self.toolbox.evaluate_test_MSE(
-            self.toolbox.compile(expr=self.best))
+        score_test = self.toolbox.map(self.toolbox.evaluate_test_MSE,
+                                      (self.best,))[0][0]
 
         print(f"The best MSE on the test set is {score_test}")
