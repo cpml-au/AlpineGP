@@ -82,7 +82,6 @@ class GPSymbRegProblem():
             self.NGEN = NGEN
             self.CXPB = CXPB
             self.MUTPB = MUTPB
-            self.pop = None
 
             self.overlapping_generation = overlapping_generation
             self.parsimony_pressure = parsimony_pressure
@@ -211,6 +210,8 @@ class GPSymbRegProblem():
                 try:
                     datasets['train'][i] = \
                         np.vstack((datasets['train'][i], datasets['val'][i]))
+                # FIXME: this could be avoided if the dataset is appropriately
+                # structured even in the case of a single sample
                 except ValueError:
                     datasets['train'][i] = \
                         np.hstack((datasets['train'][i], datasets['val'][i]))
@@ -230,20 +231,16 @@ class GPSymbRegProblem():
             self.args_val = store['common'] | store['val']
         self.args_train = store['common'] | store['train']
         self.args_test_MSE = store['common'] | store['test']
+        self.args_test_sols = self.args_test_MSE
         self.args_set = True
 
     def register_eval_funcs(self, fitness: Callable,
                             error_metric: Callable | None = None,
-                            test_sols: Callable | None = None,
-                            args_test_sols: dict | None = None):
+                            test_sols: Callable | None = None):
         """Register functions for the evaluation of the fitness of the individuals over
         the datasets.
-
-        Args:
-            val_MSE: must have the same arguments as val_fit.
         """
-        if not self.args_set or not hasattr(self, "args_set"):
-            print("setting args")
+        if not hasattr(self, "args_set") or not self.args_set:
             self.set_eval_args()
 
         if self.early_stopping['enabled']:
@@ -252,11 +249,10 @@ class GPSymbRegProblem():
             self.toolbox.register(
                 "evaluate_val_MSE", error_metric, **self.args_val)
 
-        # register functions for fitness/MSE evaluation on different datasets
         self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
         self.toolbox.register("evaluate_test_MSE", error_metric, **self.args_test_MSE)
-        self.toolbox.register("evaluate_test_sols", test_sols, **args_test_sols)
+        self.toolbox.register("evaluate_test_sols", test_sols, **self.args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -287,7 +283,7 @@ class GPSymbRegProblem():
         # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
         # single-valued tuple as eval_val_fit
         valid_fit = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
-        valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0][0]
+        valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0]
         overfit = 0
         if overfit_measure:
             training_fit = best[0].fitness.values[0]
@@ -397,8 +393,6 @@ class GPSymbRegProblem():
 
     def register_map(self, individ_feature_extractors: List[Callable] | None = None):
         def ray_mapper(f, individuals, toolbox):
-            # We are not duplicating global scope on workers so we need to use the
-            # toolbox
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
             feature_values = [[fe(i) for i in individuals]
@@ -422,7 +416,7 @@ class GPSymbRegProblem():
             save_best_individual: bool = False,
             save_train_fit_history: bool = False,
             save_best_test_sols: bool = False,
-            X_test: npt.NDArray | None = None,
+            X_test_param_name: str | None = None,
             output_path: str | None = None):
         """Runs symbolic regression.
 
@@ -485,7 +479,8 @@ class GPSymbRegProblem():
 
         if self.early_stopping['enabled']:
             print("Using early-stopping.")
-            # TODO: these calculations seem to be repeating and could be grouped in a function
+            # TODO: these calculations seem to be repeating and could be grouped in a
+            # function
             best = tools.selBest(self.pop, k=1)
             self.tbtp = best[0].fitness.values[0]
             # Evaluate fitness on the validation set
@@ -577,7 +572,6 @@ class GPSymbRegProblem():
                 self.last_improvement = training_fit
 
                 if m == self.early_stopping['max_overfit']:
-                    # save number of generations when stopping for the last training run
                     self.NGEN = self.last_gen_no_overfit
                     print("-= EARLY STOPPED =-")
                     break
@@ -613,8 +607,9 @@ class GPSymbRegProblem():
             self.save_train_fit_history(output_path)
             print("Training fitness history saved to disk.")
 
-        if save_best_test_sols and output_path is not None and X_test is not None:
-            self.save_best_test_sols(output_path, X_test)
+        if save_best_test_sols and output_path is not None \
+                and X_test_param_name is not None:
+            self.save_best_test_sols(output_path, X_test_param_name)
             print("Best individual solution evaluated over the test set saved to disk.")
 
         if self.use_ray:
@@ -647,19 +642,24 @@ class GPSymbRegProblem():
         if self.early_stopping['enabled']:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
-    def save_best_test_sols(self, output_path: str, X_test: npt.NDArray):
+    def save_best_test_sols(self, output_path: str, X_test_param_name: str):
         """Saves solutions (.npy) corresponding to the best individual evaluated
         over the test dataset.
         """
-        best_test_sols = self.toolbox.evaluate_test_sols(
-            self.toolbox.compile(expr=self.best))
+        best_test_sols = self.toolbox.map(self.toolbox.evaluate_test_sols,
+                                          (self.best,))[0]
+
+        X_test = self.data_store['test'][X_test_param_name]
+        if self.use_ray:
+            X_test = ray.get(X_test)
 
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
             np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
 
     def print_best_test_MSE(self):
+        # map function always returns a list and takes a list as an input
         score_test = self.toolbox.map(self.toolbox.evaluate_test_MSE,
-                                      (self.best,))[0][0]
+                                      (self.best,))[0]
 
         print(f"The best MSE on the test set is {score_test}")
