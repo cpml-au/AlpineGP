@@ -58,28 +58,26 @@ Prototype problem: identifying the Poisson equation in 1D.
 ```python
 from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
-from dctkit.mesh.util import generate_1_D_mesh
+from alpine.util import get_1D_complex
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from deap import gp
 from alpine.gp import gpsymbreg as gps
-from alpine.gp import primitives
 from dctkit import config
 import dctkit
-import networkx as nx
-from ray.util.multiprocessing import Pool
 import ray
+import networkx as nx
 import numpy as np
 import math
 import yaml
-from typing import Tuple, Callable
+from typing import Tuple, Callable, List
 import numpy.typing as npt
 ```
 
 2. Define the function to compute the fitness of an individual (model expression tree) 
 ```python
-def eval_MSE(residual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-             S: SimplicialComplex, u_0: C.CochainP0, return_best_sol: bool = False) -> float:
+def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
+                 S: SimplicialComplex, u_0: C.CochainP0) -> float:
 
     num_nodes = X.shape[1]
 
@@ -126,20 +124,23 @@ def eval_MSE(residual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
         best_sols.append(x)
 
-    if return_best_sol:
-        return best_sols
-
     total_err *= 1/X.shape[0]
 
-    return total_err
+    return total_err, best_sols
+
+@ray.remote
+def eval_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+            S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
+
+    _, best_sols = eval_MSE_sol(individual, X, y, S, u_0)
+
+    return best_sols
 
 @ray.remote
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
 
-    objval = 0.
-
-    total_err = eval_MSE(individual, indlen, X, y, S, u_0)
+    total_err, _ = eval_MSE_sol(individual, X, y, S, u_0)
 
     # add penalty on length of the tree to promote simpler solutions
     objval = total_err + penalty["reg_param"]*indlen
@@ -154,12 +155,8 @@ def stgp_poisson():
         config_file_data = yaml.safe_load(config_file)
 
     # generate mesh and dataset
-    S_1, x = generate_1_D_mesh(num_nodes=11, L=1.)
-    S = SimplicialComplex(S_1, x, is_well_centered=True)
-    S.get_circumcenters()
-    S.get_primal_volumes()
-    S.get_dual_volumes()
-    S.get_hodge_star()
+    S = get_1D_complex(num_nodes=11, length=1.)
+    x = S.node_coord 
     num_nodes = S.num_nodes
 
     # generate training and test datasets
@@ -183,78 +180,30 @@ def stgp_poisson():
     pset.renameArguments(ARG0="u")
     pset.renameArguments(ARG1="f")
 
-    # set parameters of the symbolic regression problem from config file
-    # also create toolbox needed for Genetic Programming algorithm
-    GPproblem_settings, GPproblem_run, GPproblem_extra = gps.load_config_data(
-        config_file_data=config_file_data, pset=pset)
-    toolbox = GPproblem_settings['toolbox']
-    penalty = GPproblem_extra['penalty']
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file_data)
 
-    # add primitives to the primitive set, as specified in the config file
-    primitives.addPrimitivesToPset(pset, GPproblem_settings['primitives'])
-
-    GPproblem_settings.pop('primitives')
-
-    ray.init()
+    penalty = config_file_data["gp"]["penalty"]
 
     # store shared objects refs
-    S_ref = ray.put(S)
-    u_0_ref = ray.put(u_0)
-    penalty_ref = ray.put(penalty)
-    X_train_ref = ray.put(X_train)
-    y_train_ref = ray.put(y_train)
+    GPprb.store_eval_common_params({'S': S, 'u_0': u_0, 'penalty': penalty})
+    param_names = ('X', 'y')
+    datasets = {'train': [X_train, y_train], 'test': [X_train, y_train]}
 
-    # set arguments for evaluate functions
-    args_train = {'X': X_train_ref, 'y': y_train_ref, 'S': S_ref, 'u_0': u_0_ref, 
-                  'penalty': penalty_ref}
+    GPprb.store_eval_dataset_params(param_names, datasets)
 
-    # register functions for fitness/MSE evaluation on different datasets
-    toolbox.register("evaluate_train", eval_fitness.remote, **args_train)
+    GPprb.register_eval_funcs(fitness=eval_fitness.remote, test_sols=eval_sols.remote)
 
-    # create symbolic regression problem instance
-    GPproblem = gps.GPSymbRegProblem(pset=pset, **GPproblem_settings)
+    feature_extractors = [len] 
+    GPprb.register_map(feature_extractors)
 
-    # MULTIPROCESSING MAP FUNCTION----------------------------------------------------
-    pool = Pool()
+    GPprb.run(print_log=True, plot_best_individual_tree=False)
 
-    def ray_mapper(f, individuals, toolbox):
-        # We are not duplicating global scope on workers so we need to use the toolbox
-        # Transform the tree expression in a callable function
-        runnables = [toolbox.compile(expr=ind) for ind in individuals]
-        lenghts = [len(ind) for ind in individuals]
-        fitnesses = ray.get([f(*args) for args in zip(runnables, lenghts)])
-        return fitnesses
+    u_best = GPprb.toolbox.map(GPprb.toolbox.evaluate_test_sols, (GPprb.best,))[0]
 
-    GPproblem.toolbox.register("map", ray_mapper, toolbox=GPproblem.toolbox)
-    # --------------------------------------------------------------------------------
-
-    GPproblem.run(plot_history=False, print_log=True, seed=None, **GPproblem_run)
-
-    best = GPproblem.best
-
-    # compute the solution corresponding to the best individual
-    u_best = eval_MSE(GPproblem.toolbox.compile(expr=best), len(str(best)),
-                          X_train, y_train, S=S, u_0=u_0, return_best_sol=True)[0]
-
-    pool.close()
     ray.shutdown()
-
     plt.figure()
     plt.plot(x[:,0], u.coeffs)
-    plt.plot(x[:,0], u_best, "ro")
-    plt.show()
-
-    # plot the tree of the best individual
-    nodes, edges, labels = gp.graph(best)
-    graph = nx.Graph()
-    graph.add_nodes_from(nodes)
-    graph.add_edges_from(edges)
-    pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-    plt.figure(figsize=(7, 7))
-    nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-    nx.draw_networkx_edges(graph, pos)
-    nx.draw_networkx_labels(graph, pos, labels)
-    plt.axis("off")
+    plt.plot(x[:,0], np.ravel(u_best), "ro")
     plt.show()
 ```
 

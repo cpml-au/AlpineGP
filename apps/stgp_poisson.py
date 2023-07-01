@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
 from alpine.data.poisson import poisson_dataset as pd
+from dctkit.mesh import util
 from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit
@@ -154,7 +155,9 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
-    S, bnodes, triang = pd.generate_square_complex(0.08)
+    # S, bnodes, triang = pd.generate_square_complex(0.08)
+    mesh = util.generate_square_mesh(0.08)
+    S = util.build_complex_from_mesh(mesh)
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = pd.load_dataset()
 
@@ -186,7 +189,8 @@ def stgp_poisson(config_file, output_path=None):
     penalty = config_file["gp"]["penalty"]
 
     # store shared objects refs
-    GPprb.store_eval_train_params('common', {'S': S, 'penalty': penalty, 'bnodes': bnodes,
+    GPprb.store_eval_train_params('common', {'S': S, 'penalty': penalty,
+                                             'bnodes': bnodes,
                                              'gamma': gamma, 'u_0': u_0})
 
     store = GPprb.data_store

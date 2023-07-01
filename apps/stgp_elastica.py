@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from jax import grad, Array
 from deap import base, gp, tools
 from dctkit.mesh.simplex import SimplicialComplex
-from alpine.util import get_1D_complex
+from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.dec import cochain as C
 from dctkit import config
 from dctkit.math.opt import optctrl as oc
@@ -34,22 +34,26 @@ def get_angles_initial_guesses(x: list, y: list) -> Dict:
     for i in range(3):
         x_current = x[i]
         y_current = y[i]
-        theta_in_init = np.ones((x_current.shape[0], x_current.shape[1]-2), dtype=dt.float_dtype)
+        theta_in_init = np.ones((x_current.shape[0], x_current.shape[1]-2),
+                                dtype=dt.float_dtype)
         const_angles = np.arctan(
             (y_current[:, -1] - y_current[:, 1])/(x_current[:, -1] - x_current[:, 1]))
         theta_0_current = np.diag(const_angles) @ theta_in_init
         theta_in_all_list.append(theta_0_current)
 
-    theta_in_all_dict = dict([('train', theta_in_all_list[0]), ('val', theta_in_all_list[1]),
+    theta_in_all_dict = dict([('train', theta_in_all_list[0]),
+                              ('val', theta_in_all_list[1]),
                               ('test', theta_in_all_list[2])])
     return theta_in_all_dict
 
 
-def is_valid_energy(theta_in: npt.NDArray, theta: npt.NDArray, prb: oc.OptimizationProblem) -> bool:
+def is_valid_energy(theta_in: npt.NDArray, theta: npt.NDArray,
+                    prb: oc.OptimizationProblem) -> bool:
     dim = len(theta_in)
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_in_noise = theta_in + noise
-    theta_noise = prb.run(x0=theta_in_noise, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+    theta_noise = prb.run(x0=theta_in_noise, maxeval=500, ftol_abs=1e-12,
+                          ftol_rel=1e-12)
     is_valid = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
     return is_valid
 
@@ -88,8 +92,9 @@ class Objectives():
 
 
 @ray.remote(num_cpus=2)
-def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float, EI0_guess: float,
-             theta_guess: npt.NDArray, theta_true: npt.NDArray, S: SimplicialComplex) -> float:
+def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
+             EI0_guess: float, theta_guess: npt.NDArray,
+             theta_true: npt.NDArray, S: SimplicialComplex) -> float:
 
     # number of unknowns angles
     dim = S.num_nodes-2
@@ -99,8 +104,8 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float, EI0_gue
     # prescribed angle at x=0
     theta_0 = theta_true[0]
 
-    # need to call config again before using JAX in energy evaluations to make sure that the
-    # current worker has initialized JAX
+    # need to call config again before using JAX in energy evaluations to make sure that
+    # the current worker has initialized JAX
     config()
 
     constraint_args = {'theta_0': theta_0}
@@ -137,8 +142,8 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float, EI0_gue
     return EI0
 
 
-def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int, thetas_true: npt.NDArray,
-                 Fs: npt.NDArray, S: SimplicialComplex,
+def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int,
+                 thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
                  theta_in_all: npt.NDArray) -> Tuple[float, npt.NDArray]:
 
     # number of unknown angles
@@ -207,11 +212,12 @@ def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int, thetas_true: np
 
 
 @ray.remote(num_cpus=2)
-def eval_best_sols(energy_func: Callable, EI0: float, indlen: int, thetas_true: npt.NDArray,
-                   Fs: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
-                   penalty: Dict) -> npt.NDArray:
+def eval_best_sols(energy_func: Callable, EI0: float, indlen: int,
+                   thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
+                   theta_in_all: npt.NDArray, penalty: Dict) -> npt.NDArray:
 
-    _, best_sols = eval_MSE_sol(energy_func, EI0, indlen, thetas_true, Fs, S, theta_in_all)
+    _, best_sols = eval_MSE_sol(energy_func, EI0, indlen, thetas_true, Fs, S,
+                                theta_in_all)
     return best_sols
 
 
@@ -226,9 +232,9 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, thetas_true: npt.ND
 
 
 @ray.remote(num_cpus=2)
-def eval_fitness(individual: Callable, EI0: float, indlen: int, thetas_true: npt.NDArray,
-                 Fs: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
-                 penalty: Dict) -> Tuple[float, ]:
+def eval_fitness(individual: Callable, EI0: float, indlen: int,
+                 thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
+                 theta_in_all: npt.NDArray, penalty: Dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, EI0, indlen,
                                 thetas_true, Fs, S, theta_in_all)
@@ -271,7 +277,9 @@ def stgp_elastica(config_file_data, output_path=None):
     thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = ed.load_dataset()
 
     # TODO: how can we extract these numbers from the dataset (especially length)?
-    S = get_1D_complex(num_nodes=NUM_NODES, length=LENGTH)
+    mesh, _ = generate_line_mesh(num_nodes=NUM_NODES, L=LENGTH)
+    S = build_complex_from_mesh(mesh)
+    S.get_hodge_star()
 
     x_all, y_all = get_positions_from_angles(
         (thetas_train, thetas_val, thetas_test))
@@ -310,13 +318,16 @@ def stgp_elastica(config_file_data, output_path=None):
                               test_sols=eval_best_sols.remote)
 
     # register custom functions
-    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0], EI0_guess=1.,
-                           theta_guess=theta_in_all['train'][0, :], theta_true=thetas_train[0, :],
+    GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0],
+                           EI0_guess=1.,
+                           theta_guess=theta_in_all['train'][0, :],
+                           theta_true=thetas_train[0, :],
                            S=GPprb.data_store['common']['S'])
 
     if GPprb.plot_best:
-        GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val, Fs=Fs_val,
-                               toolbox=GPprb.toolbox, S=S, theta_in_all=theta_in_all['val'])
+        GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val, 
+                               Fs=Fs_val, toolbox=GPprb.toolbox, S=S, 
+                               theta_in_all=theta_in_all['val'])
 
     # opt_string = ""
     # opt_individ = creator.Individual.from_string(opt_string, pset)
@@ -342,8 +353,9 @@ def stgp_elastica(config_file_data, output_path=None):
 
     start = time.perf_counter()
 
-    GPprb.run(print_log=True, seed=None, save_train_fit_history=True, save_best_individual=True,
-              save_best_test_sols=True, X_test_param_name='thetas_true', output_path=output_path,
+    GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
+              save_best_individual=True, save_best_test_sols=True,
+              X_test_param_name='thetas_true', output_path=output_path,
               preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")

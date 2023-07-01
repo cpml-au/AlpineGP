@@ -21,25 +21,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                            "intra_op_parallelism_threads=1")
 
 
-# def get_primitives_strings(pset: gp.PrimitiveSetTyped, types: list) -> List[str]:
-#     """Extract a list containing the names of all the primitives.
-
-#     Args:
-#         pset: a PrimitiveSetTyped object.
-#         types: list of all the types used in pset.
-
-#     Returns:
-#         a list containing the names (str) of the primitives.
-#     """
-#     primitives_strings = []
-#     for type in types:
-#         # NOTE: pset.primitives is a dictionary
-#         current_primitives = [str(pset.primitives[type][i].name)
-#                               for i in range(len(pset.primitives[type]))]
-#         primitives_strings.extend(current_primitives)
-#     return primitives_strings
-
-
 class GPSymbRegProblem():
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
@@ -205,7 +186,7 @@ class GPSymbRegProblem():
     def store_eval_dataset_params(self, params_names: List[str],
                                   datasets: Dict):
 
-        if not self.early_stopping['enabled']:
+        if not self.early_stopping['enabled'] and 'val' in datasets:
             for i, _ in enumerate(datasets['train']):
                 try:
                     datasets['train'][i] = \
@@ -216,7 +197,7 @@ class GPSymbRegProblem():
                     datasets['train'][i] = \
                         np.hstack((datasets['train'][i], datasets['val'][i]))
 
-        for dataset_label in ('train', 'val', 'test'):
+        for dataset_label in datasets.keys():
             keys_values = dict(zip(params_names, datasets[dataset_label]))
             self.__store_eval_params(dataset_label, keys_values)
 
@@ -251,8 +232,10 @@ class GPSymbRegProblem():
 
         self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
-        self.toolbox.register("evaluate_test_MSE", error_metric, **self.args_test_MSE)
-        self.toolbox.register("evaluate_test_sols", test_sols, **self.args_test_sols)
+        if error_metric is not None:
+            self.toolbox.register("evaluate_test_MSE", error_metric, **self.args_test_MSE)
+        if test_sols is not None:
+            self.toolbox.register("evaluate_test_sols", test_sols, **self.args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -596,7 +579,7 @@ class GPSymbRegProblem():
         if plot_best_individual_tree:
             self.plot_best_individual_tree()
 
-        if print_best_test_MSE:
+        if print_best_test_MSE and hasattr(self.toolbox, "evaluate_test_MSE"):
             self.print_best_test_MSE()
 
         if save_best_individual and output_path is not None:
@@ -607,13 +590,15 @@ class GPSymbRegProblem():
             self.save_train_fit_history(output_path)
             print("Training fitness history saved to disk.")
 
-        if save_best_test_sols and output_path is not None \
+        if save_best_test_sols and output_path is not None and \
+            hasattr(self.toolbox, "evaluate_test_sols")\
                 and X_test_param_name is not None:
             self.save_best_test_sols(output_path, X_test_param_name)
             print("Best individual solution evaluated over the test set saved to disk.")
 
         if self.use_ray:
-            ray.shutdown()
+            # ray.shutdown()
+            pass
 
     def plot_best_individual_tree(self):
         """Plots the tree of the best individual."""
