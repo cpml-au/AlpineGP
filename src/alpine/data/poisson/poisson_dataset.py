@@ -11,30 +11,30 @@ cwd = os.path.dirname(simplex.__file__)
 data_path = os.path.dirname(os.path.realpath(__file__))
 
 
-def generate_square_complex(lc):
-    """Generate a Simplicial complex and its boundary nodes from a msh file.
+# def generate_square_complex(lc):
+#     """Generate a Simplicial complex and its boundary nodes from a msh file.
 
-    Args:
-        lc (float): target mesh file.
+#     Args:
+#         lc (float): target mesh file.
 
-    Returns:
-        (SimplicialComplex): resulting simplicial complex.
-        (np.array): np.array containing the positions of the boundary nodes.
-    """
+#     Returns:
+#         (SimplicialComplex): resulting simplicial complex.
+#         (np.array): np.array containing the positions of the boundary nodes.
+#     """
 
-    _, _, S_2, node_coords, _ = util.generate_square_mesh(lc)
+#     _, _, S_2, node_coords, _ = util.generate_square_mesh(lc)
 
-    triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
-    S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
-    S.get_circumcenters()
-    S.get_primal_volumes()
-    S.get_dual_volumes()
-    S.get_hodge_star()
+#     triang = tri.Triangulation(node_coords[:, 0], node_coords[:, 1])
+#     S = simplex.SimplicialComplex(S_2, node_coords, is_well_centered=True)
+#     S.get_circumcenters()
+#     S.get_primal_volumes()
+#     S.get_dual_volumes()
+#     S.get_hodge_star()
 
-    bnodes, _ = gmsh.model.mesh.getNodesForPhysicalGroup(1, 1)
-    bnodes -= 1
+#     bnodes, _ = gmsh.model.mesh.getNodesForPhysicalGroup(1, 1)
+#     bnodes -= 1
 
-    return S, bnodes, triang
+#     return S, bnodes, triang
 
 
 def generate_dataset(S, num_samples_per_source, num_sources, noise):
