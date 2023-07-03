@@ -1,8 +1,6 @@
 import jax.numpy as jnp
 from deap import gp
 from dctkit.dec import cochain as C
-import math
-import operator
 import dctkit as dt
 from typing import List
 
@@ -113,12 +111,18 @@ primitives = {
     'InvMulD1': PrimitiveParams(inv_scalar_mul, [C.CochainD1, float], C.CochainD1),
     'InvMulD2': PrimitiveParams(inv_scalar_mul, [C.CochainD2, float], C.CochainD2),
 
-    'CochMulP0': PrimitiveParams(C.cochain_mul, [C.CochainP0, C.CochainP0], C.CochainP0),
-    'CochMulP1': PrimitiveParams(C.cochain_mul, [C.CochainP1, C.CochainP1], C.CochainP1),
-    'CochMulP2': PrimitiveParams(C.cochain_mul, [C.CochainP2, C.CochainP2], C.CochainP2),
-    'CochMulD0': PrimitiveParams(C.cochain_mul, [C.CochainD0, C.CochainD0], C.CochainD0),
-    'CochMulD1': PrimitiveParams(C.cochain_mul, [C.CochainD1, C.CochainD1], C.CochainD1),
-    'CochMulD2': PrimitiveParams(C.cochain_mul, [C.CochainD2, C.CochainD2], C.CochainD2),
+    'CochMulP0': PrimitiveParams(C.cochain_mul, [C.CochainP0, C.CochainP0],
+                                 C.CochainP0),
+    'CochMulP1': PrimitiveParams(C.cochain_mul, [C.CochainP1, C.CochainP1],
+                                 C.CochainP1),
+    'CochMulP2': PrimitiveParams(C.cochain_mul, [C.CochainP2, C.CochainP2],
+                                 C.CochainP2),
+    'CochMulD0': PrimitiveParams(C.cochain_mul, [C.CochainD0, C.CochainD0],
+                                 C.CochainD0),
+    'CochMulD1': PrimitiveParams(C.cochain_mul, [C.CochainD1, C.CochainD1],
+                                 C.CochainD1),
+    'CochMulD2': PrimitiveParams(C.cochain_mul, [C.CochainD2, C.CochainD2],
+                                 C.CochainD2),
 
     'InnP0': PrimitiveParams(C.inner_product, [C.CochainP0, C.CochainP0], float),
     'InnP1': PrimitiveParams(C.inner_product, [C.CochainP1, C.CochainP1], float),

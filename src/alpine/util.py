@@ -1,5 +1,3 @@
-from dctkit.mesh.simplex import SimplicialComplex
-import numpy.typing as npt
 from typing import Tuple
 from scipy.linalg import block_diag
 import numpy as np
@@ -7,18 +5,8 @@ import dctkit as dt
 from scipy import sparse
 
 
-# def get_1D_complex(num_nodes: int, length: float) -> SimplicialComplex:
-#     S_1, x = generate_1_D_mesh(num_nodes=num_nodes, L=length)
-#     S = SimplicialComplex(S_1, x, is_well_centered=True)
-#     S.get_circumcenters()
-#     S.get_primal_volumes()
-#     S.get_dual_volumes()
-#     S.get_hodge_star()
-#     return S
-
-
 # TODO: find a way to avoid recomputing transform (encapsulate this function
-# within a class)
+# within a class). Also, this function looks too complex...
 def get_positions_from_angles(angles: Tuple) -> Tuple:
     """Get x,y coordinates given a tuple containing all theta matrices.
     To do it, we have to solve two linear systems Ax = b_x, Ay = b_y,
