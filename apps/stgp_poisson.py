@@ -155,7 +155,6 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
-    # S, bnodes, triang = pd.generate_square_complex(0.08)
     mesh = util.generate_square_mesh(0.08)
     S = util.build_complex_from_mesh(mesh)
     num_nodes = S.num_nodes
