@@ -150,6 +150,3 @@ gp:
 plot:
   plot_best: False
   plot_best_genealogy: False
-
-mp:
-  n_jobs: 2

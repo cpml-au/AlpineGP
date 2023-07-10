@@ -40,9 +40,9 @@ def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
     return is_valid
 
 
-def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-             bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
-             gamma: float, u_0: C.CochainP0, return_best_sol: bool = False) -> float:
+def eval_MSE_sol(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+                 bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+                 gamma: float, u_0: C.CochainP0) -> Tuple[float, npt.NDArray]:
 
     num_nodes = X.shape[1]
 
@@ -96,22 +96,29 @@ def eval_MSE(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
         best_sols.append(x)
 
-    if return_best_sol:
-        return best_sols
-
     total_err *= 1/X.shape[0]
 
-    return total_err
+    return total_err, best_sols
 
 
 @ray.remote(num_cpus=2)
-def eval_MSE_remote(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-                    bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
-                    gamma: float, u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
+def eval_best_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+                   bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+                   gamma: float, u_0: npt.NDArray, penalty: dict) -> npt.NDArray:
 
-    total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+    _, best_sols = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
-    return total_err,
+    return best_sols
+
+
+@ray.remote(num_cpus=2)
+def eval_MSE(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+             bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
+             gamma: float, u_0: npt.NDArray, penalty: dict) -> float:
+
+    MSE, _ = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+
+    return MSE
 
 
 @ray.remote(num_cpus=2)
@@ -119,7 +126,7 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
                  u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
 
-    total_err = eval_MSE(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+    total_err, _ = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
 
     # penalty terms on length
     objval = total_err + penalty["reg_param"]*indlen
@@ -135,8 +142,8 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
     indfun = toolbox.compile(expr=ind)
 
-    u = eval_MSE(indfun, indlen=0, X=X, y=y, bvalues=bvalues, S=S,
-                 bnodes=bnodes, gamma=gamma, u_0=u_0, return_best_sol=True)
+    _, u = eval_MSE_sol(indfun, indlen=0, X=X, y=y, bvalues=bvalues, S=S,
+                        bnodes=bnodes, gamma=gamma, u_0=u_0)
 
     plt.figure(10, figsize=(8, 4))
     plt.clf()
@@ -155,8 +162,10 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 def stgp_poisson(config_file, output_path=None):
     # generate mesh and dataset
-    mesh = util.generate_square_mesh(0.08)
+    mesh, _ = util.generate_square_mesh(0.08)
     S = util.build_complex_from_mesh(mesh)
+    S.get_hodge_star()
+    bnodes = mesh.cell_sets_dict["boundary"]["line"]
     num_nodes = S.num_nodes
     X_train, X_val, X_test, y_train, y_val, y_test = pd.load_dataset()
 
@@ -187,56 +196,27 @@ def stgp_poisson(config_file, output_path=None):
 
     penalty = config_file["gp"]["penalty"]
 
-    # store shared objects refs
-    GPprb.store_eval_train_params('common', {'S': S, 'penalty': penalty,
-                                             'bnodes': bnodes,
-                                             'gamma': gamma, 'u_0': u_0})
+    GPprb.store_eval_common_params({'S': S, 'penalty': penalty,
+                                    'bnodes': bnodes,
+                                    'gamma': gamma, 'u_0': u_0})
 
-    store = GPprb.data_store
+    params_names = ('X', 'y', 'bvalues')
+    datasets = {'train': [X_train, y_train, bvalues_train],
+                'val': [X_val, y_val, bvalues_val],
+                'test': [X_test, y_test, bvalues_test]}
+    GPprb.store_eval_dataset_params(params_names, datasets)
 
-    if GPprb.early_stopping['enabled']:
-        GPprb.store_eval_train_params(
-            'val', {'X': X_val, 'y': y_val, 'bvalues': bvalues_val})
-        args_val = store['common'] | store['val']
-    else:
-        X_train = np.vstack((X_train, X_val))
-        y_train = np.vstack((y_train, y_val))
-        bvalues_train = np.vstack((bvalues_train, bvalues_val))
-        args_val = None
-
-    GPprb.store_eval_train_params(
-        'train', {'X': X_train, 'y': y_train, 'bvalues': bvalues_train})
-
-    args_train = store['common'] | store['train']
-    args_test_MSE = {'X': X_test, 'y': y_test, 'indlen': 0, 'bvalues': bvalues_test,
-                     'S': S, 'bnodes': bnodes, 'gamma': gamma, 'u_0': u_0}
-    args_test_sols = args_test_MSE.copy()
-    args_test_sols['return_best_sol'] = True
-
-    GPprb.register_eval_funcs(train_fit=eval_fitness.remote, args_train=args_train,
-                              val_fit=eval_fitness.remote,
-                              val_MSE=eval_MSE_remote.remote,
-                              args_val=args_val, test_MSE=eval_MSE,
-                              args_test_MSE=args_test_MSE, test_sols=eval_MSE,
-                              args_test_sols=args_test_sols)
+    GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
+                              test_sols=eval_best_sols.remote)
 
     if GPprb.plot_best:
+        triang = tri.Triangulation(S.node_coords[:, 0], S.node_coords[:, 1], S.S[2])
         GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
                                bvalues=bvalues_val, S=S, bnodes=bnodes,
                                gamma=gamma, u_0=u_0,
                                toolbox=GPprb.toolbox, triang=triang)
 
-    # MULTIPROCESSING ------------------------------------------------------------------
-    def ray_mapper(f, individuals, toolbox):
-        # We are not duplicating global scope on workers so we need to use the toolbox
-        # Transform the tree expression in a callable function
-        runnables = [toolbox.compile(expr=ind) for ind in individuals]
-        lenghts = [len(ind) for ind in individuals]
-        fitnesses = ray.get([f(*args) for args in zip(runnables, lenghts)])
-        return fitnesses
-
-    GPprb.toolbox.register("map", ray_mapper, toolbox=GPprb.toolbox)
-    # ----------------------------------------------------------------------------------
+    GPprb.register_map([len])
 
     start = time.perf_counter()
     # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
@@ -246,7 +226,7 @@ def stgp_poisson(config_file, output_path=None):
 
     GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
-              save_best_test_sols=True, X_test=X_test,
+              save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")

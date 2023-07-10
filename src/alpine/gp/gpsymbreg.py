@@ -2,10 +2,9 @@ from deap import algorithms, tools, gp, base, creator
 import matplotlib.pyplot as plt
 import numpy as np
 import operator
-from typing import Tuple, List, Dict, Callable
+from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-import numpy.typing as npt
 from .primitives import addPrimitivesToPset
 import os
 import ray
