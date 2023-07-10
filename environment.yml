@@ -11,6 +11,7 @@ dependencies:
   - python=3.11.0
   - python-gmsh
   - scipy=1.10.0
+  - scikit-learn
   - typeguard
   - yaml=0.2.5
   - pip:
@@ -18,3 +19,4 @@ dependencies:
       - git+https://github.com/alucantonio/dctkit
       - myst-parser[linkify]
       - sphinx>=3.2.1
+      - ray
