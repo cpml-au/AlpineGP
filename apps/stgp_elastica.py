@@ -20,6 +20,7 @@ import yaml
 import time
 import ray
 
+residual_formulation = False
 
 # choose precision and whether to use GPU or CPU
 #  needed for context of the plots at the end of the evolution
@@ -62,6 +63,11 @@ class Objectives():
     def __init__(self, S: SimplicialComplex) -> None:
         self.S = S
 
+    def set_residual(self, func: Callable) -> None:
+        """Set the energy function to be used for the computation of the objective
+        function."""
+        self.residual = func
+
     def set_energy_func(self, func: Callable) -> None:
         """Set the energy function to be used for the computation of the objective
         function."""
@@ -75,14 +81,26 @@ class Objectives():
         theta = C.CochainD0(self.S, theta_vec)
         FL2_EI0_coch = C.CochainD0(
             self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
-        energy = self.energy_func(theta, FL2_EI0_coch)
+        if residual_formulation:
+            residual = self.residual(theta, FL2_EI0_coch)
+            energy = jnp.linalg.norm(residual.coeffs[1:])**2
+        else:
+            energy = self.energy_func(theta, FL2_EI0_coch)
         return energy
 
     # state function: stationarity conditions for the total energy
     def total_energy_grad(self, x: npt.NDArray, theta_0: float) -> Array:
         theta = x[:-1]
         FL2_EI0 = x[-1]
-        return grad(self.total_energy)(theta, FL2_EI0, theta_0)
+        if residual_formulation:
+            # FIXME: not sure why we are not applying grad to total_energy
+            theta_vec = jnp.insert(theta, 0, theta_0)
+            theta = C.CochainD0(self.S, theta_vec)
+            FL2_EI0_coch = C.CochainD0(
+                self.S, FL2_EI0*jnp.ones(self.S.num_nodes-1, dtype=dt.float_dtype))
+            return self.residual(theta, FL2_EI0_coch).coeffs[1:]
+        else:
+            return grad(self.total_energy)(theta, FL2_EI0, theta_0)
 
     # objective function for the parameter EI0 identification problem
     def MSE_theta(self, x: npt.NDArray, theta_true: npt.NDArray) -> Array:
@@ -92,14 +110,17 @@ class Objectives():
 
 
 @ray.remote(num_cpus=2)
-def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
+def tune_EI0(func: Callable, EI0: float, indlen: int, FL2: float,
              EI0_guess: float, theta_guess: npt.NDArray,
              theta_true: npt.NDArray, S: SimplicialComplex) -> float:
 
     # number of unknowns angles
     dim = S.num_nodes-2
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func)
+    if residual_formulation:
+        obj.set_residual(func)
+    else:
+        obj.set_energy_func(func)
 
     # prescribed angle at x=0
     theta_0 = theta_true[0]
@@ -136,13 +157,13 @@ def tune_EI0(energy_func: Callable, EI0: float, indlen: int, FL2: float,
     EI0 = FL2/FL2_EI0
 
     # if optimization failed, set negative EI0
-    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3):
+    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4):
         EI0 = -1.
 
     return EI0
 
 
-def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int,
+def eval_MSE_sol(func: Callable, EI0: float, indlen: int,
                  thetas_true: npt.NDArray, Fs: npt.NDArray, S: SimplicialComplex,
                  theta_in_all: npt.NDArray) -> Tuple[float, npt.NDArray]:
 
@@ -152,7 +173,10 @@ def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int,
     total_err = 0.
 
     obj = Objectives(S=S)
-    obj.set_energy_func(energy_func)
+    if residual_formulation:
+        obj.set_residual(func)
+    else:
+        obj.set_energy_func(func)
 
     X_dim = thetas_true.shape[0]
     best_theta = np.zeros((X_dim, S.num_nodes-1), dtype=dt.float_dtype)
@@ -183,7 +207,8 @@ def eval_MSE_sol(energy_func: Callable, EI0: float, indlen: int,
             # and energies with minima that are too sensitive to the initial guess)
             valid_energy = is_valid_energy(theta_in=theta_in, theta=theta, prb=prb)
 
-            if (prb.last_opt_result == 1 or prb.last_opt_result == 3) and valid_energy:
+            if (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4) \
+                    and valid_energy:
                 x = np.append(theta, FL2_EI0)
                 fval = float(obj.MSE_theta(x, theta_true))
             else:
@@ -274,6 +299,7 @@ def plot_sol(ind: gp.PrimitiveTree, thetas_true: npt.NDArray, Fs: npt.NDArray,
 
 
 def stgp_elastica(config_file_data, output_path=None):
+    global residual_formulation
     thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = ed.load_dataset()
 
     # TODO: how can we extract these numbers from the dataset (especially length)?
@@ -286,7 +312,13 @@ def stgp_elastica(config_file_data, output_path=None):
 
     theta_in_all = get_angles_initial_guesses(x_all, y_all)
 
-    pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
+    residual_formulation = config_file["gp"]["residual_formulation"]
+
+    if residual_formulation:
+        print("Using residual formulation.")
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], C.CochainD0)
+    else:
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, C.CochainD0], float)
 
     # add internal cochain as a terminal
     internal_vec = np.ones(S.num_nodes, dtype=dt.float_dtype)
@@ -325,8 +357,8 @@ def stgp_elastica(config_file_data, output_path=None):
                            S=GPprb.data_store['common']['S'])
 
     if GPprb.plot_best:
-        GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val, 
-                               Fs=Fs_val, toolbox=GPprb.toolbox, S=S, 
+        GPprb.toolbox.register("plot_best_func", plot_sol, thetas_true=thetas_val,
+                               Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
                                theta_in_all=theta_in_all['val'])
 
     # opt_string = ""
