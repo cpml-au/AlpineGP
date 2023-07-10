@@ -54,83 +54,71 @@ $ tox -e docs
 ## Usage
 Prototype problem: identifying the Poisson equation in 1D.
 
-1. Import the relevant libraries
+1. Import the relevant libraries.
 ```python
 from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
-from alpine.util import get_1D_complex
+from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from deap import gp
 from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit
-import ray
-import networkx as nx
 import numpy as np
+import ray
 import math
 import yaml
 from typing import Tuple, Callable, List
 import numpy.typing as npt
 ```
 
-2. Define the function to compute the fitness of an individual (model expression tree) 
+2. Define the function to compute the fitness of an individual (model expression tree). 
 ```python
 def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
                  S: SimplicialComplex, u_0: C.CochainP0) -> float:
-
-    num_nodes = X.shape[1]
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
     config()
 
-    # objective: squared norm of the residual of the equation + penalty on Dirichlet 
-    # boundary condition on the first node
-    def obj(x, y):
-        penalty = 100.*x[0]**2
-        u = C.CochainP0(S, x)
-        f = C.CochainP0(S, y)
-        r = residual(u, f)
-        total_energy = C.inner_product(r, r) + penalty
-        return total_energy
-
-    prb = oc.OptimizationProblem(dim=num_nodes, state_dim=num_nodes, objfun=obj)
-
     total_err = 0.
-
     best_sols = []
 
+    # define an optimization problem with objective function the squared norm of the 
+    # residual
+    # ...
+    # ...
+
+    # loop over the dataset (training or test)
     for i, vec_y in enumerate(y):
-        # set additional arguments of the objective function (apart from the vector of unknowns)
-        args = {'y': vec_y}
-        prb.set_obj_args(args)
+        # compute the minimizer of the optimization problem for given inputs (X)
+        # ...
+        # ...
 
-        # minimize the objective
-        x = prb.run(x0=u_0.coeffs, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
+        # compute the MSE between the optimal solution and the corresponding y sample 
+        # ...
+        # ...
 
-        if (prb.last_opt_result == 1 or prb.last_opt_result == 3
-                or prb.last_opt_result == 4):
+        # add MSE for the current sample to the total error
+        total_err += MSE
 
-            current_err = np.linalg.norm(x-X[i, :])**2
-        else:
-            current_err = math.nan
-
-        if math.isnan(current_err):
-            total_err = 1e5
-            break
-
-        total_err += current_err
-
+        # append the optimal solution to the list of best solutions 
         best_sols.append(x)
 
     total_err *= 1/X.shape[0]
 
     return total_err, best_sols
+```
 
+3. Define `ray.remote` functions to return the solution associated to the best
+   individual and the fitness of an individual. These functions must have the same
+   arguments. The first argument is always the `Callable` that represents the tree of
+   the individual. 
+```python
 @ray.remote
 def eval_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-            S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
+              S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
 
     _, best_sols = eval_MSE_sol(individual, X, y, S, u_0)
 
@@ -148,16 +136,17 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
     return objval,
 ```
 
-3. Define the main function to run the symbolic regression
+4. Define the main function to run the symbolic regression.
 ```python
 def stgp_poisson():
+    # read parameters from YAML file
     with open("ex1.yaml") as config_file:
         config_file_data = yaml.safe_load(config_file)
 
-    # generate mesh and dataset
-    S = get_1D_complex(num_nodes=11, length=1.)
-    x = S.node_coord 
-    num_nodes = S.num_nodes
+    # generate the mesh and build the corresponding SimplicialComplex object 
+    # (using dctkit)
+    # ...
+    # ...
 
     # generate training and test datasets
     # exact solution = x² 
@@ -180,31 +169,41 @@ def stgp_poisson():
     pset.renameArguments(ARG0="u")
     pset.renameArguments(ARG1="f")
 
+    # create the Symbolic Regression Problem object
     GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file_data)
 
     penalty = config_file_data["gp"]["penalty"]
 
-    # store shared objects refs
+    # store shared objects (such as the SimplicialComplex objects) common to the eval 
+    # functions (fitness, best sols)
     GPprb.store_eval_common_params({'S': S, 'u_0': u_0, 'penalty': penalty})
+
+    # define the parameters of the eval functions associated to the training, 
+    # validation and test sets and store the corresponding data in the shared objs space
     param_names = ('X', 'y')
     datasets = {'train': [X_train, y_train], 'test': [X_train, y_train]}
 
     GPprb.store_eval_dataset_params(param_names, datasets)
 
+    # register the functions for the (parallel) evaluation of the fitness and the best # individuals' solutions
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, test_sols=eval_sols.remote)
 
+    # register the map function and define features (such as individual length) that
+    # must be passed to the eval functions
     feature_extractors = [len] 
     GPprb.register_map(feature_extractors)
 
+    # run the symbolic regression problem
     GPprb.run(print_log=True, plot_best_individual_tree=False)
 
+    # recover the solution associated to the best individual among all the populations
     u_best = GPprb.toolbox.map(GPprb.toolbox.evaluate_test_sols, (GPprb.best,))[0]
 
     ray.shutdown()
-    plt.figure()
-    plt.plot(x[:,0], u.coeffs)
-    plt.plot(x[:,0], np.ravel(u_best), "ro")
-    plt.show()
+    
+    # plot the solution
+    # ...
+    # ...
 ```
 
-The complete example (notebook) can be found in the `examples` directory.
+The complete notebook for this example can be found in the `examples` directory.

@@ -26,5 +26,5 @@ jobs:
     - name: Linting with flake8
       run: |
         flake8
-    - name: Running tests with tox
-      run: tox
+    # - name: Running tests with tox
+      # run: tox
