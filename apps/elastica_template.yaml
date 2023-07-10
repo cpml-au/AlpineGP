@@ -20,7 +20,7 @@ gp:
     # fun: gp.mutNodeReplacement
     # fun: gp.mutInsert
     # fun: gp.mutShrink
-    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.8, 0.2, 0.]}" # string is important
+    kargs: "{'expr': toolbox.expr_mut, 'pset': self.pset, 'prob': [0.8, 0.2, 0.]}" # string is important
     # kargs: "{'pset': pset}"
     # kargs: "{}"
     expr_mut: gp.genHalfAndHalf

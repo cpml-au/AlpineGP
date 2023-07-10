@@ -8,15 +8,23 @@ dependencies:
   - jaxopt
   - numpy=1.24.2
   - pygmo=2.19.5
-  - python=3.11.0
+  - python
   - python-gmsh
+  - jupyterlab
+  - trame
+  - ipywidgets
   - scipy=1.10.0
   - scikit-learn
+  - pyvista
+  - pygraphviz
   - typeguard
   - yaml=0.2.5
+  - pip
   - pip:
       - sphinx_rtd_theme
       - git+https://github.com/alucantonio/dctkit
+      - git+https://github.com/alucantonio/deap
       - myst-parser[linkify]
       - sphinx>=3.2.1
       - ray
+      - pygmsh
