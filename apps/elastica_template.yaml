@@ -1,4 +1,3 @@
-# template for Poisson parameters file
 gp:
   NINDIVIDUALS: 2000
   NGEN: 100
@@ -116,6 +115,3 @@ gp:
 plot:
   plot_best: False
   plot_best_genealogy: False
-
-mp:
-  n_jobs: 2
