@@ -21,6 +21,7 @@ import yaml
 from typing import Tuple, Callable
 import numpy.typing as npt
 
+residual_formulation = False
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
@@ -40,7 +41,7 @@ def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
     return is_valid
 
 
-def eval_MSE_sol(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
                  gamma: float, u_0: C.CochainP0) -> Tuple[float, npt.NDArray]:
 
@@ -55,7 +56,10 @@ def eval_MSE_sol(energy_func: Callable, indlen: int, X: npt.NDArray, y: npt.NDAr
         penalty = 0.5*gamma*jnp.sum((x[bnodes] - vec_bvalues)**2)
         c = C.CochainP0(S, x)
         fk = C.CochainP0(S, vec_y)
-        total_energy = energy_func(c, fk) + penalty
+        if residual_formulation:
+            total_energy = C.inner_product(func(c, fk), func(c, fk)) + penalty
+        else:
+            total_energy = func(c, fk) + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(
@@ -161,6 +165,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
 
 
 def stgp_poisson(config_file, output_path=None):
+    global residual_formulation
     # generate mesh and dataset
     mesh, _ = util.generate_square_mesh(0.08)
     S = util.build_complex_from_mesh(mesh)
@@ -181,8 +186,18 @@ def stgp_poisson(config_file, output_path=None):
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
     u_0 = C.CochainP0(S, u_0_vec)
 
+    residual_formulation = config_file["gp"]["residual_formulation"]
+
     # define primitive set and add primitives and terminals
-    pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
+    if residual_formulation:
+        print("Using residual formulation.")
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], C.Cochain)
+        # ones cochain
+        pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(
+            S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="ones")
+    else:
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], float)
+
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")

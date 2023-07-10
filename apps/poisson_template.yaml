@@ -146,6 +146,7 @@ gp:
       "SquareD1",
       "SquareD2",
     ]
+  residual_formulation: False
 
 plot:
   plot_best: False
