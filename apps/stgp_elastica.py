@@ -19,6 +19,7 @@ import sys
 import yaml
 import time
 import ray
+from deap import creator
 
 residual_formulation = False
 
@@ -362,11 +363,11 @@ def stgp_elastica(config_file_data, output_path=None):
                                Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
                                theta_in_all=theta_in_all['val'])
 
-    # opt_string = ""
+    # opt_string = "Sub(InnD1(St0d1(int_coch), SquareD1(dD0(theta))), InnD0(SinD0(theta), FL2_EI0))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    feature_extractors = [len, lambda ind: ind.EI0]
+    feature_extractors = [lambda ind: ind.EI0, len]
 
     GPprb.register_map(feature_extractors)
 
@@ -386,7 +387,7 @@ def stgp_elastica(config_file_data, output_path=None):
 
     start = time.perf_counter()
 
-    GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
+    GPprb.run(print_log=True, seed=seed, save_train_fit_history=True,
               save_best_individual=True, save_best_test_sols=True,
               X_test_param_name='thetas_true', output_path=output_path,
               preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
