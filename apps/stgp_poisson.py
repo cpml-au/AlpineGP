@@ -110,7 +110,8 @@ def eval_best_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDA
                    bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
                    gamma: float, u_0: npt.NDArray, penalty: dict) -> npt.NDArray:
 
-    _, best_sols = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+    _, best_sols = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes,
+                                gamma, u_0)
 
     return best_sols
 
@@ -130,7 +131,8 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
                  bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray, gamma: float,
                  u_0: npt.NDArray, penalty: dict) -> Tuple[float, ]:
 
-    total_err, _ = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes, gamma, u_0)
+    total_err, _ = eval_MSE_sol(individual, indlen, X, y, bvalues, S, bnodes,
+                                gamma, u_0)
 
     # penalty terms on length
     objval = total_err + penalty["reg_param"]*indlen

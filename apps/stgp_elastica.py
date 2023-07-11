@@ -157,7 +157,8 @@ def tune_EI0(func: Callable, EI0: float, indlen: int, FL2: float,
     EI0 = FL2/FL2_EI0
 
     # if optimization failed, set negative EI0
-    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4):
+    if not (prb.last_opt_result == 1 or prb.last_opt_result == 3 or
+            prb.last_opt_result == 4):
         EI0 = -1.
 
     return EI0
@@ -207,8 +208,8 @@ def eval_MSE_sol(func: Callable, EI0: float, indlen: int,
             # and energies with minima that are too sensitive to the initial guess)
             valid_energy = is_valid_energy(theta_in=theta_in, theta=theta, prb=prb)
 
-            if (prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4) \
-                    and valid_energy:
+            if (prb.last_opt_result == 1 or prb.last_opt_result == 3
+                    or prb.last_opt_result == 4) and valid_energy:
                 x = np.append(theta, FL2_EI0)
                 fval = float(obj.MSE_theta(x, theta_true))
             else:
@@ -251,8 +252,8 @@ def eval_MSE(energy_func: Callable, EI0: float, indlen: int, thetas_true: npt.ND
              Fs: npt.NDArray, S: SimplicialComplex, theta_in_all: npt.NDArray,
              penalty: Dict) -> float:
 
-    MSE, _ = eval_MSE_sol(energy_func, EI0, indlen,
-                          thetas_true, Fs, S, theta_in_all)
+    MSE, _ = eval_MSE_sol(energy_func, EI0, indlen, thetas_true, Fs, S, theta_in_all)
+
     return MSE
 
 

@@ -169,7 +169,8 @@ class GPSymbRegProblem():
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
         self.parsimony_pressure = config_file_data["gp"]["parsimony_pressure"]
         self.tournsize = config_file_data["gp"]["select"]["tournsize"]
-        self.stochastic_tournament = config_file_data["gp"]["select"]["stochastic_tournament"]
+        self.stochastic_tournament = \
+            config_file_data["gp"]["select"]["stochastic_tournament"]
 
         addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
 
@@ -232,9 +233,11 @@ class GPSymbRegProblem():
         self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
         if error_metric is not None:
-            self.toolbox.register("evaluate_test_MSE", error_metric, **self.args_test_MSE)
+            self.toolbox.register("evaluate_test_MSE", error_metric,
+                                  **self.args_test_MSE)
         if test_sols is not None:
-            self.toolbox.register("evaluate_test_sols", test_sols, **self.args_test_sols)
+            self.toolbox.register("evaluate_test_sols", test_sols,
+                                  **self.args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
