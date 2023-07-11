@@ -1,0 +1,60 @@
+# template for Poisson parameters file
+gp:
+  NINDIVIDUALS: 100
+  NGEN: 20
+  CXPB: 0.2
+  MUTPB: 0.8
+  frac_elitist: 0
+  min_: 2
+  max_: 5
+  overlapping_generation: True
+  early_stopping: { "enabled": False, "max_overfit": 10 }
+  parsimony_pressure:
+    { "enabled": False, "fitness_first": True, "parsimony_size": 1.5 }
+  penalty: { "method": "length", "reg_param": 0.1 }
+  select:
+    tournsize: 2
+    stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  primitives: [
+      "Add",
+      "Sub",
+      "MulF",
+      "Div",
+      "AddP0",
+      "AddP1",
+      "AddD0",
+      "AddD1",
+      "SubP0",
+      "SubP1",
+      "SubD0",
+      "SubD1",
+      "dP0",
+      "dD0",
+      # "LapP0",
+      "delP1",
+      "delD1",
+      "St0d1",
+      "St1d1",
+      "InvSt0d1",
+      "InvSt1d1",
+      "MulP0",
+      "MulP1",
+      "MulD0",
+      "MulD1",
+      "InnP0",
+      "InnP1",
+      "InnD0",
+      "InnD1",
+    ]
+
+plot:
+  plot_best: False
+  plot_best_genealogy: False
