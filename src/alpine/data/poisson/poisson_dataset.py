@@ -3,6 +3,11 @@ from dctkit.mesh import simplex, util
 from dctkit.dec import cochain as C
 import os
 from sklearn.model_selection import train_test_split
+from dctkit import config
+
+# choose precision and whether to use GPU or CPU
+# needed for context of the plots at the end of the evolution
+config()
 
 
 cwd = os.path.dirname(simplex.__file__)
@@ -26,7 +31,7 @@ def generate_dataset(S, num_samples_per_source, num_sources, noise):
         np.array: np.array of the dataset samples.
         np.array: np.array of the labels.
     """
-    node_coords = S.node_coord
+    node_coords = S.node_coords
     num_nodes = S.num_nodes
     x = node_coords[:, 0]
     y = node_coords[:, 1]
@@ -164,8 +169,9 @@ def load_noise():
 if __name__ == '__main__':
     # seet seed
     np.random.seed(42)
-    mesh, = util.generate_square_mesh(0.08)
+    mesh, _ = util.generate_square_mesh(0.08)
     S = util.build_complex_from_mesh(mesh)
+    S.get_hodge_star()
     num_nodes = S.num_nodes
     save_dataset(S, 4, 3, 0.*np.random.rand(num_nodes))
     # save_noise(num_nodes)

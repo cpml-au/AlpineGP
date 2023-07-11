@@ -641,6 +641,8 @@ class GPSymbRegProblem():
             X_test = ray.get(X_test)
 
         for i, sol in enumerate(best_test_sols):
+            print(sol)
+            print(X_test[i])
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
             np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
 
