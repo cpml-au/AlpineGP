@@ -10,7 +10,8 @@ import alpine.data.util as u
 
 
 def get_data(S: simplex.SimplicialComplex, lame_moduli: List[Tuple],
-             num_data_per_each_mod_couple: List[int]) -> Tuple[npt.NDArray, npt.NDArray]:
+             num_data_per_each_mod_couple: List[int]) -> Tuple[npt.NDArray,
+                                                               npt.NDArray]:
     # number of lame moduli must be equal to the number of data per lame moduli
     assert len(lame_moduli) == len(num_data_per_each_mod_couple)
     # total number of data = sum of the data for each couple of lame moduli
