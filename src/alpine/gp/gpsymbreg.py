@@ -435,6 +435,7 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
+        print([str(i) for i in self.pop])
 
         print("DONE.", flush=True)
 

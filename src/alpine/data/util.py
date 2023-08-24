@@ -79,16 +79,14 @@ def load_dataset(data_path: str, format: str = "csv") -> Tuple[npt.NDArray]:
 
 
     """
-    X_train = np.loadtxt(os.path.join(data_path, "X_train." + format),
-                         dtype=float, delimiter=",")
-    X_valid = np.loadtxt(os.path.join(data_path, "X_valid." + format),
-                         dtype=float, delimiter=",")
-    X_test = np.loadtxt(os.path.join(data_path, "X_test." + format),
-                        dtype=float, delimiter=",")
-    y_train = np.loadtxt(os.path.join(data_path, "y_train." + format),
-                         dtype=float, delimiter=",")
-    y_valid = np.loadtxt(os.path.join(data_path, "y_valid." + format),
-                         dtype=float, delimiter=",")
-    y_test = np.loadtxt(os.path.join(data_path, "y_test." + format),
-                        dtype=float, delimiter=",")
+    if format == "csv":
+        loadfunc = partial(np.loadtxt, delimiter=",", dtype=float)
+    elif format == "npy":
+        loadfunc = np.load
+    X_train = loadfunc(os.path.join(data_path, "X_train." + format))
+    X_valid = loadfunc(os.path.join(data_path, "X_valid." + format))
+    X_test = loadfunc(os.path.join(data_path, "X_test." + format))
+    y_train = loadfunc(os.path.join(data_path, "y_train." + format))
+    y_valid = loadfunc(os.path.join(data_path, "y_valid." + format))
+    y_test = loadfunc(os.path.join(data_path, "y_test." + format))
     return X_train, X_valid, X_test, y_train, y_valid, y_test

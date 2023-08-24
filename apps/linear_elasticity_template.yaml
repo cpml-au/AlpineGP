@@ -1,0 +1,118 @@
+gp:
+  NINDIVIDUALS: 10
+  NGEN: 10
+  CXPB: 0.2
+  MUTPB: 0.8
+  frac_elitist: 0
+  min_: 2
+  max_: 5
+  overlapping_generation: True
+  early_stopping: { "enabled": True, "max_overfit": 10 }
+  parsimony_pressure:
+    { "enabled": False, "fitness_first": True, "parsimony_size": 1.5 }
+  penalty: { "method": "length", "reg_param": 0.01 }
+  select:
+    tournsize: 2
+    stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
+  mutate:
+    # fun: gp.mutUniform
+    fun: gp.mixedMutate
+    # fun: gp.mutNodeReplacement
+    # fun: gp.mutInsert
+    # fun: gp.mutShrink
+    kargs: "{'expr': toolbox.expr_mut, 'pset': self.pset, 'prob': [0.8, 0.2, 0.]}" # string is important
+    # kargs: "{'pset': pset}"
+    # kargs: "{}"
+    expr_mut: gp.genHalfAndHalf
+    # expr_mut: gp.genFull
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+    #fun: gp.cxOnePointLeafBiased
+    #kargs: "{'termpb' : 0.1}"
+  primitives:
+    [
+      "Add",
+      "Sub",
+      "MulF",
+      "Div",
+      "SinF",
+      "ArcsinF",
+      "CosF",
+      "ArccosF",
+      "ExpF",
+      "LogF",
+      "SqrtF",
+      "SquareF",
+      "InvF",
+      "AddP0",
+      "AddP1",
+      "AddD0",
+      "AddD1",
+      "SubP0",
+      "SubP1",
+      "SubD0",
+      "SubD1",
+      "dP0",
+      "dD0",
+      "delP1",
+      "delD1",
+      "St0d1",
+      "St1d1",
+      "InvSt0d1",
+      "InvSt1d1",
+      "MulP0",
+      "MulP1",
+      "MulD0",
+      "MulD1",
+      "InvMulP0",
+      "InvMulP1",
+      "InvMulD0",
+      "InvMulD1",
+      "CochMulP0",
+      "CochMulP1",
+      "CochMulD0",
+      "CochMulD1",
+      "InnP0",
+      "InnP1",
+      "InnD0",
+      "InnD1",
+      "SinP0",
+      "SinP1",
+      "SinD0",
+      "SinD1",
+      "ArcsinP0",
+      "ArcsinP1",
+      "ArcsinD0",
+      "ArcsinD1",
+      "CosP0",
+      "CosP1",
+      "CosD0",
+      "CosD1",
+      "ArccosP0",
+      "ArccosP1",
+      "ArccosD0",
+      "ArccosD1",
+      "ExpP0",
+      "ExpP1",
+      "ExpD0",
+      "ExpD1",
+      "LogP0",
+      "LogP1",
+      "LogD0",
+      "LogD1",
+      "SqrtP0",
+      "SqrtP1",
+      "SqrtD0",
+      "SqrtD1",
+      "SquareP0",
+      "SquareP1",
+      "SquareD0",
+      "SquareD1",
+    ]
+  residual_formulation: False
+
+plot:
+  plot_best: False
+  plot_best_genealogy: False

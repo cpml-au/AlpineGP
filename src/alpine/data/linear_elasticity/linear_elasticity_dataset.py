@@ -1,10 +1,13 @@
 import numpy as np
 import dctkit as dt
+import os
 from dctkit.mesh import simplex, util
 import pygmsh
 from typing import Tuple, List
 import numpy.typing as npt
 import alpine.data.util as u
+
+data_path = os.path.dirname(os.path.realpath(__file__))
 
 # FIXME: FIX THE DOCS
 
