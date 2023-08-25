@@ -2,7 +2,9 @@ import jax.numpy as jnp
 from deap import gp
 from dctkit.dec import cochain as C
 import dctkit as dt
-from typing import List
+from typing import List, Dict, Callable, Tuple
+from functools import partial
+import operator
 
 
 def protectedDiv(left, right):
@@ -200,3 +202,61 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
         in_types = primitives[primitive].in_types
         out_type = primitives[primitive].out_type
         pset.addPrimitive(op, in_types, out_type, name=primitive)
+
+
+def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | str | Dict]) -> Dict:
+    general_primitive = primitive['fun_info']
+    primitive_in = primitive['input']
+    primitive_out = primitive['output']
+    in_attribute = primitive['att_input']
+    map_rule = primitive['map_rule']
+    primitive_dictionary = dict()
+    for in_category in in_attribute['category']:
+        for in_dim in in_attribute['dimension']:
+            for in_rank in in_attribute['rank']:
+                # concatenation of strings
+                primitive_name = general_primitive['name'] + \
+                    in_category + in_dim + in_rank
+                in_type_name = []
+                for input in primitive_in:
+                    in_type_name.append(
+                        input + in_category + in_dim + in_rank)
+                in_type = list(map(eval, in_type_name))
+                out_category = map_rule['category'](in_category)
+                out_dim = str(map_rule['dimension'](int(in_dim)))
+                out_rank = map_rule['rank'](in_rank)
+                out_type_name = primitive_out + out_category + out_dim + out_rank
+                out_type = eval(out_type_name)
+                # primitive_dictionary[primitive_name] = PrimitiveParams(
+                #    general_primitive['fun'], in_type, out_type)
+                primitive_dictionary[primitive_name] = "PrimitiveParams(" + str(
+                    general_primitive['fun']) + "," + str(in_type) + "," + str(out_type) + ")"
+    return primitive_dictionary
+
+
+def switch_category(categories: Tuple, category: str):
+    switched_category_list = list(set(categories) - set(category))
+    return str(switched_category_list[0])
+
+
+def identity(x):
+    return x
+
+
+if __name__ == "__main__":
+    primitive = {'fun_info': {'name': 'Cob', 'fun': C.coboundary},
+                 'input': ["C.Cochain"],
+                 'output': "C.Cochain",
+                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'), "rank": ("",)},
+                 'map_rule': {'category': identity, 'dimension': partial(operator.add, 1), "rank": identity}}
+    primitive = {'fun_info': {'name': 'St', 'fun': C.star},
+                 'input': ["C.Cochain"],
+                 'output': "C.Cochain",
+                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
+                 'map_rule': {'category': partial(switch_category, ('P', 'D')), 'dimension': partial(operator.sub, 2), "rank": identity}}
+    primitive = {'fun_info': {'name': 'Add', 'fun': C.add},
+                 'input': ["C.Cochain", "C.Cochain"],
+                 'output': "C.Cochain",
+                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
+                 'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+    print(generate_primitive(primitive))
