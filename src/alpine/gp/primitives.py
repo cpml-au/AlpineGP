@@ -258,12 +258,12 @@ if __name__ == "__main__":
                  'output': "C.Cochain",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
                  'map_rule': {'category': partial(switch_category, ('P', 'D')), 'dimension': partial(operator.sub, 2), "rank": identity}}
-    primitive = {'fun_info': {'name': 'Add', 'fun': C.add},
+    primitive = {'fun_info': {'name': 'Add', 'fun': jnp.add},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "C.Cochain",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
                  'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
-    primitive = {'fun_info': {'name': 'Inner', 'fun': C.add},
+    primitive = {'fun_info': {'name': 'Inner', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
