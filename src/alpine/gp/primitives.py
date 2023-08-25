@@ -243,6 +243,10 @@ def identity(x):
     return x
 
 
+def empty_string(x):
+    return ""
+
+
 if __name__ == "__main__":
     primitive = {'fun_info': {'name': 'Cob', 'fun': C.coboundary},
                  'input': ["C.Cochain"],
@@ -259,4 +263,9 @@ if __name__ == "__main__":
                  'output': "C.Cochain",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
                  'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+    primitive = {'fun_info': {'name': 'Inner', 'fun': C.add},
+                 'input': ["C.Cochain", "C.Cochain"],
+                 'output': "float",
+                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("",)},
+                 'map_rule': {'category': empty_string, 'dimension': empty_string, "rank": identity}}
     print(generate_primitive(primitive))
