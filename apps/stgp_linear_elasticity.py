@@ -3,7 +3,7 @@ from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
-from deap import gp, base
+from deap import gp, base, creator
 from alpine.data.util import load_dataset
 from alpine.data.linear_elasticity.linear_elasticity_dataset import data_path
 from dctkit.mesh import util
@@ -28,19 +28,6 @@ residual_formulation = False
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
 config()
-
-
-def deformation_gradient(c: C.CochainP0) -> C.CochainP2:
-    F = c.complex.get_deformation_gradient(c.coeffs)
-    return C.CochainP2(c.complex, F)
-
-
-def transpose(c: C.Cochain) -> C.Cochain:
-    return C.Cochain(c.complex, jnp.transpose(c.coeffs, axes=(0, 2, 1)))
-
-
-def trace(c: C.Cochain) -> C.Cochain:
-    return C.Cochain(c.complex, jnp.trace(c.coeffs, axis1=1, axis2=2))
 
 
 def get_boundary_values(X, left_bnd_nodes_idx, left_bnd_nodes_pos, right_bnd_nodes_idx,
@@ -96,10 +83,11 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
                 penalty += jnp.sum((x_reshaped[idx, int(key)] - values)**2)
         penalty *= 0.5*gamma
         nodes = C.CochainP0(S, x_reshaped)
+        F = C.deformation_gradient(nodes)
         # if residual_formulation:
         #    total_energy = C.inner_product(func(c, fk), func(c, fk)) + penalty
         # else:
-        total_energy = func(nodes) + penalty
+        total_energy = func(F) + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(dim=num_nodes*dim_embedded_space,
@@ -121,8 +109,10 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12,
-                      ftol_rel=1e-12, maxeval=1000)
+        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12,
+                              ftol_rel=1e-12, maxeval=1000)
+        # reshape x to have a tensor
+        x = x_flatten.reshape(S.node_coords.shape)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -292,9 +282,9 @@ def stgp_linear_elasticity(config_file, output_path=None):
         pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0, C.CochainP0], C.Cochain)
         # ones cochain
         pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(
-            S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="ones")
+            S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="F")
     else:
-        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0], float)
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
 
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
@@ -304,26 +294,11 @@ def stgp_linear_elasticity(config_file, output_path=None):
     pset.addTerminal(0.1, float, name="0.1")
 
     identity = jnp.stack([jnp.identity(2)]*num_faces)
-    identity_coch = C.CochainP2(S, identity)
-    pset.addTerminal(identity_coch, C.CochainP2, name="I")
-
-    # add special primitives
-    pset.addPrimitive(deformation_gradient, [C.CochainP0], C.CochainP2, name="def_grad")
-    pset.addPrimitive(trace, [C.CochainP0], C.CochainP0, name="trP0")
-    pset.addPrimitive(trace, [C.CochainP1], C.CochainP1, name="trP1")
-    pset.addPrimitive(trace, [C.CochainP2], C.CochainP2, name="trP2")
-    pset.addPrimitive(trace, [C.CochainD0], C.CochainD0, name="trD0")
-    pset.addPrimitive(trace, [C.CochainD1], C.CochainD1, name="trD1")
-    pset.addPrimitive(trace, [C.CochainD2], C.CochainD2, name="trD2")
-    pset.addPrimitive(transpose, [C.CochainP0], C.CochainP0, name="TP0")
-    pset.addPrimitive(transpose, [C.CochainP1], C.CochainP1, name="TP1")
-    pset.addPrimitive(transpose, [C.CochainP2], C.CochainP2, name="TP2")
-    pset.addPrimitive(transpose, [C.CochainD0], C.CochainD0, name="TD0")
-    pset.addPrimitive(transpose, [C.CochainD1], C.CochainD1, name="TD1")
-    pset.addPrimitive(transpose, [C.CochainD2], C.CochainD2, name="TD2")
+    identity_coch = C.CochainP2T(S, identity)
+    pset.addTerminal(identity_coch, C.CochainP2T, name="I")
 
     # rename arguments
-    pset.renameArguments(ARG0="nodes")
+    pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
     GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
@@ -354,12 +329,14 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
-    # opt_string = "Sub(InnP1(dP0(u), dP0(u)), MulF(2., InnP0(f, u)))"
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    epsilon = "SubP2T(MulFP2T(AddP2T(F, tranP2T(F)), 1/2), I)"
+    opt_string_eps = "Add(MulF(2., InnP2T(epsilon, epsilon)), MulF(10., InnP2T(MulVP2VT(trP2T(epsilon), I), epsilon)))"
+    # opt_string_eps = "InnP2T(epsilon, epsilon)"
+    opt_string = opt_string_eps.replace("epsilon", epsilon)
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)
