@@ -295,13 +295,13 @@ tr_coch = {'fun_info': {'name': 'tr', 'fun': C.trace},
            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
            'map_rule': {'category': identity, 'dimension': identity, "rank": rank_downgrade}}
 coch_primitives.append(generate_primitive(tr_coch))
-mul_FT = {'fun_info': {'name': 'MulF', 'fun': C.scalar_mul},
+mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
           'input': ["C.Cochain", "float"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
           'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(mul_FT))
-mul_VT = {'fun_info': {'name': 'MulV', 'fun': C.vector_tensor_mul},
+mul_VT = {'fun_info': {'name': 'MV', 'fun': C.vector_tensor_mul},
           'input': ["C.Cochain", "C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("VT",)},
@@ -336,11 +336,13 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
     if primitive_names is None:
         primitive_names = list(primitives.keys())
 
-    for primitive in primitive_names:
-        op = primitives[primitive].op
-        in_types = primitives[primitive].in_types
-        out_type = primitives[primitive].out_type
-        pset.addPrimitive(op, in_types, out_type, name=primitive)
+    for primitive_family in primitive_names:
+        for primitive in primitives.keys():
+            if primitive_family in primitive:
+                op = primitives[primitive].op
+                in_types = primitives[primitive].in_types
+                out_type = primitives[primitive].out_type
+                pset.addPrimitive(op, in_types, out_type, name=primitive)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 gp:
-  NINDIVIDUALS: 5
-  NGEN: 1
+  NINDIVIDUALS: 100
+  NGEN: 10
   CXPB: 0.2
   MUTPB: 0.8
   frac_elitist: 0
@@ -31,7 +31,22 @@ gp:
     kargs: "{}"
     #fun: gp.cxOnePointLeafBiased
     #kargs: "{'termpb' : 0.1}"
-  primitives: []
+  primitives: [
+    AddF,
+    SubF,
+    MulF,
+    'Inn',
+    'MF',
+    'MV',
+    'St',
+    'tr'
+  ]
+  primitives_ADF: [
+    'Add',
+    'Sub',
+    'tran',
+    'MF'
+]
   residual_formulation: False
 
 plot:

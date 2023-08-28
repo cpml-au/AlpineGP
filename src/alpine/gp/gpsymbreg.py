@@ -37,7 +37,8 @@ class GPSymbRegProblem():
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
-                 use_ray=True):
+                 use_ray=True,
+                 ADF=None):
         """Symbolic regression problem via Genetic Programming.
 
             Args:
@@ -56,7 +57,7 @@ class GPSymbRegProblem():
         self.pset = pset
 
         if config_file_data is not None:
-            self.load_config_data(config_file_data)
+            self.load_config_data(config_file_data, ADF)
         else:
             self.NINDIVIDUALS = NINDIVIDUALS
             self.NGEN = NGEN
@@ -110,7 +111,7 @@ class GPSymbRegProblem():
         self.plot_initialized = False
         self.fig_id = 0
 
-    def __creator_toolbox_config(self, config_file_data: Dict):
+    def __creator_toolbox_config(self, config_file_data: Dict, ADF=None):
         """Initialize toolbox and individual creator based on config file."""
         toolbox = base.Toolbox()
         creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
@@ -156,10 +157,14 @@ class GPSymbRegProblem():
                          list, toolbox.individual_pop)
         toolbox.register("compile", gp.compile, pset=self.pset)
 
+        if ADF is not None:
+            # FIXME: continue from here!
+            pass
+
         self.toolbox = toolbox
         self.createIndividual = createIndividual
 
-    def load_config_data(self, config_file_data: Dict):
+    def load_config_data(self, config_file_data: Dict, ADF=None):
         """Load problem settings from YAML file."""
         self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
         self.NGEN = config_file_data["gp"]["NGEN"]
@@ -177,7 +182,10 @@ class GPSymbRegProblem():
         else:
             addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
 
-        self.__creator_toolbox_config(config_file_data=config_file_data)
+        if ADF is not None:
+            addPrimitivesToPset(ADF, config_file_data["gp"]['primitives_ADF'])
+
+        self.__creator_toolbox_config(config_file_data=config_file_data, ADF=ADF)
 
         self.early_stopping = config_file_data["gp"]["early_stopping"]
         self.plot_best = config_file_data["plot"]["plot_best"]
@@ -451,8 +459,6 @@ class GPSymbRegProblem():
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
-
-        # print([str(i) for i in self.pop])
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 

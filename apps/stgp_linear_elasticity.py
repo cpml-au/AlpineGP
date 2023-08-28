@@ -138,7 +138,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
     total_err *= 1/X.shape[0]
 
-    return total_err, best_sols
+    return 10.*total_err, best_sols
 
 
 @ray.remote(num_cpus=2)
@@ -286,6 +286,8 @@ def stgp_linear_elasticity(config_file, output_path=None):
     else:
         pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
 
+    # define ADF
+    ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
@@ -296,12 +298,13 @@ def stgp_linear_elasticity(config_file, output_path=None):
     identity = jnp.stack([jnp.identity(2)]*num_faces)
     identity_coch = C.CochainP2T(S, identity)
     pset.addTerminal(identity_coch, C.CochainP2T, name="I")
+    pset.addADF(ADF)
 
     # rename arguments
     pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF=ADF)
 
     penalty = config_file["gp"]["penalty"]
 
@@ -329,14 +332,14 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    epsilon = "SubP2T(MulFP2T(AddP2T(F, tranP2T(F)), 1/2), I)"
-    opt_string_eps = "Add(MulF(2., InnP2T(epsilon, epsilon)), MulF(10., InnP2T(MulVP2VT(trP2T(epsilon), I), epsilon)))"
+    # epsilon = "SubP2T(MulFP2T(AddP2T(F, tranP2T(F)), 1/2), I)"
+    # opt_string_eps = "Add(MulF(2., InnP2T(epsilon, epsilon)), MulF(10., InnP2T(MulVP2VT(trP2T(epsilon), I), epsilon)))"
     # opt_string_eps = "InnP2T(epsilon, epsilon)"
-    opt_string = opt_string_eps.replace("epsilon", epsilon)
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_string = opt_string_eps.replace("epsilon", epsilon)
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)
