@@ -172,7 +172,10 @@ class GPSymbRegProblem():
         self.stochastic_tournament = \
             config_file_data["gp"]["select"]["stochastic_tournament"]
 
-        addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
+        if len(config_file_data["gp"]['primitives']) == 0:
+            addPrimitivesToPset(self.pset)
+        else:
+            addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
@@ -435,7 +438,6 @@ class GPSymbRegProblem():
         # Generate initial population
         print("Generating initial population...", flush=True)
         self.pop = self.toolbox.population(n=self.NINDIVIDUALS)
-        print([str(i) for i in self.pop])
 
         print("DONE.", flush=True)
 
@@ -449,6 +451,8 @@ class GPSymbRegProblem():
         if seed is not None:
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
+
+        # print([str(i) for i in self.pop])
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
