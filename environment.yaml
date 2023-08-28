@@ -16,7 +16,6 @@ dependencies:
   - scipy=1.10.0
   - scikit-learn
   - pyvista
-  - pygraphviz
   - typeguard
   - yaml=0.2.5
   - pip
@@ -25,3 +24,4 @@ dependencies:
     - git+https://github.com/alucantonio/deap
     - ray
     - pygmsh
+    - pygraphviz
