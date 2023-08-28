@@ -55,9 +55,10 @@ class GPSymbRegProblem():
                     for survival.
         """
         self.pset = pset
+        self.ADF = ADF
 
         if config_file_data is not None:
-            self.load_config_data(config_file_data, ADF)
+            self.load_config_data(config_file_data)
         else:
             self.NINDIVIDUALS = NINDIVIDUALS
             self.NGEN = NGEN
@@ -111,14 +112,10 @@ class GPSymbRegProblem():
         self.plot_initialized = False
         self.fig_id = 0
 
-    def __creator_toolbox_config(self, config_file_data: Dict, ADF=None):
+    def __creator_toolbox_config(self, config_file_data: Dict):
         """Initialize toolbox and individual creator based on config file."""
         toolbox = base.Toolbox()
         creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
-        creator.create("Individual",
-                       gp.PrimitiveTree,
-                       fitness=creator.FitnessMin)
-        createIndividual = creator.Individual
 
         min_ = config_file_data["gp"]["min_"]
         max_ = config_file_data["gp"]["max_"]
@@ -149,22 +146,42 @@ class GPSymbRegProblem():
                          min_=min_,
                          max_=max_,
                          is_pop=True)
-        toolbox.register("individual", tools.initIterate,
-                         createIndividual, toolbox.expr)
+        if self.ADF is not None:
+            min_ADF = config_file_data["gp"]["min_"]
+            max_ADF = config_file_data["gp"]["max_"]
+
+            creator.create("Individual", list, fitness=creator.FitnessMin)
+            creator.create("ADF", gp.PrimitiveTree, pset=self.ADF)
+            creator.create("MAIN", gp.PrimitiveTree, pset=self.pset)
+
+            createIndividual = creator.MAIN
+
+            toolbox.register('expr_ADF', gp.genFull, pset=self.ADF,
+                             min_=min_ADF, max_=max_ADF)
+            toolbox.register('ADF', tools.initIterate, creator.ADF, toolbox.expr_ADF)
+            toolbox.register("main_individual", tools.initIterate,
+                             creator.MAIN, toolbox.expr)
+
+            toolbox.register("individual", tools.initCycle,
+                             createIndividual, [toolbox.main_individual, toolbox.ADF])
+        else:
+            creator.create("Individual",
+                           gp.PrimitiveTree,
+                           fitness=creator.FitnessMin)
+            createIndividual = creator.Individual
+            toolbox.register("individual", tools.initIterate,
+                             createIndividual, toolbox.expr)
+
         toolbox.register("individual_pop", tools.initIterate,
                          createIndividual, toolbox.expr_pop)
         toolbox.register("population", tools.initRepeat,
                          list, toolbox.individual_pop)
         toolbox.register("compile", gp.compile, pset=self.pset)
 
-        if ADF is not None:
-            # FIXME: continue from here!
-            pass
-
         self.toolbox = toolbox
         self.createIndividual = createIndividual
 
-    def load_config_data(self, config_file_data: Dict, ADF=None):
+    def load_config_data(self, config_file_data: Dict):
         """Load problem settings from YAML file."""
         self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
         self.NGEN = config_file_data["gp"]["NGEN"]
@@ -182,10 +199,10 @@ class GPSymbRegProblem():
         else:
             addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
 
-        if ADF is not None:
-            addPrimitivesToPset(ADF, config_file_data["gp"]['primitives_ADF'])
+        if self.ADF is not None:
+            addPrimitivesToPset(self.ADF, config_file_data["gp"]['primitives_ADF'])
 
-        self.__creator_toolbox_config(config_file_data=config_file_data, ADF=ADF)
+        self.__creator_toolbox_config(config_file_data=config_file_data)
 
         self.early_stopping = config_file_data["gp"]["early_stopping"]
         self.plot_best = config_file_data["plot"]["plot_best"]
@@ -390,6 +407,13 @@ class GPSymbRegProblem():
     def register_map(self, individ_feature_extractors: List[Callable] | None = None):
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
+            if self.ADF is not None:
+                # replace ADF name with the actual ADF value
+                full_ind_str = [str(ind[0]).replace(self.ADF.name, str(ind[1]))
+                                for ind in individuals]
+                print(individuals[0])
+                individuals = [self.createIndividual.from_string(
+                    full_ind, pset=self.pset) for full_ind in full_ind_str]
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
             feature_values = [[fe(i) for i in individuals]
                               for fe in individ_feature_extractors]
@@ -460,6 +484,7 @@ class GPSymbRegProblem():
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
 
+        print([str(ind) for ind in self.pop])
         print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the fitness of the entire population on the training set
