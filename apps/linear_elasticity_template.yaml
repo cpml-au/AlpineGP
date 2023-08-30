@@ -1,8 +1,8 @@
 gp:
-  NINDIVIDUALS: 100
-  NGEN: 10
-  CXPB: 0.2
-  MUTPB: 0.8
+  NINDIVIDUALS: 1
+  NGEN: 1
+  CXPB: 0.
+  MUTPB: 0.
   frac_elitist: 0
   min_: 2
   max_: 5
@@ -33,16 +33,17 @@ gp:
     kargs: "{}"
     #fun: gp.cxOnePointLeafBiased
     #kargs: "{'termpb' : 0.1}"
-  primitives: [
-    AddF,
-    SubF,
-    MulF,
-    'Inn',
-    'MF',
-    'MV',
-    'St',
-    'tr'
-  ]
+  #primitives: [
+  #  AddF,
+  #  SubF,
+  #  MulF,
+  #  'Inn',
+  #  'MF',
+  #  'MV',
+  #  'St',
+  #  'tr'
+  #]
+  primitives: []
   primitives_ADF: [
     'Add',
     'Sub',
