@@ -81,7 +81,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
                 penalty += jnp.sum((x_reshaped[idx, :] - values)**2)
             else:
                 penalty += jnp.sum((x_reshaped[idx, int(key)] - values)**2)
-        penalty *= 0.5*gamma
+        penalty *= gamma
         nodes = C.CochainP0(S, x_reshaped)
         F = C.deformation_gradient(nodes)
         # if residual_formulation:
@@ -109,10 +109,11 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12,
-                              ftol_rel=1e-12, maxeval=1000)
+        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-9, ftol_rel=1e-9)
+        print(total_energy(X[i, :].flatten(), curr_bvalues))
+        # print(prb.last_opt_result)
         # reshape x to have a tensor
-        x = x_flatten.reshape(S.node_coords.shape)
+        # x = x_flatten.reshape(S.node_coords.shape)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -122,7 +123,12 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
             valid_energy = True
 
             if valid_energy:
-                current_err = np.linalg.norm(x-X[i, :])**2
+                current_err = np.linalg.norm(x_flatten-X[i, :].flatten())**2
+                # print(X[i, :])
+                # print("--------------------------------------")
+                # print(x_flatten.reshape(S.node_coords.shape))
+                # print("--------------------------------------")
+                # print(curr_bvalues)
             else:
                 current_err = math.nan
         else:
@@ -134,7 +140,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
         total_err += current_err
 
-        best_sols.append(x)
+        best_sols.append(x_flatten.reshape(S.node_coords.shape))
 
     total_err *= 1/X.shape[0]
 
@@ -269,7 +275,7 @@ def stgp_linear_elasticity(config_file, output_path=None):
                                        bottom_left_corner_pos)
 
     # penalty parameter for the Dirichlet bcs
-    gamma = 10000.
+    gamma = 1000000.
 
     # initial guess for the solution of the problem
     u_0 = C.CochainP0(S, ref_node_coords)
@@ -284,10 +290,11 @@ def stgp_linear_elasticity(config_file, output_path=None):
         pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(
             S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="F")
     else:
-        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
+        pset = gp.PrimitiveSetTyped("energy", [C.CochainD0T], float)
 
     # define ADF
     ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
+    main_pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
@@ -296,15 +303,15 @@ def stgp_linear_elasticity(config_file, output_path=None):
     pset.addTerminal(0.1, float, name="0.1")
 
     identity = jnp.stack([jnp.identity(2)]*num_faces)
-    identity_coch = C.CochainP2T(S, identity)
-    pset.addTerminal(identity_coch, C.CochainP2T, name="I")
-    pset.addADF(ADF)
+    identity_coch = C.CochainD0T(S, identity)
+    pset.addTerminal(identity_coch, C.CochainD0T, name="I")
+    # pset.addADF(ADF)
 
     # rename arguments
     pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF=ADF)
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF_info=None)
 
     penalty = config_file["gp"]["penalty"]
 
@@ -332,14 +339,15 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    # epsilon = "SubP2T(MulFP2T(AddP2T(F, tranP2T(F)), 1/2), I)"
-    # opt_string_eps = "Add(MulF(2., InnP2T(epsilon, epsilon)), MulF(10., InnP2T(MulVP2VT(trP2T(epsilon), I), epsilon)))"
+    epsilon = "SubD0T(MFD0T(AddD0T(F, tranD0T(F)), 1/2), I)"
+    opt_string_eps = "Add(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MVD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string_eps = "InnP2T(epsilon, epsilon)"
-    # opt_string = opt_string_eps.replace("epsilon", epsilon)
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_string = opt_string_eps.replace("epsilon", epsilon)
+    print(opt_string)
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)

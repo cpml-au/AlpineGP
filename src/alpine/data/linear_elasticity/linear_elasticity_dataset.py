@@ -35,6 +35,7 @@ def get_data(S: simplex.SimplicialComplex, lame_moduli: List[Tuple],
             true_curr_node_coords[j, :, :] = S.node_coords.copy()
             true_curr_node_coords[j, :, 0] *= 1 + strain_xx
             true_curr_node_coords[j, :, 1] *= 1 + strain_yy
+        print(true_curr_node_coords)
         X[prec_num_data:prec_num_data+num_data, :, :] = true_curr_node_coords
         y[prec_num_data:prec_num_data+num_data] = true_strain_xx
         # update prec_num_data
