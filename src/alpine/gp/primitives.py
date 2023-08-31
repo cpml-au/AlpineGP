@@ -230,7 +230,6 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                         in_type_name.append(input + in_category + in_dim + in_rank[i])
                     else:
                         in_type_name.append(input + in_category + in_dim + in_rank)
-                # print(in_type_name)
                 in_type = list(map(eval, in_type_name))
                 out_category = map_rule['category'](in_category)
                 out_dim = str(map_rule['dimension'](int(in_dim)))
@@ -239,8 +238,6 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                 out_type = eval(out_type_name)
                 primitive_dictionary[primitive_name] = PrimitiveParams(
                     general_primitive['fun'], in_type, out_type)
-                # primitive_dictionary[primitive_name] = "PrimitiveParams(" + str(
-                #    general_primitive['fun']) + "," + str(in_type) + "," + str(out_type) + ")"
     return primitive_dictionary
 
 
@@ -271,19 +268,19 @@ def vec_tensor_mul_rank(x):
 
 scalar_primitives = {
     # scalar operations
-    'Add': PrimitiveParams(jnp.add, [float, float], float),
-    'Sub': PrimitiveParams(jnp.subtract, [float, float], float),
+    'AddF': PrimitiveParams(jnp.add, [float, float], float),
+    'SubF': PrimitiveParams(jnp.subtract, [float, float], float),
     'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
     'Div': PrimitiveParams(protectedDiv, [float, float], float)}
 coch_primitives = []
 primitives = scalar_primitives
-add_coch = {'fun_info': {'name': 'Add', 'fun': C.add},
+add_coch = {'fun_info': {'name': 'AddC', 'fun': C.add},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(add_coch))
-sub_coch = {'fun_info': {'name': 'Sub', 'fun': C.sub},
+sub_coch = {'fun_info': {'name': 'SubC', 'fun': C.sub},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("V", "T")},
@@ -328,6 +325,7 @@ coch_primitives.append(generate_primitive(inner_product))
 for primitive in coch_primitives:
     # merge dictionary
     primitives = primitives | primitive
+primitives = scalar_primitives | primitives
 
 
 def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
@@ -343,12 +341,3 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
                 in_types = primitives[primitive].in_types
                 out_type = primitives[primitive].out_type
                 pset.addPrimitive(op, in_types, out_type, name=primitive)
-
-
-if __name__ == "__main__":
-    mul_VT = {'fun_info': {'name': 'MulV', 'fun': C.vector_tensor_mul},
-              'input': ["C.Cochain", "C.Cochain"],
-              'output': "C.Cochain",
-              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("VT",)},
-              'map_rule': {'category': identity, 'dimension': identity, "rank": vec_tensor_mul_rank}}
-    print(generate_primitive(mul_VT))
