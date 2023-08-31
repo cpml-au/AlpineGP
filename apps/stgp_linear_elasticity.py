@@ -110,8 +110,6 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
         # minimize the objective
         x_flatten = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-9, ftol_rel=1e-9)
-        print(total_energy(X[i, :].flatten(), curr_bvalues))
-        # print(prb.last_opt_result)
         # reshape x to have a tensor
         # x = x_flatten.reshape(S.node_coords.shape)
 
@@ -124,11 +122,6 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
             if valid_energy:
                 current_err = np.linalg.norm(x_flatten-X[i, :].flatten())**2
-                # print(X[i, :])
-                # print("--------------------------------------")
-                # print(x_flatten.reshape(S.node_coords.shape))
-                # print("--------------------------------------")
-                # print(curr_bvalues)
             else:
                 current_err = math.nan
         else:
@@ -293,8 +286,8 @@ def stgp_linear_elasticity(config_file, output_path=None):
         pset = gp.PrimitiveSetTyped("energy", [C.CochainD0T], float)
 
     # define ADF
-    ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
-    main_pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
+    # ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
+    # main_pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
@@ -339,15 +332,14 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    epsilon = "SubD0T(MFD0T(AddD0T(F, tranD0T(F)), 1/2), I)"
-    opt_string_eps = "Add(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MVD0VT(trD0T(epsilon), I), epsilon)))"
+    # epsilon = "SubD0T(MFD0T(AddD0T(F, tranD0T(F)), 1/2), I)"
+    # opt_string_eps = "Add(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MVD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string_eps = "InnP2T(epsilon, epsilon)"
-    opt_string = opt_string_eps.replace("epsilon", epsilon)
-    print(opt_string)
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_string = opt_string_eps.replace("epsilon", epsilon)
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)

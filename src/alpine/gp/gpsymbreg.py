@@ -156,20 +156,10 @@ class GPSymbRegProblem():
 
             # primitives of the main_pset are the primitives of pset
             # together with the primitives of ADF
-            for key in dict(self.pset.primitives).keys():
-                print([prim.name for prim in dict(self.pset.primitives)[key]])
-            print("----------------------------------------")
-            for key in dict(self.ADF.primitives).keys():
-                print([prim.name for prim in dict(self.ADF.primitives)[key]])
             self.main_pset.primitives = dict()
             for key in list(self.pset.primitives.keys()) + list(self.pset.primitives.keys()):
                 self.main_pset.primitives[key] = self.pset.primitives[key] + \
                     self.ADF.primitives[key]
-            # self.main_pset.primitives = dict(
-            #    self.pset.primitives) | dict(self.ADF.primitives)
-            print("----------------------------------------")
-            for key in dict(self.main_pset.primitives).keys():
-                print([prim.name for prim in dict(self.main_pset.primitives)[key]])
 
             creator.create("Individual", list, fitness=creator.FitnessMin)
             creator.create("ADF", gp.PrimitiveTree, pset=self.ADF)
@@ -436,8 +426,6 @@ class GPSymbRegProblem():
                 # replace ADF name with the actual ADF value
                 full_ind_str = [str(ind[0]).replace(self.ADF.name, str(ind[1]))
                                 for ind in individuals]
-                print(full_ind_str)
-                print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                 for key in dict(self.main_pset.primitives).keys():
                     print([prim.name for prim in dict(self.main_pset.primitives)[key]])
                 individuals = [self.create_full_ind.from_string(
