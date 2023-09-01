@@ -33,23 +33,20 @@ gp:
     kargs: "{}"
     #fun: gp.cxOnePointLeafBiased
     #kargs: "{'termpb' : 0.1}"
-  #primitives: [
-  #  AddF,
-  #  SubF,
-  #  MulF,
-  #  'Inn',
-  #  'MF',
-  #  'MV',
-  #  'St',
-  #  'tr'
-  #]
-  primitives: []
-  #primitives_ADF: [
-  #  'Add',
-  #  'Sub',
-  #  'tran',
-  #  'MF'
-  # ]
+  primitives: [
+    {"name": "AddF", "dimension": tuple(), "rank": tuple()},
+    {"name": "SubF", "dimension": tuple(), "rank": tuple()},
+    {"name": "MulF", "dimension": tuple(), "rank": tuple()},
+    {"name": "Div", "dimension": tuple(), "rank": tuple()},
+    {"name": "AddC", "dimension": [0,1,2], "rank": ["V", "T"]},
+    {"name": "SubC", "dimension": [0,1,2], "rank": ["V", "T"]},
+    {"name": "tr", "dimension": [0,1,2], "rank": ["T"]},
+    {"name": "MF", "dimension": [0,1,2], "rank": ["T"]},
+    {"name": "Mv", "dimension": [0,1,2], "rank": ["VT"]},
+    {"name": "tran", "dimension": [0,1,2], "rank": ["T"]},
+    {"name": "St", "dimension": [0,1,2], "rank": ["T"]},
+    {"name": "Inn", "dimension": [0,1,2], "rank": ["T"]}
+  ]
   residual_formulation: False
 
 plot:

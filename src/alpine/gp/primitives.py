@@ -201,40 +201,53 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
 
     Args:
         primitive: a dictionary containing the relevant information of the function.
-          It consists of 5 keys: 'fun_info' contains an inner dictionary containing the name
-          of the function (value of the inner key 'name') and the callable itself
-          (value of the inner key 'fun'); 'input' contains a list containing the input type;
+          It consists of the following 5 keys: 'fun_info' contains an inner dictionary
+          encoding the name of the function (value of the inner key 'name') and the
+          callable itself (value of the inner key 'fun'); 'input' contains a list
+          composed of the input types; 'output' contains a string encoding the output
+          type; 'att_input' contains an inner dictionary with keys 'category'
+          (primal/dual), 'dimension' (0,1,2) and 'rank' ("SC", i.e. scalar, "V", "T"
+          or "VT"); 'map_output' contains an inner dictionary consisting of the
+          same keys of 'att_input'. In this case, each key contains a callable object
+          that provides the map to get the output category/dimension/rank given the
+          input one.
 
-
+    Returns:
+        a dict in which each key is the name of the sub-primitive and each value
+            is a PrimitiveParams object.
     """
     general_primitive = primitive['fun_info']
-    primitive_in = primitive['input']
-    primitive_out = primitive['output']
     in_attribute = primitive['att_input']
+    max_dim = int(list(in_attribute['dimension'])[-1])
     map_rule = primitive['map_rule']
-    num_input = len(primitive_in)
     primitive_dictionary = dict()
-    # for i in range(num_input):
     for in_category in in_attribute['category']:
         for in_dim in in_attribute['dimension']:
             for in_rank in in_attribute['rank']:
                 # concatenation of strings
+                in_rank = in_rank.replace("SC", "")
                 primitive_name = general_primitive['name'] + \
                     in_category + in_dim + in_rank
                 in_type_name = []
-                for i, input in enumerate(primitive_in):
+                for i, input in enumerate(primitive['input']):
                     # float type must be handled separately
                     if input == "float":
                         in_type_name.append(input)
                     elif len(in_rank) == 2:
-                        in_type_name.append(input + in_category + in_dim + in_rank[i])
+                        # in this case the correct rank must be taken
+                        in_type_name.append(input + in_category +
+                                            in_dim + in_rank[i])
                     else:
                         in_type_name.append(input + in_category + in_dim + in_rank)
                 in_type = list(map(eval, in_type_name))
                 out_category = map_rule['category'](in_category)
-                out_dim = str(map_rule['dimension'](int(in_dim)))
+                # for star dimension mapping is delicate
+                if general_primitive['name'] == "St":
+                    out_dim = str(map_rule['dimension'](int(in_dim), max_dim))
+                else:
+                    out_dim = str(map_rule['dimension'](int(in_dim)))
                 out_rank = map_rule['rank'](in_rank)
-                out_type_name = primitive_out + out_category + out_dim + out_rank
+                out_type_name = primitive['output'] + out_category + out_dim + out_rank
                 out_type = eval(out_type_name)
                 primitive_dictionary[primitive_name] = PrimitiveParams(
                     general_primitive['fun'], in_type, out_type)
@@ -266,26 +279,51 @@ def vec_tensor_mul_rank(x):
     return "T"
 
 
+def star_dim(x, max_dim):
+    return max_dim - x
+
+
 scalar_primitives = {
     # scalar operations
     'AddF': PrimitiveParams(jnp.add, [float, float], float),
     'SubF': PrimitiveParams(jnp.subtract, [float, float], float),
     'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
-    'Div': PrimitiveParams(protectedDiv, [float, float], float)}
+    'Div': PrimitiveParams(protectedDiv, [float, float], float),
+    'SinF': PrimitiveParams(jnp.sin, [float], float),
+    'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
+    'CosF': PrimitiveParams(jnp.cos, [float], float),
+    'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
+    'ExpF': PrimitiveParams(jnp.exp, [float], float),
+    'LogF': PrimitiveParams(protectedLog, [float], float),
+    'SqrtF': PrimitiveParams(protectedSqrt, [float], float),
+    'SquareF': PrimitiveParams(square_mod, [float], float),
+    'InvF': PrimitiveParams(inv_float, [float], float)}
 coch_primitives = []
 primitives = scalar_primitives
 add_coch = {'fun_info': {'name': 'AddC', 'fun': C.add},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("V", "T")},
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(add_coch))
 sub_coch = {'fun_info': {'name': 'SubC', 'fun': C.sub},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("V", "T")},
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(sub_coch))
+coboundary = {'fun_info': {'name': 'd', 'fun': C.coboundary},
+              'input': ["C.Cochain"],
+              'output': "C.Cochain",
+              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'), "rank": ("SC",)},
+              'map_rule': {'category': identity, 'dimension': partial(operator.add, 1), "rank": identity}}
+coch_primitives.append(generate_primitive(coboundary))
+codifferential = {'fun_info': {'name': 'del', 'fun': C.codifferential},
+                  'input': ["C.Cochain"],
+                  'output': "C.Cochain",
+                  'att_input': {'category': ('P', 'D'), 'dimension': ('1', '2'), "rank": ("SC",)},
+                  'map_rule': {'category': identity, 'dimension': partial(operator.add, -1), "rank": identity}}
+coch_primitives.append(generate_primitive(codifferential))
 tr_coch = {'fun_info': {'name': 'tr', 'fun': C.trace},
            'input': ["C.Cochain"],
            'output': "C.Cochain",
@@ -295,10 +333,16 @@ coch_primitives.append(generate_primitive(tr_coch))
 mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
           'input': ["C.Cochain", "float"],
           'output': "C.Cochain",
-          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
+          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC", "T")},
           'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(mul_FT))
-mul_VT = {'fun_info': {'name': 'MV', 'fun': C.vector_tensor_mul},
+mul_coch = {'fun_info': {'name': 'CMul', 'fun': C.cochain_mul},
+            'input': ["C.Cochain", "C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(mul_coch))
+mul_VT = {'fun_info': {'name': 'Mv', 'fun': C.vector_tensor_mul},
           'input': ["C.Cochain", "C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("VT",)},
@@ -313,15 +357,65 @@ coch_primitives.append(generate_primitive(tran_coch))
 star = {'fun_info': {'name': 'St', 'fun': C.star},
         'input': ["C.Cochain"],
         'output': "C.Cochain",
-        'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
-        'map_rule': {'category': partial(switch_category, ('P', 'D')), 'dimension': partial(operator.sub, 2), "rank": identity}}
+        'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC", "T")},
+        'map_rule': {'category': partial(switch_category, ('P', 'D')), 'dimension': star_dim, "rank": identity}}
 coch_primitives.append(generate_primitive(star))
 inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
-                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
+                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC", "T")},
                  'map_rule': {'category': empty_string, 'dimension': empty_string, "rank": empty_string}}
 coch_primitives.append(generate_primitive(inner_product))
+sin_coch = {'fun_info': {'name': 'Sin', 'fun': C.sin},
+            'input': ["C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(sin_coch))
+arcsin_coch = {'fun_info': {'name': 'ArcSin', 'fun': C.arcsin},
+               'input': ["C.Cochain"],
+               'output': "C.Cochain",
+               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+               'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(arcsin_coch))
+cos_coch = {'fun_info': {'name': 'Cos', 'fun': C.cos},
+            'input': ["C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(cos_coch))
+arccos_coch = {'fun_info': {'name': 'ArcCos', 'fun': C.arccos},
+               'input': ["C.Cochain"],
+               'output': "C.Cochain",
+               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+               'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(arccos_coch))
+exp_coch = {'fun_info': {'name': 'Exp', 'fun': C.exp},
+            'input': ["C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(exp_coch))
+log_coch = {'fun_info': {'name': 'Log', 'fun': C.log},
+            'input': ["C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(log_coch))
+sqrt_coch = {'fun_info': {'name': 'Sqrt', 'fun': C.sqrt},
+             'input': ["C.Cochain"],
+             'output': "C.Cochain",
+             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(sqrt_coch))
+square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
+               'input': ["C.Cochain"],
+               'output': "C.Cochain",
+               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("SC",)},
+               'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(square_coch))
+
+
 for primitive in coch_primitives:
     # merge dictionary
     primitives = primitives | primitive
@@ -329,15 +423,20 @@ primitives = scalar_primitives | primitives
 
 
 def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
-                        primitive_names: List | None = None) -> None:
+                        primitive_spec: List | None = None) -> None:
 
-    if primitive_names is None:
-        primitive_names = list(primitives.keys())
-
-    for primitive_family in primitive_names:
+    for primitive_family in primitive_spec:
+        non_feasible_dimensions = list(set(('0', '1', '2')) -
+                                       set(primitive_family['dimension']))
+        non_feasible_ranks = list(
+            set(("SC", "V", "T", "vtm")) - set(primitive_family["rank"]))
+        non_feasible_objects = non_feasible_dimensions + non_feasible_ranks
         for primitive in primitives.keys():
-            if primitive_family in primitive:
-                op = primitives[primitive].op
-                in_types = primitives[primitive].in_types
-                out_type = primitives[primitive].out_type
-                pset.addPrimitive(op, in_types, out_type, name=primitive)
+            if primitive_family['name'] in primitive:
+                if sum([primitive_family['name'].count(obj)
+                        for obj in non_feasible_objects]) == 0 or primitive_family['name'].count("VT") == 1:
+                    # check that it's of a feasible dimension
+                    op = primitives[primitive].op
+                    in_types = primitives[primitive].in_types
+                    out_type = primitives[primitive].out_type
+                    pset.addPrimitive(op, in_types, out_type, name=primitive)
