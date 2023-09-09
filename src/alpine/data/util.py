@@ -82,7 +82,7 @@ def load_dataset(data_path: str, format: str = "csv") -> Tuple[npt.NDArray]:
     if format == "csv":
         loadfunc = partial(np.loadtxt, delimiter=",", dtype=float)
     elif format == "npy":
-        loadfunc = np.load
+        loadfunc = partial(np.load, allow_pickle=True)
     X_train = loadfunc(os.path.join(data_path, "X_train." + format))
     X_valid = loadfunc(os.path.join(data_path, "X_valid." + format))
     X_test = loadfunc(os.path.join(data_path, "X_test." + format))

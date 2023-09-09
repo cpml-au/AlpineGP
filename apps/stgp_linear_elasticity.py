@@ -30,20 +30,45 @@ residual_formulation = False
 config()
 
 
-def get_boundary_values(X, left_bnd_nodes_idx, left_bnd_nodes_pos, right_bnd_nodes_idx,
-                        right_bnd_pos_components, bottom_left_corner,
-                        bottom_left_corner_pos):
+def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
     bvalues_X = []
-    for true_curr_node_coords in X:
-        right_bnd_nodes_pos = true_curr_node_coords[right_bnd_nodes_idx,
-                                                    :][:, right_bnd_pos_components]
+    right_bnd_nodes_idx = boundary_nodes_info['right_bnd_nodes_idx']
+    left_bnd_nodes_idx = boundary_nodes_info['left_bnd_nodes_idx']
+    up_bnd_nodes_idx = boundary_nodes_info['up_bnd_nodes_idx']
+    down_bnd_nodes_idx = boundary_nodes_info['down_bnd_nodes_idx']
+    for i, data_label in enumerate(y):
+        true_curr_node_coords = X[i, :, :]
+        if data_label == "pure_tension":
+            bottom_left_corner = left_bnd_nodes_idx[0]
 
-        # NOTE: without flatten it does not work properly when concatenating multiple bcs;
-        # fix this so that flatten is not needed (not intuitive)
-        boundary_values = {"0": (left_bnd_nodes_idx + right_bnd_nodes_idx,
-                                 np.vstack((left_bnd_nodes_pos,
-                                           right_bnd_nodes_pos)).flatten()),
-                           ":": (bottom_left_corner, bottom_left_corner_pos)}
+            left_bnd_pos_components = [0]
+            right_bnd_pos_components = [0]
+
+            left_bnd_nodes_pos = ref_node_coords[left_bnd_nodes_idx[1:],
+                                                 :][:, left_bnd_pos_components]
+            bottom_left_corner_pos = ref_node_coords[bottom_left_corner, :]
+            right_bnd_nodes_pos = true_curr_node_coords[right_bnd_nodes_idx,
+                                                        :][:, right_bnd_pos_components]
+
+            # NOTE: without flatten it does not work properly when concatenating multiple bcs;
+            # fix this so that flatten is not needed (not intuitive)
+            boundary_values = {"0": (left_bnd_nodes_idx[1:] + right_bnd_nodes_idx,
+                                     np.vstack((left_bnd_nodes_pos,
+                                               right_bnd_nodes_pos)).flatten()),
+                               ":": (bottom_left_corner, bottom_left_corner_pos)}
+        elif data_label == "pure_shear":
+            up_bnd_nodes_pos_x = true_curr_node_coords[up_bnd_nodes_idx, 0]
+            up_bnd_nodes_pos_y = ref_node_coords[up_bnd_nodes_idx, 1]
+            up_bnd_pos = np.zeros((len(up_bnd_nodes_idx), 3))
+            up_bnd_pos[:, 0] = up_bnd_nodes_pos_x
+            up_bnd_pos[:, 1] = up_bnd_nodes_pos_y
+            down_bnd_pos = ref_node_coords[down_bnd_nodes_idx, :]
+            left_bnd_pos = true_curr_node_coords[left_bnd_nodes_idx, :]
+            right_bnd_pos = true_curr_node_coords[right_bnd_nodes_idx, :]
+            bnodes = left_bnd_nodes_idx + right_bnd_nodes_idx + up_bnd_nodes_idx + down_bnd_nodes_idx
+            bvalues = np.vstack((left_bnd_pos, right_bnd_pos, up_bnd_pos, down_bnd_pos))
+            boundary_values = {":": (bnodes, bvalues)}
+
         bvalues_X.append(boundary_values)
     return bvalues_X
 
@@ -85,13 +110,13 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         penalty *= gamma
         nodes = C.CochainP0(S, x_reshaped)
         F = C.deformation_gradient(nodes)
-        identity = jnp.stack([jnp.identity(2)]*num_faces)
-        I = C.CochainD0T(S, identity)
-        epsilon = C.sub(C.scalar_mul(C.add(F, C.transpose(F)), 0.5), I)
+        # identity = jnp.stack([jnp.identity(2)]*num_faces)
+        # I = C.CochainD0T(S, identity)
+        # epsilon = C.sub(C.scalar_mul(C.add(F, C.transpose(F)), 0.5), I)
         # if residual_formulation:
         #    total_energy = C.inner_product(func(c, fk), func(c, fk)) + penalty
         # else:
-        total_energy = func(epsilon) + penalty
+        total_energy = func(F) + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(dim=num_nodes*dim_embedded_space,
@@ -213,6 +238,8 @@ def stgp_linear_elasticity(config_file, output_path=None):
         p = geom.add_polygon([[0., 0.], [L, 0.], [L, L], [0., L]], mesh_size=lc)
         # create a default physical group for the boundary lines
         geom.add_physical(p.lines, label="boundary")
+        geom.add_physical(p.lines[0], label="down")
+        geom.add_physical(p.lines[2], label="up")
         geom.add_physical(p.lines[1], label="right")
         geom.add_physical(p.lines[3], label="left")
         mesh = geom.generate_mesh()
@@ -226,50 +253,36 @@ def stgp_linear_elasticity(config_file, output_path=None):
     X_train, X_val, X_test, y_train, y_val, y_test = load_dataset(data_path, "npy")
 
     # set bc
-    num_nodes = S.num_nodes
     num_faces = S.S[2].shape[0]
     ref_node_coords = S.node_coords
 
-    bnd_edges_idx = S.bnd_faces_indices
     left_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "left")
     right_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "right")
-    left_bnd_edges_idx = util.get_edges_for_physical_group(S, mesh, "left")
-    right_bnd_edges_idx = util.get_edges_for_physical_group(S, mesh, "right")
-
-    bottom_left_corner = left_bnd_nodes_idx.pop(0)
-
-    left_bnd_pos_components = [0]
-    right_bnd_pos_components = [0]
-
-    left_bnd_nodes_pos = ref_node_coords[left_bnd_nodes_idx,
-                                         :][:, left_bnd_pos_components]
-    bottom_left_corner_pos = ref_node_coords[bottom_left_corner, :]
+    down_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "down")
+    up_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "up")
 
     # FIXME: just to initialize ref_metric_contravariant. Write a routine in simplex that does it
     _ = S.get_deformation_gradient(ref_node_coords)
 
+    # define a dictionary containing boundary nodes information (needed to set properly boundary_values)
+    boundary_nodes_info = {'left_bnd_nodes_idx': left_bnd_nodes_idx,
+                           'right_bnd_nodes_idx': right_bnd_nodes_idx,
+                           'up_bnd_nodes_idx': up_bnd_nodes_idx,
+                           'down_bnd_nodes_idx': down_bnd_nodes_idx}
+
     # extract boundary values
-    bvalues_train = get_boundary_values(X_train,
-                                        left_bnd_nodes_idx,
-                                        left_bnd_nodes_pos,
-                                        right_bnd_nodes_idx,
-                                        right_bnd_pos_components,
-                                        bottom_left_corner,
-                                        bottom_left_corner_pos)
-    bvalues_val = get_boundary_values(X_val,
-                                      left_bnd_nodes_idx,
-                                      left_bnd_nodes_pos,
-                                      right_bnd_nodes_idx,
-                                      right_bnd_pos_components,
-                                      bottom_left_corner,
-                                      bottom_left_corner_pos)
-    bvalues_test = get_boundary_values(X_test,
-                                       left_bnd_nodes_idx,
-                                       left_bnd_nodes_pos,
-                                       right_bnd_nodes_idx,
-                                       right_bnd_pos_components,
-                                       bottom_left_corner,
-                                       bottom_left_corner_pos)
+    bvalues_train = get_boundary_values(X=X_train,
+                                        y=y_train,
+                                        ref_node_coords=ref_node_coords,
+                                        boundary_nodes_info=boundary_nodes_info)
+    bvalues_val = get_boundary_values(X=X_val,
+                                      y=y_val,
+                                      ref_node_coords=ref_node_coords,
+                                      boundary_nodes_info=boundary_nodes_info)
+    bvalues_test = get_boundary_values(X=X_test,
+                                       y=y_test,
+                                       ref_node_coords=ref_node_coords,
+                                       boundary_nodes_info=boundary_nodes_info)
 
     # penalty parameter for the Dirichlet bcs
     gamma = 1000000.
@@ -287,7 +300,7 @@ def stgp_linear_elasticity(config_file, output_path=None):
         pset.addTerminal(C.Cochain(S.num_nodes, True, S, np.ones(
             S.num_nodes, dtype=dctkit.float_dtype)), C.Cochain, name="F")
     else:
-        pset = gp.PrimitiveSetTyped("energy", [C.CochainD0T], float)
+        pset = gp.PrimitiveSetTyped("F", [C.CochainD0T], float)
 
     # define ADF
     # ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
@@ -305,7 +318,7 @@ def stgp_linear_elasticity(config_file, output_path=None):
     # pset.addADF(ADF)
 
     # rename arguments
-    pset.renameArguments(ARG0="eps")
+    pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
     GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF_info=None)
@@ -336,16 +349,16 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    # epsilon = "SubD0T(MFD0T(AddD0T(F, tranD0T(F)), 1/2), I)"
-    opt_string_eps = "AddF(MulF(2., InnD0T(eps, eps)), MulF(10., InnD0T(MvD0VT(trD0T(eps), I), eps)))"
+    # epsilon = "SubCD0T(symD0T(F), I)"
+    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string_eps = "InnP2T(epsilon, epsilon)"
     # opt_string = opt_string_eps.replace("epsilon", epsilon)
     # opt_string = "InnD0T(MFD0T(SubCD0T(SubCD0T(I, StP2T(StD0T(I))), MFD0T(SubCD0T(SubCD0T(F, F), StP2T(StD0T(AddCD0T(StP2T(tranP2T(tranP2T(StD0T(F)))), SubCD0T(SubCD0T(I, F), SubCD0T(F, F)))))), 1/2)), InnD0T(StP2T(AddCP2T(MFP2T(AddCP2T(StD0T(AddCD0T(AddCD0T(F, MvD0VT(SubCD0V(trD0T(F), trD0T(I)), AddCD0T(I, tranD0T(I)))), MvD0VT(SubCD0V(trD0T(F), trD0T(I)), AddCD0T(I, tranD0T(MvD0VT(trD0T(I), I)))))), MvP2VT(trP2T(StD0T(tranD0T(SubCD0T(StP2T(MFP2T(MFP2T(StD0T(I), MulF(AddF(1/2, 10.), MulF(10., 1/2))), MulF(1/2, 0.1))), AddCD0T(tranD0T(AddCD0T(MFD0T(I, 10.), MvD0VT(trD0T(I), F))), AddCD0T(I, F)))))), StD0T(MFD0T(SubCD0T(I, I), AddF(AddF(0.1, -1.), SubF(InnD0T(I, tranD0T(AddCD0T(MFD0T(F, 10.), MFD0T(F, -1.)))), 10.)))))), -1.), StD0T(I))), SubCD0T(tranD0T(I), F))), MFD0T(StP2T(MFP2T(MFP2T(StD0T(I), MulF(MulF(-1., 0.1), -1.)), 1/2)), 0.1))"
     # opt_string = "InnD0T(SubCD0T(I,F), SubCD0T(SubCD0T(MFD0T(I,AddF(1.,10.)),MFD0T(MvD0VT(trD0T(F), I),Div(10.,2.))),F))"
-    opt_individ = creator.Individual.from_string(opt_string_eps, pset)
-    seed = [opt_individ]
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)

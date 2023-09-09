@@ -353,7 +353,12 @@ tran_coch = {'fun_info': {'name': 'tran', 'fun': C.transpose},
              'output': "C.Cochain",
              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
              'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
-coch_primitives.append(generate_primitive(tran_coch))
+sym_coch = {'fun_info': {'name': 'sym', 'fun': C.sym},
+            'input': ["C.Cochain"],
+            'output': "C.Cochain",
+            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'), "rank": ("T",)},
+            'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(sym_coch))
 star = {'fun_info': {'name': 'St', 'fun': C.star},
         'input': ["C.Cochain"],
         'output': "C.Cochain",
