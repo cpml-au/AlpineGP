@@ -44,6 +44,7 @@ gp:
     {"name": "MF", "dimension": [0,1,2], "rank": ["T"]},
     {"name": "Mv", "dimension": [0,1,2], "rank": ["VT"]},
     {"name": "tran", "dimension": [0,1,2], "rank": ["T"]},
+    {"name": "sym", "dimension": [0,1,2], "rank": ["T"]},
     {"name": "St", "dimension": [0,1,2], "rank": ["T"]},
     {"name": "Inn", "dimension": [0,1,2], "rank": ["T"]}
   ]
