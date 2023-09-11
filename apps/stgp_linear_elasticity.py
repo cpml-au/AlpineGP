@@ -39,12 +39,15 @@ def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
     for i, data_label in enumerate(y):
         true_curr_node_coords = X[i, :, :]
         if data_label == "pure_tension":
-            bottom_left_corner = left_bnd_nodes_idx[0]
+            bottom_left_corner_idx = left_bnd_nodes_idx.index(0)
+            bottom_left_corner = left_bnd_nodes_idx[bottom_left_corner_idx]
+            left_bnd_nodes_without_corner = left_bnd_nodes_idx[:bottom_left_corner_idx] + \
+                left_bnd_nodes_idx[(bottom_left_corner_idx+1):]
 
             left_bnd_pos_components = [0]
             right_bnd_pos_components = [0]
 
-            left_bnd_nodes_pos = ref_node_coords[left_bnd_nodes_idx[1:],
+            left_bnd_nodes_pos = ref_node_coords[left_bnd_nodes_without_corner,
                                                  :][:, left_bnd_pos_components]
             bottom_left_corner_pos = ref_node_coords[bottom_left_corner, :]
             right_bnd_nodes_pos = true_curr_node_coords[right_bnd_nodes_idx,
@@ -52,7 +55,7 @@ def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
 
             # NOTE: without flatten it does not work properly when concatenating multiple bcs;
             # fix this so that flatten is not needed (not intuitive)
-            boundary_values = {"0": (left_bnd_nodes_idx[1:] + right_bnd_nodes_idx,
+            boundary_values = {"0": (left_bnd_nodes_without_corner + right_bnd_nodes_idx,
                                      np.vstack((left_bnd_nodes_pos,
                                                right_bnd_nodes_pos)).flatten()),
                                ":": (bottom_left_corner, bottom_left_corner_pos)}
@@ -92,10 +95,11 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
     num_data, num_nodes, dim_embedded_space = X.shape
 
+    num_faces = S.S[2].shape[0]
+
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
     config()
-    num_faces = S.S[2].shape[0]
 
     # create objective function and set its energy function
     def total_energy(x, curr_bvalues):
@@ -138,7 +142,8 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-9, ftol_rel=1e-9)
+        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), maxeval=1000,
+                              ftol_abs=1e-12, ftol_rel=1e-12)
         # reshape x to have a tensor
         # x = x_flatten.reshape(S.node_coords.shape)
 
@@ -151,10 +156,16 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
             if valid_energy:
                 current_err = np.linalg.norm(x_flatten-X[i, :].flatten())**2
+                x_reshaped = x_flatten.reshape(S.node_coords.shape)
+                curr_nodes = C.CochainP0(S, x_reshaped)
+                F = C.deformation_gradient(curr_nodes)
+                W = jnp.stack(
+                    [jnp.array([[0, jnp.e], [-jnp.e, 0]])]*num_faces)
+                F_plus_W = C.CochainD0(S, F.coeffs + W)
+                print((func(F) - func(F_plus_W))**2)
+                current_err += (func(F) - func(F_plus_W))**2
             else:
                 current_err = math.nan
-        else:
-            current_err = math.nan
 
         if math.isnan(current_err):
             total_err = 1e5
@@ -302,9 +313,6 @@ def stgp_linear_elasticity(config_file, output_path=None):
     else:
         pset = gp.PrimitiveSetTyped("F", [C.CochainD0T], float)
 
-    # define ADF
-    # ADF = gp.PrimitiveSetTyped("epsilon", [C.CochainP2T], C.CochainP2T)
-    # main_pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP2T], float)
     # add constants
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-1., float, name="-1.")
@@ -315,13 +323,12 @@ def stgp_linear_elasticity(config_file, output_path=None):
     identity = jnp.stack([jnp.identity(2)]*num_faces)
     identity_coch = C.CochainD0T(S, identity)
     pset.addTerminal(identity_coch, C.CochainD0T, name="I")
-    # pset.addADF(ADF)
 
     # rename arguments
     pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF_info=None)
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
 
     penalty = config_file["gp"]["penalty"]
 
@@ -351,10 +358,8 @@ def stgp_linear_elasticity(config_file, output_path=None):
     start = time.perf_counter()
     # epsilon = "SubCD0T(symD0T(F), I)"
     # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
-    # opt_string_eps = "InnP2T(epsilon, epsilon)"
     # opt_string = opt_string_eps.replace("epsilon", epsilon)
-    # opt_string = "InnD0T(MFD0T(SubCD0T(SubCD0T(I, StP2T(StD0T(I))), MFD0T(SubCD0T(SubCD0T(F, F), StP2T(StD0T(AddCD0T(StP2T(tranP2T(tranP2T(StD0T(F)))), SubCD0T(SubCD0T(I, F), SubCD0T(F, F)))))), 1/2)), InnD0T(StP2T(AddCP2T(MFP2T(AddCP2T(StD0T(AddCD0T(AddCD0T(F, MvD0VT(SubCD0V(trD0T(F), trD0T(I)), AddCD0T(I, tranD0T(I)))), MvD0VT(SubCD0V(trD0T(F), trD0T(I)), AddCD0T(I, tranD0T(MvD0VT(trD0T(I), I)))))), MvP2VT(trP2T(StD0T(tranD0T(SubCD0T(StP2T(MFP2T(MFP2T(StD0T(I), MulF(AddF(1/2, 10.), MulF(10., 1/2))), MulF(1/2, 0.1))), AddCD0T(tranD0T(AddCD0T(MFD0T(I, 10.), MvD0VT(trD0T(I), F))), AddCD0T(I, F)))))), StD0T(MFD0T(SubCD0T(I, I), AddF(AddF(0.1, -1.), SubF(InnD0T(I, tranD0T(AddCD0T(MFD0T(F, 10.), MFD0T(F, -1.)))), 10.)))))), -1.), StD0T(I))), SubCD0T(tranD0T(I), F))), MFD0T(StP2T(MFP2T(MFP2T(StD0T(I), MulF(MulF(-1., 0.1), -1.)), 1/2)), 0.1))"
-    # opt_string = "InnD0T(SubCD0T(I,F), SubCD0T(SubCD0T(MFD0T(I,AddF(1.,10.)),MFD0T(MvD0VT(trD0T(F), I),Div(10.,2.))),F))"
+    # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I), AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
