@@ -37,8 +37,7 @@ class GPSymbRegProblem():
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
-                 use_ray=True,
-                 ADF_info=None):
+                 use_ray=True):
         """Symbolic regression problem via Genetic Programming.
 
             Args:
@@ -55,12 +54,6 @@ class GPSymbRegProblem():
                     for survival.
         """
         self.pset = pset
-        if ADF_info is not None:
-            self.ADF = ADF_info['ADF']
-            self.main_pset = ADF_info['main_pset']
-        else:
-            self.ADF = None
-            self.main_pset = None
         if config_file_data is not None:
             self.load_config_data(config_file_data)
         else:
@@ -150,44 +143,15 @@ class GPSymbRegProblem():
                          min_=min_,
                          max_=max_,
                          is_pop=True)
-        if self.ADF is not None:
-            min_ADF = config_file_data["gp"]["min_"]
-            max_ADF = config_file_data["gp"]["max_"]
+        creator.create("Individual",
+                       gp.PrimitiveTree,
+                       fitness=creator.FitnessMin)
+        createIndividual = creator.Individual
+        toolbox.register("individual", tools.initIterate,
+                         createIndividual, toolbox.expr)
 
-            # primitives of the main_pset are the primitives of pset
-            # together with the primitives of ADF
-            self.main_pset.primitives = dict()
-            for key in list(self.pset.primitives.keys()) + list(self.pset.primitives.keys()):
-                self.main_pset.primitives[key] = self.pset.primitives[key] + \
-                    self.ADF.primitives[key]
-
-            creator.create("Individual", list, fitness=creator.FitnessMin)
-            creator.create("ADF", gp.PrimitiveTree, pset=self.ADF)
-            creator.create("MAIN", gp.PrimitiveTree, pset=self.pset)
-            creator.create("MAIN_AND_ADF", gp.PrimitiveTree, pset=self.main_pset)
-
-            createIndividual = creator.Individual
-            create_full_ind = creator.MAIN_AND_ADF
-            self.create_full_ind = create_full_ind
-
-            toolbox.register('expr_ADF', gp.genFull, pset=self.ADF,
-                             min_=min_ADF, max_=max_ADF)
-            toolbox.register('ADF', tools.initIterate, creator.ADF, toolbox.expr_ADF)
-            toolbox.register("main_individual", tools.initIterate,
-                             creator.MAIN, toolbox.expr)
-
-            toolbox.register("individual", tools.initCycle,
-                             createIndividual, [toolbox.main_individual, toolbox.ADF])
-        else:
-            creator.create("Individual",
-                           gp.PrimitiveTree,
-                           fitness=creator.FitnessMin)
-            createIndividual = creator.Individual
-            toolbox.register("individual", tools.initIterate,
-                             createIndividual, toolbox.expr)
-
-            # toolbox.register("individual_pop", tools.initIterate,
-            #                 createIndividual, toolbox.expr_pop)
+        # toolbox.register("individual_pop", tools.initIterate,
+        #                 createIndividual, toolbox.expr_pop)
         toolbox.register("population", tools.initRepeat,
                          list, toolbox.individual)
         toolbox.register("compile", gp.compile, pset=self.pset)
@@ -212,9 +176,6 @@ class GPSymbRegProblem():
             addPrimitivesToPset(self.pset)
         else:
             addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
-
-        if self.ADF is not None:
-            addPrimitivesToPset(self.ADF, config_file_data["gp"]['primitives_ADF'])
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
@@ -421,16 +382,6 @@ class GPSymbRegProblem():
     def register_map(self, individ_feature_extractors: List[Callable] | None = None):
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
-            '''
-            if self.ADF is not None:
-                # replace ADF name with the actual ADF value
-                full_ind_str = [str(ind[0]).replace(self.ADF.name, str(ind[1]))
-                                for ind in individuals]
-                for key in dict(self.main_pset.primitives).keys():
-                    print([prim.name for prim in dict(self.main_pset.primitives)[key]])
-                individuals = [self.create_full_ind.from_string(
-                    full_ind, pset=self.main_pset) for full_ind in full_ind_str]
-            '''
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
             feature_values = [[fe(i) for i in individuals]
                               for fe in individ_feature_extractors]
