@@ -70,7 +70,8 @@ if __name__ == '__main__':
                    data_generator_kwargs={'S': S,
                                           'lame_moduli': [[(10, 1)], [(10, 1)]],
                                           'num_data_per_each_mod_couple': [[5], [5]],
-                                          'bench_labels': ["pure_tension", "pure_shear"]},
+                                          'bench_labels': ["pure_tension",
+                                                           "pure_shear"]},
                    perc_val=0.3,
                    perc_test=0.2,
                    format="npy")
