@@ -3,7 +3,8 @@ from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
-from deap import gp, base, creator
+from deap import gp, base
+# from deap import creator
 from alpine.data.util import load_dataset
 from alpine.data.linear_elasticity.linear_elasticity_dataset import data_path
 from dctkit.mesh import util
@@ -39,10 +40,10 @@ def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
     for i, data_label in enumerate(y):
         true_curr_node_coords = X[i, :, :]
         if data_label == "pure_tension":
-            bottom_left_corner_idx = left_bnd_nodes_idx.index(0)
-            bottom_left_corner = left_bnd_nodes_idx[bottom_left_corner_idx]
-            left_bnd_nodes_without_corner = left_bnd_nodes_idx[:bottom_left_corner_idx] + \
-                left_bnd_nodes_idx[(bottom_left_corner_idx+1):]
+            bot_left_corn_idx = left_bnd_nodes_idx.index(0)
+            bottom_left_corner = left_bnd_nodes_idx[bot_left_corn_idx]
+            left_bnd_nodes_without_corner = left_bnd_nodes_idx[:bot_left_corn_idx] + \
+                left_bnd_nodes_idx[(bot_left_corn_idx+1):]
 
             left_bnd_pos_components = [0]
             right_bnd_pos_components = [0]
@@ -53,9 +54,9 @@ def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
             right_bnd_nodes_pos = true_curr_node_coords[right_bnd_nodes_idx,
                                                         :][:, right_bnd_pos_components]
 
-            # NOTE: without flatten it does not work properly when concatenating multiple bcs;
-            # fix this so that flatten is not needed (not intuitive)
-            boundary_values = {"0": (left_bnd_nodes_without_corner + right_bnd_nodes_idx,
+            # NOTE: without flatten it does not work properly when concatenating
+            # multiple bcs; fix this so that flatten is not needed (not intuitive)
+            boundary_values = {"0": (left_bnd_nodes_without_corner+right_bnd_nodes_idx,
                                      np.vstack((left_bnd_nodes_pos,
                                                right_bnd_nodes_pos)).flatten()),
                                ":": (bottom_left_corner, bottom_left_corner_pos)}
@@ -68,25 +69,14 @@ def get_boundary_values(X, y, ref_node_coords, boundary_nodes_info):
             down_bnd_pos = ref_node_coords[down_bnd_nodes_idx, :]
             left_bnd_pos = true_curr_node_coords[left_bnd_nodes_idx, :]
             right_bnd_pos = true_curr_node_coords[right_bnd_nodes_idx, :]
-            bnodes = left_bnd_nodes_idx + right_bnd_nodes_idx + up_bnd_nodes_idx + down_bnd_nodes_idx
-            bvalues = np.vstack((left_bnd_pos, right_bnd_pos, up_bnd_pos, down_bnd_pos))
+            bnodes = left_bnd_nodes_idx + right_bnd_nodes_idx + \
+                up_bnd_nodes_idx + down_bnd_nodes_idx
+            bvalues = np.vstack((left_bnd_pos, right_bnd_pos,
+                                 up_bnd_pos, down_bnd_pos))
             boundary_values = {":": (bnodes, bvalues)}
 
         bvalues_X.append(boundary_values)
     return bvalues_X
-
-
-'''
-def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
-                    bnodes: npt.NDArray) -> bool:
-    # perturb solution and check whether the gradient still vanishes
-    # (i.e. constant energy)
-    u_noise = u + noise*np.mean(u)
-    u_noise[bnodes] = u[bnodes]
-    grad_u_noise = jnp.linalg.norm(prb.gradient(u_noise))
-    is_valid = grad_u_noise >= 1e-6
-    return is_valid
-'''
 
 
 def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
@@ -149,23 +139,17 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
-            # check whether the energy is "admissible" (i.e. exclude constant energies)
-            # valid_energy = is_valid_energy(u=x, prb=prb, bnodes=bnodes)
-            # FIXME: get rid of valid_energy
-            valid_energy = True
 
-            if valid_energy:
-                current_err = np.linalg.norm(x_flatten-X[i, :].flatten())**2
-                x_reshaped = x_flatten.reshape(S.node_coords.shape)
-                curr_nodes = C.CochainP0(S, x_reshaped)
-                F = C.deformation_gradient(curr_nodes)
-                W = jnp.stack(
-                    [jnp.array([[0, jnp.e], [-jnp.e, 0]])]*num_faces)
-                F_plus_W = C.CochainD0(S, F.coeffs + W)
-                print((func(F) - func(F_plus_W))**2)
-                current_err += (func(F) - func(F_plus_W))**2
-            else:
-                current_err = math.nan
+            current_err = np.linalg.norm(x_flatten-X[i, :].flatten())**2
+            x_reshaped = x_flatten.reshape(S.node_coords.shape)
+            curr_nodes = C.CochainP0(S, x_reshaped)
+            F = C.deformation_gradient(curr_nodes)
+            W = jnp.stack(
+                [jnp.array([[0, jnp.e], [-jnp.e, 0]])]*num_faces)
+            F_plus_W = C.CochainD0(S, F.coeffs + W)
+            current_err += (func(F) - func(F_plus_W))**2
+        else:
+            current_err = math.nan
 
         if math.isnan(current_err):
             total_err = 1e5
@@ -177,7 +161,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
 
     total_err *= 1/X.shape[0]
 
-    return 10.*total_err, best_sols
+    return 1000.*total_err, best_sols
 
 
 @ray.remote(num_cpus=2)
@@ -272,10 +256,12 @@ def stgp_linear_elasticity(config_file, output_path=None):
     down_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "down")
     up_bnd_nodes_idx = util.get_nodes_for_physical_group(mesh, 1, "up")
 
-    # FIXME: just to initialize ref_metric_contravariant. Write a routine in simplex that does it
+    # FIXME: just to initialize ref_metric_contravariant.
+    # Write a routine in simplex that does it
     _ = S.get_deformation_gradient(ref_node_coords)
 
-    # define a dictionary containing boundary nodes information (needed to set properly boundary_values)
+    # define a dictionary containing boundary nodes information (needed to set properly
+    #  boundary_values)
     boundary_nodes_info = {'left_bnd_nodes_idx': left_bnd_nodes_idx,
                            'right_bnd_nodes_idx': right_bnd_nodes_idx,
                            'up_bnd_nodes_idx': up_bnd_nodes_idx,
@@ -357,9 +343,11 @@ def stgp_linear_elasticity(config_file, output_path=None):
 
     start = time.perf_counter()
     # epsilon = "SubCD0T(symD0T(F), I)"
-    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
+    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)),
+    # MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string = opt_string_eps.replace("epsilon", epsilon)
-    # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I), AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
+    # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I),
+    # AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 

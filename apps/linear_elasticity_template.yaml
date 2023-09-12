@@ -6,8 +6,6 @@ gp:
   frac_elitist: 0
   min_: 2
   max_: 5
-  min_ADF: 1
-  max_ADF: 4
   overlapping_generation: True
   early_stopping: { "enabled": True, "max_overfit": 10 }
   parsimony_pressure:
