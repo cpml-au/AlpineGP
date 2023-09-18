@@ -216,11 +216,11 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
     _, axes = plt.subplots(1, dim, num=10)
     for i in range(dim):
         axes[i].triplot(S.node_coords[:, 0], S.node_coords[:, 1],
-                        triangles=S.S[2], color="#e5f5f9")
+                        triangles=S.S[2], color="#e5f5e0")
         axes[i].triplot(u[i][:, 0], u[i][:, 1],
-                        triangles=S.S[2], color="#99d8c9")
-        axes[i].triplot(X[i, :, 0], X[i, :, 1],
-                        triangles=S.S[2], color="#2ca25f")
+                        triangles=S.S[2], color="#a1d99b")
+        # axes[i].triplot(X[i, :, 0], X[i, :, 1],
+        #                triangles=S.S[2], color="#4daf4a")
     fig.canvas.draw()
     fig.canvas.flush_events()
     plt.pause(0.1)
@@ -229,7 +229,7 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
 def stgp_linear_elasticity(config_file, output_path=None):
     global residual_formulation
     # generate mesh
-    lc = 0.5
+    lc = 0.1
     L = 1.
     with pygmsh.geo.Geometry() as geom:
         p = geom.add_polygon([[0., 0.], [L, 0.], [L, L], [0., L]], mesh_size=lc)
@@ -340,15 +340,15 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    epsilon = "SubCD0T(symD0T(F), I)"
-    opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
-    opt_string = opt_string_eps.replace("epsilon", epsilon)
+    # epsilon = "SubCD0T(symD0T(F), I)"
+    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
+    # opt_string = opt_string_eps.replace("epsilon", epsilon)
     # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I),
     # AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)
