@@ -2,9 +2,10 @@ from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
-from matplotlib import tri
+from matplotlib.pyplot import triplot
+# from matplotlib import tri
 from deap import gp, base
-# from deap import creator
+from deap import creator
 from alpine.data.util import load_dataset
 from alpine.data.linear_elasticity.linear_elasticity_dataset import data_path
 from dctkit.mesh import util
@@ -199,26 +200,27 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray,
 
 
 # Plot best solution
-def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, y: npt.NDArray,
-             bvalues: dict, S: SimplicialComplex, bnodes: npt.NDArray,
-             gamma: float, u_0: C.CochainP0, toolbox: base.Toolbox,
-             triang: tri.Triangulation):
+def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
+             S: SimplicialComplex, gamma: float, u_0: C.CochainP0,
+             toolbox: base.Toolbox):
 
     indfun = toolbox.compile(expr=ind)
+    dim = X.shape[0]
 
-    _, u = eval_MSE_sol(indfun, indlen=0, X=X, y=y, bvalues=bvalues, S=S,
-                        bnodes=bnodes, gamma=gamma, u_0=u_0)
+    _, u = eval_MSE_sol(indfun, indlen=0, X=X, bvalues=bvalues,
+                        S=S, gamma=gamma, u_0=u_0)
 
-    plt.figure(10, figsize=(8, 4))
+    plt.figure(10, figsize=(10, 2))
     plt.clf()
     fig = plt.gcf()
-    _, axes = plt.subplots(2, 3, num=10)
-    for i in range(0, 3):
-        axes[0, i].tricontourf(triang, u[i], cmap='RdBu', levels=20)
-        pltobj = axes[1, i].tricontourf(triang, X[i], cmap='RdBu', levels=20)
-        axes[0, i].set_box_aspect(1)
-        axes[1, i].set_box_aspect(1)
-    plt.colorbar(pltobj, ax=axes)
+    _, axes = plt.subplots(1, dim, num=10)
+    for i in range(dim):
+        axes[i].triplot(S.node_coords[:, 0], S.node_coords[:, 1],
+                        triangles=S.S[2], color="#e5f5f9")
+        axes[i].triplot(u[i][:, 0], u[i][:, 1],
+                        triangles=S.S[2], color="#99d8c9")
+        axes[i].triplot(X[i, :, 0], X[i, :, 1],
+                        triangles=S.S[2], color="#2ca25f")
     fig.canvas.draw()
     fig.canvas.flush_events()
     plt.pause(0.1)
@@ -330,28 +332,23 @@ def stgp_linear_elasticity(config_file, output_path=None):
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
                               test_sols=eval_best_sols.remote)
 
-    '''
     if GPprb.plot_best:
-        triang = tri.Triangulation(S.node_coords[:, 0], S.node_coords[:, 1], S.S[2])
-        GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val, y=y_val,
-                               bvalues=bvalues_val, S=S, bnodes=bnodes,
-                               gamma=gamma, u_0=u_0,
-                               toolbox=GPprb.toolbox, triang=triang)
+        GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val,
+                               bvalues=bvalues_val, S=S, gamma=gamma, u_0=u_0,
+                               toolbox=GPprb.toolbox)
 
-    '''
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    # epsilon = "SubCD0T(symD0T(F), I)"
-    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)),
-    # MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
-    # opt_string = opt_string_eps.replace("epsilon", epsilon)
+    epsilon = "SubCD0T(symD0T(F), I)"
+    opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
+    opt_string = opt_string_eps.replace("epsilon", epsilon)
     # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I),
     # AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="X",
               output_path=output_path)
