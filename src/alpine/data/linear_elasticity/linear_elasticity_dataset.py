@@ -30,7 +30,7 @@ def get_data(S: simplex.SimplicialComplex, lame_moduli: List[List],
         for i, moduli in enumerate(lame_moduli[k]):
             lambda_, mu_ = moduli
             num_data = num_data_per_each_mod_couple[k][i]
-            true_strain = 0.1*np.arange(1, num_data + 1, dtype=dt.float_dtype)
+            true_strain = 0.01*np.arange(1, num_data + 1, dtype=dt.float_dtype)
             true_curr_node_coords = np.zeros(
                 (num_data, S.num_nodes, 3), dtype=dt.float_dtype)
             if benchmark == "pure_tension":
@@ -52,7 +52,7 @@ def get_data(S: simplex.SimplicialComplex, lame_moduli: List[List],
 
 
 if __name__ == '__main__':
-    lc = 0.5
+    lc = 0.1
     L = 1.
     with pygmsh.geo.Geometry() as geom:
         p = geom.add_polygon([[0., 0.], [L, 0.], [L, L], [0., L]], mesh_size=lc)
