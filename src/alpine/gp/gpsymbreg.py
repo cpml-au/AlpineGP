@@ -575,7 +575,7 @@ class GPSymbRegProblem():
 
         print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
-        print(f"The best individual is {best}", flush=True)
+        print(f"The best individual is {self.best}", flush=True)
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
         if self.early_stopping['enabled']:

@@ -133,7 +133,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), maxeval=1000,
+        x_flatten = prb.solve(x0=u_0.coeffs.flatten(), maxeval=5000,
                               ftol_abs=1e-12, ftol_rel=1e-12)
         # reshape x to have a tensor
         # x = x_flatten.reshape(S.node_coords.shape)
@@ -343,8 +343,7 @@ def stgp_linear_elasticity(config_file, output_path=None):
     # epsilon = "SubCD0T(symD0T(F), I)"
     # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string = opt_string_eps.replace("epsilon", epsilon)
-    # opt_string = "InnD0T(AddCD0T(MvD0VT(trD0T(SubCD0T(F, I)), AddCD0T(AddCD0T(I, I),
-    # AddCD0T(AddCD0T(I, I), I))), SubCD0T(F, I)), SubCD0T(F, I))"
+    # opt_string = ""
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
