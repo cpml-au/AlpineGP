@@ -52,8 +52,8 @@ def get_data(S: simplex.SimplicialComplex, lame_moduli: List[List],
 
 
 if __name__ == '__main__':
-    lc = 0.1
-    L = 1.
+    lc = 0.2
+    L = 2.
     with pygmsh.geo.Geometry() as geom:
         p = geom.add_polygon([[0., 0.], [L, 0.], [L, L], [0., L]], mesh_size=lc)
         # create a default physical group for the boundary lines
@@ -66,6 +66,7 @@ if __name__ == '__main__':
     S.get_hodge_star()
     S.get_flat_DPD_weights()
     S.get_flat_DPP_weights()
+    print(S.num_nodes)
     u.save_dataset(data_generator=get_data,
                    data_generator_kwargs={'S': S,
                                           'lame_moduli': [[(10, 1)], [(10, 1)]],
