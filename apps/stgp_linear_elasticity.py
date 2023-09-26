@@ -229,8 +229,8 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
 def stgp_linear_elasticity(config_file, output_path=None):
     global residual_formulation
     # generate mesh
-    lc = 0.1
-    L = 1.
+    lc = 0.2
+    L = 2.
     with pygmsh.geo.Geometry() as geom:
         p = geom.add_polygon([[0., 0.], [L, 0.], [L, L], [0., L]], mesh_size=lc)
         # create a default physical group for the boundary lines
