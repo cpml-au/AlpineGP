@@ -240,7 +240,7 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                 in_type = list(map(eval, in_type_name))
                 out_category = map_rule['category'](in_category)
                 # for star dimension mapping is delicate
-                if general_primitive['name'] == "St":
+                if general_primitive['name'] == "St1" or general_primitive['name'] == "St2":
                     out_dim = str(map_rule['dimension'](int(in_dim), max_dim))
                 else:
                     out_dim = str(map_rule['dimension'](int(in_dim)))
@@ -312,7 +312,7 @@ sub_coch = {'fun_info': {'name': 'SubC', 'fun': C.sub},
                           "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(sub_coch))
-coboundary = {'fun_info': {'name': 'd', 'fun': C.coboundary},
+coboundary = {'fun_info': {'name': 'cob', 'fun': C.coboundary},
               'input': ["C.Cochain"],
               'output': "C.Cochain",
               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
@@ -343,6 +343,13 @@ mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
                         "rank": ("SC", "T")},
           'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(mul_FT))
+inv_mul_FT = {'fun_info': {'name': 'InvM', 'fun': inv_scalar_mul},
+              'input': ["C.Cochain", "float"],
+              'output': "C.Cochain",
+              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
+                            "rank": ("SC", "T")},
+              'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+coch_primitives.append(generate_primitive(inv_mul_FT))
 mul_coch = {'fun_info': {'name': 'CMul', 'fun': C.cochain_mul},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
@@ -374,14 +381,22 @@ sym_coch = {'fun_info': {'name': 'sym', 'fun': C.sym},
                           "rank": ("T",)},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(sym_coch))
-star = {'fun_info': {'name': 'St', 'fun': C.star},
-        'input': ["C.Cochain"],
-        'output': "C.Cochain",
-        'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                      "rank": ("SC", "T")},
-        'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                     'dimension': star_dim, "rank": identity}}
-coch_primitives.append(generate_primitive(star))
+star_1 = {'fun_info': {'name': 'St1', 'fun': C.star},
+          'input': ["C.Cochain"],
+          'output': "C.Cochain",
+          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
+                        "rank": ("SC", "T")},
+          'map_rule': {'category': partial(switch_category, ('P', 'D')),
+                       'dimension': star_dim, "rank": identity}}
+coch_primitives.append(generate_primitive(star_1))
+star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
+          'input': ["C.Cochain"],
+          'output': "C.Cochain",
+          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
+                        "rank": ("SC", "T")},
+          'map_rule': {'category': partial(switch_category, ('P', 'D')),
+                       'dimension': star_dim, "rank": identity}}
+coch_primitives.append(generate_primitive(star_2))
 inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
@@ -463,6 +478,7 @@ primitives = scalar_primitives | primitives
 def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
                         primitive_spec: List | None = None) -> None:
 
+    # FIXME: add docs.
     for primitive_family in primitive_spec:
         non_feasible_dimensions = list(set(('0', '1', '2')) -
                                        set(primitive_family['dimension']))
@@ -471,10 +487,9 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped,
         non_feasible_objects = non_feasible_dimensions + non_feasible_ranks
         for primitive in primitives.keys():
             if primitive_family['name'] in primitive:
-                if sum([primitive_family['name'].count(obj)
+                if sum([primitive.count(obj)
                         for obj in non_feasible_objects]) == 0 or \
                         primitive_family['name'].count("VT") == 1:
-                    # check that it's of a feasible dimension
                     op = primitives[primitive].op
                     in_types = primitives[primitive].in_types
                     out_type = primitives[primitive].out_type
