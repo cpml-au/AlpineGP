@@ -2,10 +2,7 @@ from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
-from matplotlib.pyplot import triplot
-# from matplotlib import tri
 from deap import gp, base
-from deap import creator
 from alpine.data.util import load_dataset
 from alpine.data.linear_elasticity.linear_elasticity_dataset import data_path
 from dctkit.mesh import util
@@ -341,7 +338,8 @@ def stgp_linear_elasticity(config_file, output_path=None):
 
     start = time.perf_counter()
     # epsilon = "SubCD0T(symD0T(F), I)"
-    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)), MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
+    # opt_string_eps = "AddF(MulF(2., InnD0T(epsilon, epsilon)),
+    # MulF(10., InnD0T(MvD0VT(trD0T(epsilon), I), epsilon)))"
     # opt_string = opt_string_eps.replace("epsilon", epsilon)
     # opt_string = ""
     # opt_individ = creator.Individual.from_string(opt_string, pset)

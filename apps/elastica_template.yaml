@@ -31,7 +31,6 @@ gp:
     kargs: "{}"
     #fun: gp.cxOnePointLeafBiased
     #kargs: "{'termpb' : 0.1}"
-  
   primitives: [
     {"name": "AddF", "dimension": tuple(), "rank": tuple()},
     {"name": "SubF", "dimension": tuple(), "rank": tuple()},
