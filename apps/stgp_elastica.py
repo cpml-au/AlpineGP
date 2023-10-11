@@ -3,14 +3,15 @@ import numpy.typing as npt
 from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
 from jax import grad, Array
-from deap import base, gp, tools
+from deap import base, gp, tools, creator
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.dec import cochain as C
 from dctkit import config
 from dctkit.math.opt import optctrl as oc
 import dctkit as dt
-from alpine.data.elastica import elastica_dataset as ed
+from alpine.data.util import load_dataset
+from alpine.data.elastica.elastica_dataset import data_path
 from alpine.gp import gpsymbreg as gps
 from alpine.util import get_positions_from_angles
 import matplotlib.pyplot as plt
@@ -53,8 +54,8 @@ def is_valid_energy(theta_in: npt.NDArray, theta: npt.NDArray,
     dim = len(theta_in)
     noise = 0.0001*np.ones(dim).astype(dt.float_dtype)
     theta_in_noise = theta_in + noise
-    theta_noise = prb.run(x0=theta_in_noise, maxeval=500, ftol_abs=1e-12,
-                          ftol_rel=1e-12)
+    theta_noise = prb.solve(x0=theta_in_noise, maxeval=500, ftol_abs=1e-12,
+                            ftol_rel=1e-12)
     is_valid = np.allclose(theta, theta_noise, rtol=1e-6, atol=1e-6)
     return is_valid
 
@@ -149,7 +150,7 @@ def tune_EI0(func: Callable, EI0: float, indlen: int, FL2: float,
 
     x0 = np.append(theta_guess, FL2_EI0)
 
-    x = prb.run(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+    x = prb.solve(x0=x0, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
 
     # theta = x[:-1]
     FL2_EI0 = x[-1]
@@ -202,7 +203,7 @@ def eval_MSE_sol(func: Callable, EI0: float, indlen: int,
                 dim=dim, state_dim=dim, objfun=obj.total_energy)
             args = {'FL2_EI0': FL2_EI0, 'theta_0': theta_0}
             prb.set_obj_args(args)
-            theta = prb.run(x0=theta_in, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
+            theta = prb.solve(x0=theta_in, maxeval=500, ftol_abs=1e-12, ftol_rel=1e-12)
 
             # check whether the energy is "admissible" (i.e. exclude constant energies
             # and energies with minima that are too sensitive to the initial guess)
@@ -301,7 +302,8 @@ def plot_sol(ind: gp.PrimitiveTree, thetas_true: npt.NDArray, Fs: npt.NDArray,
 
 def stgp_elastica(config_file_data, output_path=None):
     global residual_formulation
-    thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = ed.load_dataset()
+    thetas_train, thetas_val, thetas_test, Fs_train, Fs_val, Fs_test = load_dataset(
+        data_path, "csv")
 
     # TODO: how can we extract these numbers from the dataset (especially length)?
     mesh, _ = generate_line_mesh(num_nodes=NUM_NODES, L=LENGTH)
@@ -362,9 +364,9 @@ def stgp_elastica(config_file_data, output_path=None):
                                Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
                                theta_in_all=theta_in_all['val'])
 
-    # opt_string = ""
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_string = "SubF(MulF(1/2, InnP0(CMulP0(int_coch, St1D1(cobD0(theta))), CMulP0(int_coch, St1D1(cobD0(theta))))), InnD0(FL2_EI0, SinD0(theta)))"
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
     feature_extractors = [lambda ind: ind.EI0, len]
 
@@ -386,7 +388,7 @@ def stgp_elastica(config_file_data, output_path=None):
 
     start = time.perf_counter()
 
-    GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
+    GPprb.run(print_log=True, seed=seed, save_train_fit_history=True,
               save_best_individual=True, save_best_test_sols=True,
               X_test_param_name='thetas_true', output_path=output_path,
               preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)

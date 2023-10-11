@@ -38,17 +38,17 @@ gp:
     {"name": "Div", "dimension": tuple(), "rank": tuple()},
     {"name": "SquareF", "dimension": tuple(), "rank": tuple()},
     {"name": "SqrtF", "dimension": tuple(), "rank": tuple()},
-    {"name": "AddC", "dimension": [0,1,2], "rank": ["V", "T"]},
-    {"name": "SubC", "dimension": [0,1,2], "rank": ["V", "T"]},
-    {"name": "Square", "dimension": [0,1,2], "rank": ["V", "T"]},
-    {"name": "Sqrt", "dimension": [0,1,2], "rank": ["V", "T"]},
-    {"name": "tr", "dimension": [0,1,2], "rank": ["T"]},
-    {"name": "MF", "dimension": [0,1,2], "rank": ["T"]},
-    {"name": "Mv", "dimension": [0,1,2], "rank": ["VT"]},
-    {"name": "tran", "dimension": [0,1,2], "rank": ["T"]},
-    {"name": "sym", "dimension": [0,1,2], "rank": ["T"]},
-    {"name": "St", "dimension": [0,1,2], "rank": ["T"]},
-    {"name": "Inn", "dimension": [0,1,2], "rank": ["T"]}
+    {"name": "AddC", "dimension": ["0","1","2"], "rank": ["V", "T"]},
+    {"name": "SubC", "dimension": ["0","1","2"], "rank": ["V", "T"]},
+    {"name": "Square", "dimension": ["0","1","2"], "rank": ["V", "T"]},
+    {"name": "Sqrt", "dimension": ["0","1","2"], "rank": ["V", "T"]},
+    {"name": "tr", "dimension": ["0","1","2"], "rank": ["T"]},
+    {"name": "MF", "dimension": ["0","1","2"], "rank": ["T"]},
+    {"name": "Mv", "dimension": ["0","1","2"], "rank": ["VT"]},
+    {"name": "tran", "dimension": ["0","1","2"], "rank": ["T"]},
+    {"name": "sym", "dimension": ["0","1","2"], "rank": ["T"]},
+    {"name": "St", "dimension": ["0","1","2"], "rank": ["T"]},
+    {"name": "Inn", "dimension": ["0","1","2"], "rank": ["T"]}
   ]
   residual_formulation: False
 
