@@ -216,7 +216,6 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
     """
     general_primitive = primitive['fun_info']
     in_attribute = primitive['att_input']
-    max_dim = int(list(in_attribute['dimension'])[-1])
     map_rule = primitive['map_rule']
     primitive_dictionary = dict()
     for in_category in in_attribute['category']:
@@ -239,11 +238,7 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                         in_type_name.append(input + in_category + in_dim + in_rank)
                 in_type = list(map(eval, in_type_name))
                 out_category = map_rule['category'](in_category)
-                # for star dimension mapping is delicate
-                if general_primitive['name'] == "St1" or general_primitive['name'] == "St2":
-                    out_dim = str(map_rule['dimension'](int(in_dim), max_dim))
-                else:
-                    out_dim = str(map_rule['dimension'](int(in_dim)))
+                out_dim = str(map_rule['dimension'](int(in_dim)))
                 out_rank = map_rule['rank'](in_rank)
                 out_type_name = primitive['output'] + out_category + out_dim + out_rank
                 out_type = eval(out_type_name)
@@ -348,7 +343,8 @@ inv_mul_FT = {'fun_info': {'name': 'InvM', 'fun': inv_scalar_mul},
               'output': "C.Cochain",
               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                             "rank": ("SC", "T")},
-              'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
+              'map_rule': {'category': identity, 'dimension': identity,
+                           "rank": identity}}
 coch_primitives.append(generate_primitive(inv_mul_FT))
 mul_coch = {'fun_info': {'name': 'CMul', 'fun': C.cochain_mul},
             'input': ["C.Cochain", "C.Cochain"],
@@ -387,7 +383,7 @@ star_1 = {'fun_info': {'name': 'St1', 'fun': C.star},
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
                         "rank": ("SC", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': star_dim, "rank": identity}}
+                       'dimension': partial(star_dim, max_dim=1), "rank": identity}}
 coch_primitives.append(generate_primitive(star_1))
 star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
           'input': ["C.Cochain"],
@@ -395,7 +391,7 @@ star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                         "rank": ("SC", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': star_dim, "rank": identity}}
+                       'dimension': partial(star_dim, max_dim=2), "rank": identity}}
 coch_primitives.append(generate_primitive(star_2))
 inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],

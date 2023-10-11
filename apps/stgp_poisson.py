@@ -4,7 +4,8 @@ from dctkit.math.opt import optctrl as oc
 import matplotlib.pyplot as plt
 from matplotlib import tri
 from deap import gp, base
-from alpine.data.poisson import poisson_dataset as pd
+from alpine.data.util import load_dataset
+import alpine.data.poisson.poisson_dataset as pd
 from dctkit.mesh import util
 from alpine.gp import gpsymbreg as gps
 from dctkit import config
@@ -36,7 +37,7 @@ def is_valid_energy(u: npt.NDArray, prb: oc.OptimizationProblem,
     # (i.e. constant energy)
     u_noise = u + noise*np.mean(u)
     u_noise[bnodes] = u[bnodes]
-    grad_u_noise = jnp.linalg.norm(prb.gradient(u_noise))
+    grad_u_noise = jnp.linalg.norm(prb.solver.gradient(u_noise))
     is_valid = grad_u_noise >= 1e-6
     return is_valid
 
@@ -78,7 +79,7 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.run(x0=u_0.coeffs, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
+        x = prb.solve(x0=u_0.coeffs, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -174,7 +175,7 @@ def stgp_poisson(config_file, output_path=None):
     S.get_hodge_star()
     bnodes = mesh.cell_sets_dict["boundary"]["line"]
     num_nodes = S.num_nodes
-    X_train, X_val, X_test, y_train, y_val, y_test = pd.load_dataset()
+    X_train, X_val, X_test, y_train, y_val, y_test = load_dataset(pd.data_path, "csv")
 
     # extract boundary values
     bvalues_train = X_train[:, bnodes]
@@ -237,7 +238,7 @@ def stgp_poisson(config_file, output_path=None):
 
     start = time.perf_counter()
     # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
-    # opt_string = "Sub(InnP1(dP0(u), dP0(u)), MulF(2., InnP0(f, u)))"
+    # opt_string = "SubF(InnP1(cobP0(u), cobP0(u)), MulF(2., InnP0(f, u)))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 

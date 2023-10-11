@@ -3,7 +3,7 @@ import numpy.typing as npt
 from typing import Callable, Dict, Tuple
 import jax.numpy as jnp
 from jax import grad, Array
-from deap import base, gp, tools, creator
+from deap import base, gp, tools
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.dec import cochain as C
@@ -364,9 +364,10 @@ def stgp_elastica(config_file_data, output_path=None):
                                Fs=Fs_val, toolbox=GPprb.toolbox, S=S,
                                theta_in_all=theta_in_all['val'])
 
-    opt_string = "SubF(MulF(1/2, InnP0(CMulP0(int_coch, St1D1(cobD0(theta))), CMulP0(int_coch, St1D1(cobD0(theta))))), InnD0(FL2_EI0, SinD0(theta)))"
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_string = "SubF(MulF(1/2, InnP0(CMulP0(int_coch, St1D1(cobD0(theta))),
+    # CMulP0(int_coch, St1D1(cobD0(theta))))), InnD0(FL2_EI0, SinD0(theta)))"
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
     feature_extractors = [lambda ind: ind.EI0, len]
 
@@ -388,7 +389,7 @@ def stgp_elastica(config_file_data, output_path=None):
 
     start = time.perf_counter()
 
-    GPprb.run(print_log=True, seed=seed, save_train_fit_history=True,
+    GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
               save_best_individual=True, save_best_test_sols=True,
               X_test_param_name='thetas_true', output_path=output_path,
               preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
