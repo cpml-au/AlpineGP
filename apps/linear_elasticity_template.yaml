@@ -1,8 +1,9 @@
+# template for Linear Elasticity parameters file
 gp:
-  NINDIVIDUALS: 1
-  NGEN: 1
-  CXPB: 0.
-  MUTPB: 0.
+  NINDIVIDUALS: 1000
+  NGEN: 100
+  CXPB: 0.2
+  MUTPB: 0.8
   frac_elitist: 0
   min_: 2
   max_: 5

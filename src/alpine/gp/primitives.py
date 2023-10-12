@@ -43,6 +43,35 @@ def square_mod(x):
     return jnp.square(x).astype(dt.float_dtype)
 
 
+def switch_category(categories: Tuple, category: str):
+    switched_category_list = list(set(categories) - set(category))
+    return str(switched_category_list[0])
+
+
+def identity(x):
+    return x
+
+
+def empty_string(x):
+    return ""
+
+
+def rank_downgrade(x):
+    if x == "T":
+        return "V"
+    elif x == "V":
+        return ""
+    raise ValueError("Invalid input rank")
+
+
+def vec_tensor_mul_rank(x):
+    return "T"
+
+
+def star_dim(x, max_dim):
+    return max_dim - x
+
+
 class PrimitiveParams:
     def __init__(self, op, in_types, out_type) -> None:
         self.op = op
@@ -104,35 +133,6 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                 primitive_dictionary[primitive_name] = PrimitiveParams(
                     general_primitive['fun'], in_type, out_type)
     return primitive_dictionary
-
-
-def switch_category(categories: Tuple, category: str):
-    switched_category_list = list(set(categories) - set(category))
-    return str(switched_category_list[0])
-
-
-def identity(x):
-    return x
-
-
-def empty_string(x):
-    return ""
-
-
-def rank_downgrade(x):
-    if x == "T":
-        return "V"
-    elif x == "V":
-        return ""
-    raise ValueError("Invalid input rank")
-
-
-def vec_tensor_mul_rank(x):
-    return "T"
-
-
-def star_dim(x, max_dim):
-    return max_dim - x
 
 
 scalar_primitives = {

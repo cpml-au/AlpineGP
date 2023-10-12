@@ -9,13 +9,25 @@ import alpine.data.util as u
 
 data_path = os.path.dirname(os.path.realpath(__file__))
 
-# FIXME: FIX THE DOCS
-
 
 def get_data(S: simplex.SimplicialComplex, lame_moduli: List[List],
              num_data_per_each_mod_couple: List[List],
-             bench_labels: List[str]) -> Tuple[npt.NDArray,
-                                               npt.NDArray]:
+             bench_names: List[str]) -> Tuple[npt.NDArray,
+                                              npt.NDArray]:
+    """Generate dataset for linear elasticity.
+
+    Args:
+        S: a simplicial complex (reference configuration).
+        lame_moduli: list of lame moduli for each benchmark.
+        num_data_per_each_mod_couple: list containing the number of data for each
+            benchmark.
+        bench_names: list containing the name of each benchmark
+            (currently supported: pure tension, pure shear).
+
+    Returns:
+        a tuple containing the node coordinates of the deformed configuration and
+            the benchmark name corresponding to those.
+    """
     # number of lame moduli must be equal to the number of data per lame moduli
     assert len(lame_moduli) == len(num_data_per_each_mod_couple)
     # total number of data = sum of the data for each couple of lame moduli
@@ -26,7 +38,7 @@ def get_data(S: simplex.SimplicialComplex, lame_moduli: List[List],
     y = np.empty(tot_num_data, dtype=object)
     # number of data points for the previous couple of lame moduli, initialized to 0
     prec_num_data = 0
-    for k, benchmark in enumerate(bench_labels):
+    for k, benchmark in enumerate(bench_names):
         for i, moduli in enumerate(lame_moduli[k]):
             lambda_, mu_ = moduli
             num_data = num_data_per_each_mod_couple[k][i]
@@ -71,8 +83,8 @@ if __name__ == '__main__':
                    data_generator_kwargs={'S': S,
                                           'lame_moduli': [[(10, 1)], [(10, 1)]],
                                           'num_data_per_each_mod_couple': [[10], [10]],
-                                          'bench_labels': ["pure_tension",
-                                                           "pure_shear"]},
+                                          'bench_names': ["pure_tension",
+                                                          "pure_shear"]},
                    perc_val=0.3,
                    perc_test=0.2,
                    format="npy")
