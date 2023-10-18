@@ -78,7 +78,6 @@ if __name__ == '__main__':
     S.get_hodge_star()
     S.get_flat_DPD_weights()
     S.get_flat_DPP_weights()
-    print(S.num_nodes)
     u.save_dataset(data_generator=get_data,
                    data_generator_kwargs={'S': S,
                                           'lame_moduli': [[(10, 1)], [(10, 1)]],

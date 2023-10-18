@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 from deap import gp
 from dctkit.dec import cochain as C
+from dctkit.dec import vector as V
 import dctkit as dt
 from typing import List, Dict, Callable, Tuple
 from functools import partial
@@ -322,6 +323,14 @@ square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
                'map_rule': {'category': identity, 'dimension': identity,
                             "rank": identity}}
 coch_primitives.append(generate_primitive(square_coch))
+flat = {'fun_info': {'name': 'flat', 'fun': V.flat_PDP},
+        'input': ["C.Cochain"],
+        'output': "C.Cochain",
+        'att_input': {'category': ('P',), 'dimension': ('0',),
+                      "rank": ("SC",)},
+        'map_rule': {'category': identity, 'dimension': partial(operator.add, 1),
+                     "rank": identity}}
+coch_primitives.append(generate_primitive(flat))
 
 
 for primitive in coch_primitives:
