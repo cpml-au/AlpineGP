@@ -44,19 +44,23 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
+    total_err = 0.
     # main loop
     for t in range(num_t_points - 1):
         u_coch = C.CochainP0(S, u[:, t])
         u[1:-1, t+1] = u[1:-1, t] + dt*func(u_coch).coeffs[1:-1]
-
-    # evaluate errors
-    u_data = u_data_T.T
-    errors = u[:, time_data] - u_data
-
-    total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
+        if np.isnan(u[:, t+1]).any():
+            total_err = np.nan
 
     if math.isnan(total_err):
         total_err = 1e5
+
+    else:
+        # evaluate errors
+        u_data = u_data_T.T
+        errors = u[:, time_data] - u_data
+
+        total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
 
     best_sol = u
 
