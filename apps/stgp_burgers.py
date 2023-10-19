@@ -32,14 +32,14 @@ warnings.filterwarnings("ignore")
 
 def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, num_t_points: float,
-                 num_x_points: float, dt: float, u_0: C.CochainP0) -> Tuple[float, npt.NDArray]:
+                 num_x_points: float, dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
     config()
 
     # initialize u setting initial and boundary conditions
-    u = np.zeros((num_x_points, num_t_points), dtype=dt_.float_dtype)
+    u = np.zeros((num_x_points-1, num_t_points), dtype=dt_.float_dtype)
     u[:, 0] = u_0.coeffs
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
@@ -47,7 +47,7 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
     total_err = 0.
     # main loop
     for t in range(num_t_points - 1):
-        u_coch = C.CochainP0(S, u[:, t])
+        u_coch = C.CochainD0(S, u[:, t])
         u[1:-1, t+1] = u[1:-1, t] + dt*func(u_coch).coeffs[1:-1]
         if np.isnan(u[:, t+1]).any():
             total_err = np.nan
@@ -71,7 +71,7 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
 def eval_best_sols(individual: Callable, indlen: int, time_data: npt.NDArray,
                    u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                    num_t_points: float, num_x_points: float, dt: float,
-                   u_0: C.CochainP0, penalty: dict) -> npt.NDArray:
+                   u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
 
     _, best_sols = eval_MSE_sol(individual, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -83,7 +83,7 @@ def eval_best_sols(individual: Callable, indlen: int, time_data: npt.NDArray,
 def eval_MSE(individual: Callable, indlen: int, time_data: npt.NDArray,
              u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
              num_t_points: float, num_x_points: float, dt: float,
-             u_0: C.CochainP0, penalty: dict) -> float:
+             u_0: C.CochainD0, penalty: dict) -> float:
 
     MSE, _ = eval_MSE_sol(individual, indlen, time_data,
                           u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -95,7 +95,7 @@ def eval_MSE(individual: Callable, indlen: int, time_data: npt.NDArray,
 def eval_fitness(individual: Callable, indlen: int, time_data: npt.NDArray,
                  u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                  num_t_points: float, num_x_points: float, dt: float,
-                 u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
+                 u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -108,7 +108,7 @@ def eval_fitness(individual: Callable, indlen: int, time_data: npt.NDArray,
 
 # Plot best solution
 def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
-             S: SimplicialComplex, gamma: float, u_0: C.CochainP0,
+             S: SimplicialComplex, gamma: float, u_0: C.CochainD0,
              toolbox: base.Toolbox):
 
     indfun = toolbox.compile(expr=ind)
@@ -156,10 +156,11 @@ def stgp_burgers(config_file, output_path=None):
 
     # initial guess for the solution of the problem
     x = np.linspace(0, x_max, num_x_points)
+    x_circ = (x[:-1] + x[1:])/2
 
     # initial condition
-    u_0_coeffs = 2 * np.exp(-2 * (x - 0.5 * x_max)**2)
-    u_0 = C.CochainP0(S, u_0_coeffs)
+    u_0_coeffs = 2 * np.exp(-2 * (x_circ - 0.5 * x_max)**2)
+    u_0 = C.CochainD0(S, u_0_coeffs)
 
     # boundary conditions
     nodes_BC = {'left': np.zeros(num_t_points), 'right': np.zeros(num_t_points)}
@@ -169,7 +170,7 @@ def stgp_burgers(config_file, output_path=None):
     # define primitive set and add primitives and terminals
     if residual_formulation:
         print("Using residual formulation.")
-        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainP0], C.CochainP0)
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0], C.CochainD0)
     else:
         raise Exception("Only residual formulation available for this problem.")
 
@@ -179,8 +180,8 @@ def stgp_burgers(config_file, output_path=None):
     pset.addTerminal(-1., float, name="-1.")
     pset.addTerminal(2., float, name="2.")
     pset.addTerminal(-2., float, name="-2.")
-    pset.addTerminal(10., float, name="10.")
-    pset.addTerminal(0.1, float, name="0.1")
+    # pset.addTerminal(10., float, name="10.")
+    # pset.addTerminal(0.1, float, name="0.1")
 
     # rename arguments
     pset.renameArguments(ARG0="u")
@@ -215,7 +216,8 @@ def stgp_burgers(config_file, output_path=None):
     GPprb.register_map([len])
 
     start = time.perf_counter()
-    # opt_string = "St1D1(cobD0(AddCD0(St1P1(flatP0(MFP0(SquareP0(u), -1/2))), MFD0(St1P1(cobP0(u)), 0.1))))"
+    # from deap import creator
+    # opt_string = "St1P1(cobP0(St1D1(flat_upD0(MFD0(SquareD0(u),-1/2)))))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 

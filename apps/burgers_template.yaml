@@ -1,9 +1,9 @@
 # template for Elastica parameters file
 gp:
-  NINDIVIDUALS: 1
-  NGEN: 1
-  CXPB: 0.
-  MUTPB: 0.
+  NINDIVIDUALS: 10
+  NGEN: 10
+  CXPB: 0.2
+  MUTPB: 0.8
   frac_elitist: 0
   min_: 2
   max_: 5
@@ -39,12 +39,12 @@ gp:
     {"name": "Div", "dimension": None, "rank": None},
     {"name": "SquareF", "dimension": None, "rank": None},
     {"name": "SqrtF", "dimension": None, "rank": None},
-    {"name": "SinF", "dimension": None, "rank": None},
-    {"name": "ArcsinF", "dimension": None, "rank": None},
-    {"name": "CosF", "dimension": None, "rank": None},
-    {"name": "ArccosF", "dimension": None, "rank": None},
-    {"name": "ExpF", "dimension": None, "rank": None},
-    {"name": "LogF", "dimension": None, "rank": None},
+    #{"name": "SinF", "dimension": None, "rank": None},
+    #{"name": "ArcsinF", "dimension": None, "rank": None},
+    #{"name": "CosF", "dimension": None, "rank": None},
+    #{"name": "ArccosF", "dimension": None, "rank": None},
+    #{"name": "ExpF", "dimension": None, "rank": None},
+    #{"name": "LogF", "dimension": None, "rank": None},
     {"name": "InvF", "dimension": None, "rank": None},
     {"name": "AddC", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "SubC", "dimension": ["0","1"], "rank": ["SC"]},
@@ -56,7 +56,8 @@ gp:
     {"name": "MF", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
-    {"name": "flat", "dimension": ["0"], "rank": ["SC"]}
+    {"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
+    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]}
   ]
   residual_formulation: True
 
