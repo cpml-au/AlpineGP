@@ -33,11 +33,11 @@ if __name__ == "__main__":
     nodes_BC = {'left': np.zeros(num_t_points), 'right': np.zeros(num_t_points)}
 
     # viscosity coefficient
-    epsilon = 0.
+    epsilon = 0.1
     u.save_dataset(data_generator=burgers_data,
                    data_generator_kwargs={'x_max': x_max, 't_max': t_max, 'dx': dx,
                                           'dt': dt, 'u_0': u_0, 'nodes_BC': nodes_BC,
-                                          'epsilon': epsilon, 'scheme': "upwind"},
+                                          'epsilon': epsilon, 'scheme': "parabolic"},
                    perc_val=0.3,
                    perc_test=0.2,
                    format="npy")

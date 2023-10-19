@@ -1,7 +1,7 @@
 # template for Elastica parameters file
 gp:
-  NINDIVIDUALS: 10
-  NGEN: 10
+  NINDIVIDUALS: 1000
+  NGEN: 100
   CXPB: 0.2
   MUTPB: 0.8
   frac_elitist: 0
@@ -11,7 +11,7 @@ gp:
   early_stopping: { "enabled": True, "max_overfit": 10 }
   parsimony_pressure:
     { "enabled": False, "fitness_first": True, "parsimony_size": 1.5 }
-  penalty: { "method": "length", "reg_param": 0. }
+  penalty: { "method": "length", "reg_param": 0.01}
   select:
     tournsize: 2
     stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
@@ -57,7 +57,8 @@ gp:
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
-    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]}
+    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
+    {"name": "Inn", "dimension": ["0","1"], "rank": ["SC"]}
   ]
   residual_formulation: True
 

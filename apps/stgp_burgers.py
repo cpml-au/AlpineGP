@@ -180,8 +180,8 @@ def stgp_burgers(config_file, output_path=None):
     pset.addTerminal(-1., float, name="-1.")
     pset.addTerminal(2., float, name="2.")
     pset.addTerminal(-2., float, name="-2.")
-    # pset.addTerminal(10., float, name="10.")
-    # pset.addTerminal(0.1, float, name="0.1")
+    pset.addTerminal(10., float, name="10.")
+    pset.addTerminal(0.1, float, name="0.1")
 
     # rename arguments
     pset.renameArguments(ARG0="u")
@@ -217,7 +217,7 @@ def stgp_burgers(config_file, output_path=None):
 
     start = time.perf_counter()
     # from deap import creator
-    # opt_string = "St1P1(cobP0(St1D1(flat_upD0(MFD0(SquareD0(u),-1/2)))))"
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),0.1))))"
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
