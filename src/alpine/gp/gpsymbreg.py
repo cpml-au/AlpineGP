@@ -37,7 +37,8 @@ class GPSymbRegProblem():
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
-                 use_ray=True):
+                 use_ray=True,
+                 ADF=None):
         """Symbolic regression problem via Genetic Programming.
 
             Args:
@@ -54,6 +55,7 @@ class GPSymbRegProblem():
                     for survival.
         """
         self.pset = pset
+        self.ADF = ADF
         if config_file_data is not None:
             self.load_config_data(config_file_data)
         else:
@@ -135,26 +137,38 @@ class GPSymbRegProblem():
         toolbox.decorate(
             "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
-        toolbox.register("expr", gp.genHalfAndHalf,
-                         pset=self.pset, min_=min_, max_=max_)
-        toolbox.register("expr_pop",
-                         gp.genHalfAndHalf,
-                         pset=self.pset,
-                         min_=min_,
-                         max_=max_,
-                         is_pop=True)
-        creator.create("Individual",
-                       gp.PrimitiveTree,
-                       fitness=creator.FitnessMin)
-        createIndividual = creator.Individual
-        toolbox.register("individual", tools.initIterate,
-                         createIndividual, toolbox.expr)
+        if self.ADF is not None:
+            creator.create("Individual", list, fitness=creator.FitnessMin)
+            creator.create("Tree", gp.PrimitiveTree)
+            createIndividual = creator.Individual
 
-        # toolbox.register("individual_pop", tools.initIterate,
-        #                 createIndividual, toolbox.expr_pop)
-        toolbox.register("population", tools.initRepeat,
-                         list, toolbox.individual)
-        toolbox.register("compile", gp.compile, pset=self.pset)
+            toolbox.register("adf_expr", gp.genHalfAndHalf,
+                             pset=self.ADF, min_=min_, max_=max_)
+            toolbox.register("main_expr", gp.genHalfAndHalf,
+                             pset=self.pset, min_=min_, max_=max_)
+            toolbox.register("adf", tools.initIterate,
+                             creator.Tree, toolbox.adf_expr)
+            toolbox.register("main", tools.initIterate,
+                             creator.Tree, toolbox.main_expr)
+            func_cycle = [toolbox.main, toolbox.adf]
+            toolbox.register('individual', tools.initCycle,
+                             createIndividual, func_cycle)
+            toolbox.register('population', tools.initRepeat, list, toolbox.individual)
+
+            toolbox.register("compile", gp.compileADF, psets=[self.pset, self.ADF])
+        else:
+            toolbox.register("expr", gp.genHalfAndHalf,
+                             pset=self.pset, min_=min_, max_=max_)
+            creator.create("Individual",
+                           gp.PrimitiveTree,
+                           fitness=creator.FitnessMin)
+            createIndividual = creator.Individual
+            toolbox.register("individual", tools.initIterate,
+                             createIndividual, toolbox.expr)
+
+            toolbox.register("population", tools.initRepeat,
+                             list, toolbox.individual)
+            toolbox.register("compile", gp.compile, pset=self.pset)
 
         self.toolbox = toolbox
         self.createIndividual = createIndividual
@@ -172,12 +186,10 @@ class GPSymbRegProblem():
         self.stochastic_tournament = \
             config_file_data["gp"]["select"]["stochastic_tournament"]
 
-        if len(config_file_data["gp"]['primitives']) == 0:
-            addPrimitivesToPset(self.pset)
-        else:
-            addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
-
+        addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
         self.__creator_toolbox_config(config_file_data=config_file_data)
+        if self.ADF is not None:
+            addPrimitivesToPset(self.ADF, config_file_data["gp"]['primitives'])
 
         self.early_stopping = config_file_data["gp"]["early_stopping"]
         self.plot_best = config_file_data["plot"]["plot_best"]
@@ -452,9 +464,7 @@ class GPSymbRegProblem():
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
 
-        # print(len(self.pop))
-        # print(self.pop[0])
-        # print([ind for ind in self.pop])
+        print([[str(i[0]), str(i[1])] for i in self.pop])
         print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the fitness of the entire population on the training set
@@ -493,9 +503,12 @@ class GPSymbRegProblem():
 
             # Apply crossover and mutation to the offspring, except elite individuals
             elite_ind = tools.selBest(offspring, self.n_elitist)
+            # offspring = elite_ind + \
+            #    algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
+            #                    self.n_elitist, self.CXPB, self.MUTPB)
             offspring = elite_ind + \
                 algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
-                                 self.n_elitist, self.CXPB, self.MUTPB)
+                                 self.n_elitist, self.CXPB, self.MUTPB, [self.pset, self.ADF])
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)

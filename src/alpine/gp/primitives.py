@@ -339,6 +339,11 @@ flat_par = {'fun_info': {'name': 'flat_par', 'fun': partial(V.flat_PDD, scheme="
             'map_rule': {'category': identity, 'dimension': partial(operator.add, 1),
                          "rank": identity}}
 coch_primitives.append(generate_primitive(flat_par))
+# FIXME: extend auto-generator to handle scalar fields primitives
+coch_primitives.append({'inter_up': PrimitiveParams(
+    V.upwind_interpolation, [C.CochainD0], V.ScalarField)})
+coch_primitives.append({'int_up': PrimitiveParams(
+    V.upwind_integration, [V.ScalarField], C.CochainD1)})
 
 
 for primitive in coch_primitives:

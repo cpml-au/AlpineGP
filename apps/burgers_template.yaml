@@ -1,9 +1,9 @@
 # template for Elastica parameters file
 gp:
-  NINDIVIDUALS: 1000
-  NGEN: 100
-  CXPB: 0.2
-  MUTPB: 0.8
+  NINDIVIDUALS: 10
+  NGEN: 10
+  CXPB: 0.
+  MUTPB: 1.
   frac_elitist: 0
   min_: 2
   max_: 5
@@ -56,9 +56,11 @@ gp:
     {"name": "MF", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
-    {"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
+    #{"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
     {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
-    {"name": "Inn", "dimension": ["0","1"], "rank": ["SC"]}
+    {"name": "Inn", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "inter_up", "dimension": None, "rank": None},
+    {"name": "int_up", "dimension": None, "rank": None}
   ]
   residual_formulation: True
 
