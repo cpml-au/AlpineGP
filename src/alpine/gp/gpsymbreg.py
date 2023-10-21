@@ -20,6 +20,10 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                            "intra_op_parallelism_threads=1")
 
 
+def len_ADF(x):
+    return len(x[0]) + len(x[1])
+
+
 class GPSymbRegProblem():
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
@@ -82,7 +86,7 @@ class GPSymbRegProblem():
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
-        self.stats_size = tools.Statistics(len)
+        self.stats_size = tools.Statistics(len_ADF)
         self.mstats = tools.MultiStatistics(fitness=self.stats_fit,
                                             size=self.stats_size)
         self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
@@ -392,6 +396,7 @@ class GPSymbRegProblem():
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def register_map(self, individ_feature_extractors: List[Callable] | None = None):
+
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
@@ -538,7 +543,9 @@ class GPSymbRegProblem():
                                     overfit_measure=self.early_stopping['enabled'],
                                     print_log=print_log)
 
-            print(f"The best individual of this generation is: {best}")
+            # print(f"The best individual of this generation is: {best}")
+            print(f"The best individual of this generation is: {best[0]}")
+            print(f"ADF = {best[1]}")
 
             if callback_fun is not None:
                 callback_fun(self.pop)
@@ -571,7 +578,9 @@ class GPSymbRegProblem():
                                                        training_fit) >= 1e-1:
                     m += 1
 
-                print(f"The best until now is: {self.best}")
+                # print(f"The best until now is: {self.best}")
+                print(f"The best until now is: {best[0]}")
+                print(f"ADF = {best[1]}")
 
                 self.last_improvement = training_fit
 
@@ -588,7 +597,9 @@ class GPSymbRegProblem():
 
         print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
-        print(f"The best individual is {self.best}", flush=True)
+        # print(f"The best individual is {self.best}", flush=True)
+        print(f"The best individual is: {self.best[0]}")
+        print(f"ADF = {self.best[1]}")
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
         if self.early_stopping['enabled']:

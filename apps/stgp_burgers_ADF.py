@@ -176,7 +176,7 @@ def stgp_burgers(config_file, output_path=None):
     else:
         raise Exception("Only residual formulation available for this problem.")
 
-    # add constants
+    # add constants for MAIN
     pset.addTerminal(0.5, float, name="1/2")
     pset.addTerminal(-0.5, float, name="-1/2")
     pset.addTerminal(-1., float, name="-1.")
@@ -184,6 +184,8 @@ def stgp_burgers(config_file, output_path=None):
     pset.addTerminal(-2., float, name="-2.")
     pset.addTerminal(10., float, name="10.")
     pset.addTerminal(0.1, float, name="0.1")
+
+    # add constants for ADF
     ADF.addTerminal(0.5, float, name="1/2")
     ADF.addTerminal(-0.5, float, name="-1/2")
     ADF.addTerminal(-1., float, name="-1.")
@@ -223,7 +225,7 @@ def stgp_burgers(config_file, output_path=None):
     #                           bvalues=bvalues_val, S=S, gamma=gamma, u_0=u_0,
     #                           toolbox=GPprb.toolbox)
 
-    GPprb.register_map([len])
+    GPprb.register_map([gps.len_ADF])
 
     start = time.perf_counter()
     # from deap import creator
