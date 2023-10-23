@@ -1,9 +1,9 @@
-# template for Elastica parameters file
+# template for Burgers parameters file
 gp:
   NINDIVIDUALS: 10
   NGEN: 10
-  CXPB: 0.
-  MUTPB: 1.
+  CXPB: 0.2
+  MUTPB: 0.8
   frac_elitist: 0
   min_: 2
   max_: 5
@@ -57,11 +57,28 @@ gp:
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
     #{"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
-    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
+    #{"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
     {"name": "Inn", "dimension": ["0","1"], "rank": ["SC"]},
+    #{"name": "inter_up", "dimension": None, "rank": None},
+    #{"name": "int_up", "dimension": None, "rank": None}
+  ]
+  ADF:
+    use_ADF: True
+    min_ADF: 1
+    max_ADF: 2
+    primitives: [
+    {"name": "AddC", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "SubC", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "cob", "dimension": ["0"], "rank": ["SC"]},
+    {"name": "del", "dimension": ["1"], "rank": ["SC"]},
+    {"name": "St1", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "Square", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "Sqrt", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
+    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
     {"name": "inter_up", "dimension": None, "rank": None},
     {"name": "int_up", "dimension": None, "rank": None}
-  ]
+    ]
   residual_formulation: True
 
 plot:

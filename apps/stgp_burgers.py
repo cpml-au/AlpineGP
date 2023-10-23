@@ -166,28 +166,34 @@ def stgp_burgers(config_file, output_path=None):
     nodes_BC = {'left': np.zeros(num_t_points), 'right': np.zeros(num_t_points)}
 
     residual_formulation = config_file["gp"]["residual_formulation"]
+    use_ADF = config_file["gp"]["ADF"]["use_ADF"]
 
     # define primitive set and add primitives and terminals
     if residual_formulation:
         print("Using residual formulation.")
         pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0], C.CochainD0)
+        # add constants
+        pset.addTerminal(0.5, float, name="1/2")
+        pset.addTerminal(-0.5, float, name="-1/2")
+        pset.addTerminal(-1., float, name="-1.")
+        pset.addTerminal(2., float, name="2.")
+        pset.addTerminal(-2., float, name="-2.")
+        # pset.addTerminal(10., float, name="10.")
+        # pset.addTerminal(0.1, float, name="0.1")
+        # rename arguments
+        pset.renameArguments(ARG0="u")
+
+        if use_ADF:
+            ADF = gp.PrimitiveSetTyped("ADF", [C.CochainD0], C.CochainD1)
+            pset.addADF(ADF)
+            ADF.renameArguments(ARG0="u")
+        else:
+            ADF = None
     else:
         raise Exception("Only residual formulation available for this problem.")
 
-    # add constants
-    pset.addTerminal(0.5, float, name="1/2")
-    pset.addTerminal(-0.5, float, name="-1/2")
-    pset.addTerminal(-1., float, name="-1.")
-    pset.addTerminal(2., float, name="2.")
-    pset.addTerminal(-2., float, name="-2.")
-    pset.addTerminal(10., float, name="10.")
-    pset.addTerminal(0.1, float, name="0.1")
-
-    # rename arguments
-    pset.renameArguments(ARG0="u")
-
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
+    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file, ADF=ADF)
 
     penalty = config_file["gp"]["penalty"]
 
@@ -213,11 +219,20 @@ def stgp_burgers(config_file, output_path=None):
     #                           bvalues=bvalues_val, S=S, gamma=gamma, u_0=u_0,
     #                           toolbox=GPprb.toolbox)
 
-    GPprb.register_map([len])
+    if use_ADF:
+        GPprb.register_map([lambda x: len(x[0]) + len(x[1])])
+    else:
+        GPprb.register_map(len)
 
     start = time.perf_counter()
     # from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),0.1))))"
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
+    #  MFP0(St1D1(cobD0(u)),0.1))))"
+    # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
+    # opt_string_ADF = "int_up(inter_up(u))"
+    # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
+    # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
+    # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
