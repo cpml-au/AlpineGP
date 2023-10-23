@@ -140,11 +140,11 @@ class GPSymbRegProblem():
         toolbox.register("mutate",
                          eval(mutate_fun), **mutate_kargs)
 
+        toolbox.decorate(
+            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+        toolbox.decorate(
+            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
         if self.ADF is None:
-            toolbox.decorate(
-                "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-            toolbox.decorate(
-                "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
             toolbox.register("expr", gp.genHalfAndHalf,
                              pset=self.pset, min_=min_, max_=max_)
             creator.create("Individual",
