@@ -20,10 +20,6 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                            "intra_op_parallelism_threads=1")
 
 
-def len_ADF(x):
-    return len(x[0]) + len(x[1])
-
-
 class GPSymbRegProblem():
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
@@ -140,11 +136,11 @@ class GPSymbRegProblem():
         toolbox.register("mutate",
                          eval(mutate_fun), **mutate_kargs)
 
-        toolbox.decorate(
-            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-        toolbox.decorate(
-            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
         if self.ADF is None:
+            toolbox.decorate(
+                "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+            toolbox.decorate(
+                "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
             toolbox.register("expr", gp.genHalfAndHalf,
                              pset=self.pset, min_=min_, max_=max_)
             creator.create("Individual",
@@ -179,7 +175,7 @@ class GPSymbRegProblem():
                              createIndividual, func_cycle)
             toolbox.register('population', tools.initRepeat, list, toolbox.individual)
 
-            toolbox.register("compile", gp.compileADF, psets=[self.pset, self.ADF])
+            toolbox.register("compile", gp.compileADF, psets=(self.pset, self.ADF))
 
         self.toolbox = toolbox
         self.createIndividual = createIndividual
@@ -476,6 +472,8 @@ class GPSymbRegProblem():
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
 
+        # print([[str(ind[0]), str(ind[1])] for ind in self.pop])
+
         print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the fitness of the entire population on the training set
@@ -485,8 +483,12 @@ class GPSymbRegProblem():
             preprocess_fun(self.pop)
 
         fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
+        # print(fitnesses)
 
         for ind, fit in zip(self.pop, fitnesses):
+            # print("Gen 0")
+            # print(str(ind[0]), str(ind[1]))
+            # print(fit)
             ind.fitness.values = fit
 
         if self.early_stopping['enabled']:
@@ -521,11 +523,17 @@ class GPSymbRegProblem():
             else:
                 offspring = elite_ind + \
                     algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
-                                     self.n_elitist, self.CXPB, self.MUTPB, [self.pset, self.ADF])
+                                     self.n_elitist, self.CXPB, self.MUTPB, (self.pset, self.ADF))
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+
+            # if seed is not None and gen == 3:
+            #    print("Seeding population with individuals...", flush=True)
+            #    invalid_ind[:len(seed)] = seed
+            # print(len(offspring))
+            # print(len(invalid_ind))
 
             if preprocess_fun is not None:
                 preprocess_fun(invalid_ind)
@@ -533,6 +541,9 @@ class GPSymbRegProblem():
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
 
             for ind, fit in zip(invalid_ind, fitnesses):
+                # print(f"Gen {cgen}")
+                # print(str(ind[0]), str(ind[1]))
+                # print(fit)
                 ind.fitness.values = fit
 
             if not self.overlapping_generation:
