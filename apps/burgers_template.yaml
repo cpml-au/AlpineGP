@@ -57,13 +57,13 @@ gp:
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
     # {"name": "flat_up", "dimension": ["0"], "rank": ["SC"]},
-    #{"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
+    {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
     {"name": "Inn", "dimension": ["0","1"], "rank": ["SC"]},
     #{"name": "inter_up", "dimension": None, "rank": None},
     #{"name": "int_up", "dimension": None, "rank": None}
   ]
   ADF:
-    use_ADF: True
+    use_ADF: False
     min_ADF: 1
     max_ADF: 2
     primitives: [

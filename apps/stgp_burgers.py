@@ -179,6 +179,8 @@ def stgp_burgers(config_file, output_path=None):
         pset.addTerminal(-1., float, name="-1.")
         pset.addTerminal(2., float, name="2.")
         pset.addTerminal(-2., float, name="-2.")
+        pset.addTerminal(dx, float, name="dx")
+        pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
         # pset.addTerminal(0.1, float, name="0.1")
         # rename arguments
@@ -228,7 +230,7 @@ def stgp_burgers(config_file, output_path=None):
     start = time.perf_counter()
     # from deap import creator
     # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),0.1))))"
+    # MFP0(St1D1(cobD0(u)),Div(dx, 2.)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
