@@ -50,13 +50,6 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
         u_coch = C.CochainD0(S, u[:, t])
         u[1:-1, t+1] = u[1:-1, t] + dt*func(u_coch).coeffs[1:-1]
         if np.isnan(u[:, t+1]).any() or (np.abs(u[:, t+1]) > 1e5).any():
-            # if indlen == 11:
-            #    print(t)
-            #    print(np.isnan(u[:, t+1]).any())
-            #    print((np.abs(u[:, t+1]) > 1e5).any())
-            #    for j in range(t+1):
-            #        print(u[:, j+1])
-            #    print("BREAK")
             total_err = np.nan
             break
 
@@ -70,17 +63,6 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
 
         total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
 
-    # print(u_data_T[-1, :10])
-    # if indlen == 11:
-    # if u_data_T.size == 222880:
-    #    print("Inside the fit")
-    #    print(time_data)
-    #    print(u_data_T[-1, :])
-    #    print(u_data_T.T[:, 0])
-    #    print(u[:, time_data[0]])
-    # print(u_data_T[1, :10])
-
-    # print(total_err)
     best_sol = u
 
     return total_err, best_sol
@@ -244,19 +226,20 @@ def stgp_burgers(config_file, output_path=None):
         GPprb.register_map([len])
 
     start = time.perf_counter()
-    from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),0.1))))"
+    # from deap import creator
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
+    # MFP0(St1D1(cobD0(u)),0.1))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
-    opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
+    # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
-    opt_string_ADF = "flat_upD0(u)"
-    opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
-    opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
-    opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
+    # opt_string_ADF = "flat_upD0(u)"
+    # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
+    # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
+    # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
     # opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="time_data",
               output_path=output_path)

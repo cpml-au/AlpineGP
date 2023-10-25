@@ -1,7 +1,7 @@
 # template for Burgers parameters file
 gp:
-  NINDIVIDUALS: 3
-  NGEN: 1
+  NINDIVIDUALS: 1000
+  NGEN: 100
   CXPB: 0.2
   MUTPB: 0.8
   frac_elitist: 0
@@ -78,7 +78,7 @@ gp:
     {"name": "flat_par", "dimension": ["0"], "rank": ["SC"]},
     {"name": "inter_up", "dimension": None, "rank": None},
     {"name": "int_up", "dimension": None, "rank": None},
-    {"name": "flat_up", "dimension": ["0"], "rank": ["SC"]}
+    #{"name": "flat_up", "dimension": ["0"], "rank": ["SC"]}
     ]
   residual_formulation: True
 
