@@ -1,13 +1,14 @@
 from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
 import matplotlib.pyplot as plt
-from deap import gp, base
+from deap import gp, base, tools
 from alpine.data.util import load_dataset
 from alpine.data.burgers.burgers_dataset import data_path
 from dctkit.mesh import util
 from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit as dt_
+import pygmo as pg
 
 import ray
 
@@ -30,7 +31,69 @@ config()
 warnings.filterwarnings("ignore")
 
 
-def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
+class Problem:
+    def __init__(self, u, u_data_T, time_data, dt, num_t_points, func, S):
+        self.u = u
+        self.u_data_T = u_data_T
+        self.time_data = time_data
+        self.dt = dt
+        self.num_t_points = num_t_points
+        self.func = func
+        self.S = S
+
+    def fitness(self, epsilon):
+        total_err = 0
+        for t in range(self.num_t_points - 1):
+            u_coch = C.CochainD0(self.S, self.u[:, t])
+            self.u[1:-1, t+1] = self.u[1:-1, t] + self.dt * \
+                self.func(u_coch, epsilon).coeffs[1:-1]
+            if np.isnan(self.u[:, t+1]).any() or (np.abs(self.u[:, t+1]) > 1e5).any():
+                total_err = np.nan
+                break
+
+        if math.isnan(total_err):
+            total_err = 1e5
+
+        else:
+            # evaluate errors
+            u_data = self.u_data_T.T
+            errors = self.u[:, self.time_data] - u_data
+
+            total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
+
+        return [total_err]
+
+    def get_bounds(self):
+        return ([0.000001], [1])
+
+
+@ray.remote(num_cpus=2)
+def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
+                 bvalues: dict, S: SimplicialComplex, num_t_points: float,
+                 num_x_points: float, dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
+    # need to call config again before using JAX in energy evaluations to make sure that
+    # the current worker has initialized JAX
+    config()
+
+    # initialize u setting initial and boundary conditions
+    u = np.zeros((num_x_points-1, num_t_points), dtype=dt_.float_dtype)
+    u[:, 0] = u_0.coeffs
+    u[0, :] = bvalues['left']
+    u[-1, :] = bvalues['right']
+
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
+    algo = pg.algorithm(pg.sea(gen=10))
+    prob = pg.problem(prb)
+    pop = pg.population(prob, size=100)
+    pop = algo.evolve(pop)
+
+    # extract epsilon
+    epsilon = pop.champion_x[0]
+
+    return epsilon
+
+
+def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
                  bvalues: dict, S: SimplicialComplex, num_t_points: float,
                  num_x_points: float, dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
 
@@ -44,61 +107,47 @@ def eval_MSE_sol(func: Callable, indlen: int, time_data: npt.NDArray, u_data_T: 
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
-    total_err = 0.
-    # main loop
-    for t in range(num_t_points - 1):
-        u_coch = C.CochainD0(S, u[:, t])
-        u[1:-1, t+1] = u[1:-1, t] + dt*func(u_coch).coeffs[1:-1]
-        if np.isnan(u[:, t+1]).any() or (np.abs(u[:, t+1]) > 1e5).any():
-            total_err = np.nan
-            break
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
+    total_err = prb.fitness(epsilon)[0]
 
-    if math.isnan(total_err):
-        total_err = 1e5
-
-    else:
-        # evaluate errors
-        u_data = u_data_T.T
-        errors = u[:, time_data] - u_data
-
-        total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
-
-    best_sol = u
+    # NOTE: since in our data we have u.T, we also store the transpose
+    # of u as the best solution.
+    best_sol = u[:, time_data].T
 
     return total_err, best_sol
 
 
 @ray.remote(num_cpus=2)
-def eval_best_sols(individual: Callable, indlen: int, time_data: npt.NDArray,
+def eval_best_sols(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
                    u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                    num_t_points: float, num_x_points: float, dt: float,
                    u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
 
-    _, best_sols = eval_MSE_sol(individual, indlen, time_data,
+    _, best_sols = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
 
     return best_sols
 
 
 @ray.remote(num_cpus=2)
-def eval_MSE(individual: Callable, indlen: int, time_data: npt.NDArray,
+def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
              u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
              num_t_points: float, num_x_points: float, dt: float,
              u_0: C.CochainD0, penalty: dict) -> float:
 
-    MSE, _ = eval_MSE_sol(individual, indlen, time_data,
+    MSE, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                           u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
 
     return MSE
 
 
 @ray.remote(num_cpus=2)
-def eval_fitness(individual: Callable, indlen: int, time_data: npt.NDArray,
+def eval_fitness(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
                  u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                  num_t_points: float, num_x_points: float, dt: float,
                  u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
 
-    total_err, _ = eval_MSE_sol(individual, indlen, time_data,
+    total_err, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
 
     # penalty terms on length
@@ -137,16 +186,34 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
 def stgp_burgers(config_file, output_path=None):
     global residual_formulation
 
-    # problem params
-    x_max = 5
-    t_max = 2
-    dx = 0.025
-    dt = 0.001
-    num_x_points = int(x_max/dx)
-    num_t_points = int(t_max/dt)
+    # SPACE PARAMS
+    L = 5
+    L_norm = 1
+    # spatial resolution
+    dx = 0.05
+    dx_norm = dx/L
+    #  Number of spatial grid points
+    num_x_points_norm = int(L_norm / dx_norm)
+
+    # vector containing spatial points
+    x_norm = np.linspace(0, L_norm, num_x_points_norm)
+    x_norm_circ = (x_norm[:-1] + x_norm[1:])/2
+
+    # initial velocity
+    u_0 = 2 * np.exp(-2 * (x_norm_circ - 0.5 * L)**2)
+    umax = np.max(u_0)
+
+    # TIME PARAMS
+    T = 2
+    T_norm = T*umax/L
+    # temporal resolution
+    dt = 0.01
+    dt_norm = dt*umax/L
+    # number of temporal grid points
+    num_t_points_norm = int(T_norm / dt_norm)
 
     # generate mesh
-    mesh, _ = util.generate_line_mesh(num_x_points, x_max)
+    mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
     S = util.build_complex_from_mesh(mesh)
     S.get_hodge_star()
     S.get_flat_PDP_weights()
@@ -155,16 +222,12 @@ def stgp_burgers(config_file, output_path=None):
     time_train, time_val, time_test, u_train_T, u_val_T, u_test_T = load_dataset(
         data_path, "npy")
 
-    # initial guess for the solution of the problem
-    x = np.linspace(0, x_max, num_x_points)
-    x_circ = (x[:-1] + x[1:])/2
-
     # initial condition
-    u_0_coeffs = 2 * np.exp(-2 * (x_circ - 0.5 * x_max)**2)
-    u_0 = C.CochainD0(S, u_0_coeffs)
+    u_0 = C.CochainD0(S, u_0/umax)
 
     # boundary conditions
-    nodes_BC = {'left': np.zeros(num_t_points), 'right': np.zeros(num_t_points)}
+    nodes_BC = {'left': np.zeros(num_t_points_norm),
+                'right': np.zeros(num_t_points_norm)}
 
     residual_formulation = config_file["gp"]["residual_formulation"]
     use_ADF = config_file["gp"]["ADF"]["use_ADF"]
@@ -172,19 +235,20 @@ def stgp_burgers(config_file, output_path=None):
     # define primitive set and add primitives and terminals
     if residual_formulation:
         print("Using residual formulation.")
-        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0], C.CochainD0)
+        pset = gp.PrimitiveSetTyped("MAIN", [C.CochainD0, float], C.CochainD0)
         # add constants
         pset.addTerminal(0.5, float, name="1/2")
         pset.addTerminal(-0.5, float, name="-1/2")
         pset.addTerminal(-1., float, name="-1.")
         pset.addTerminal(2., float, name="2.")
         pset.addTerminal(-2., float, name="-2.")
-        pset.addTerminal(dx, float, name="dx")
-        pset.addTerminal(dt, float, name="dt")
+        # pset.addTerminal(dx, float, name="dx")
+        # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
         # pset.addTerminal(0.1, float, name="0.1")
         # rename arguments
         pset.renameArguments(ARG0="u")
+        pset.renameArguments(ARG1="eps")
 
         if use_ADF:
             ADF = gp.PrimitiveSetTyped("ADF", [C.CochainD0], C.CochainD1)
@@ -203,9 +267,9 @@ def stgp_burgers(config_file, output_path=None):
     GPprb.store_eval_common_params({'S': S,
                                     'penalty': penalty,
                                     'bvalues': nodes_BC,
-                                    'dt': dt,
-                                    'num_t_points': num_t_points,
-                                    'num_x_points': num_x_points,
+                                    'dt': dt_norm,
+                                    'num_t_points': num_t_points_norm,
+                                    'num_x_points': num_x_points_norm,
                                     'u_0': u_0})
 
     params_names = ('time_data', 'u_data_T')
@@ -217,20 +281,44 @@ def stgp_burgers(config_file, output_path=None):
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
                               test_sols=eval_best_sols.remote)
 
+    # register custom functions
+    GPprb.toolbox.register("evaluate_epsilon", tune_epsilon.remote,
+                           time_data=time_train,
+                           u_data_T=u_train_T,
+                           bvalues=nodes_BC,
+                           S=S,
+                           dt=dt_norm,
+                           num_t_points=num_t_points_norm,
+                           num_x_points=num_x_points_norm,
+                           u_0=u_0)
+
     # if GPprb.plot_best:
     #    GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val,
     #                           bvalues=bvalues_val, S=S, gamma=gamma, u_0=u_0,
     #                           toolbox=GPprb.toolbox)
 
     if use_ADF:
-        GPprb.register_map([lambda x: len(x[0]) + len(x[1])])
+        GPprb.register_map([lambda ind: ind.epsilon, lambda x: len(x[0]) + len(x[1])])
     else:
-        GPprb.register_map([len])
+        GPprb.register_map([lambda ind: ind.epsilon, len])
+
+    def evaluate_epsilons(pop):
+        if not hasattr(pop[0], "epsilon"):
+            for ind in pop:
+                ind.epsilon = 1.
+
+        epsilons = GPprb.toolbox.map(GPprb.toolbox.evaluate_epsilon, pop)
+
+        for ind, epsilon in zip(pop, epsilons):
+            ind.epsilon = epsilon
+
+    def print_epsilon(pop):
+        best = tools.selBest(pop, k=1)[0]
+        print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    # from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),Div(dx, 2.)))))"
+    from deap import creator
+    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
@@ -238,13 +326,14 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
-              save_best_test_sols=True, X_test_param_name="time_data",
-              output_path=output_path)
+              save_best_test_sols=True, X_test_param_name="u_data_T",
+              output_path=output_path, preprocess_fun=evaluate_epsilons,
+              callback_fun=print_epsilon)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
