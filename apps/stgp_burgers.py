@@ -71,7 +71,7 @@ class Problem:
         return [total_err]
 
     def get_bounds(self):
-        return ([0.000001], [1])
+        return ([0.00001], [1])
 
 
 @ray.remote(num_cpus=2)
@@ -90,9 +90,9 @@ def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     u[-1, :] = bvalues['right']
 
     prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
-    algo = pg.algorithm(pg.sea(gen=10))
+    algo = pg.algorithm(pg.de(gen=10))
     prob = pg.problem(prb)
-    pop = pg.population(prob, size=100)
+    pop = pg.population(prob, size=200)
     pop = algo.evolve(pop)
 
     # extract epsilon
@@ -202,14 +202,15 @@ def stgp_burgers(config_file, output_path=None):
     dx = 0.05
     dx_norm = dx/L
     #  Number of spatial grid points
-    num_x_points_norm = int(L_norm / dx_norm)
+    num_x_points = int(L / dx)
+    num_x_points_norm = num_x_points
 
     # vector containing spatial points
-    x_norm = np.linspace(0, L_norm, num_x_points_norm)
-    x_norm_circ = (x_norm[:-1] + x_norm[1:])/2
+    x = np.linspace(0, L, num_x_points)
+    x_circ = (x[:-1] + x[1:])/2
 
     # initial velocity
-    u_0 = 2 * np.exp(-2 * (x_norm_circ - 0.5 * L)**2)
+    u_0 = 2 * np.exp(-2 * (x_circ - 0.5 * L)**2)
     umax = np.max(u_0)
 
     # TIME PARAMS
@@ -329,8 +330,6 @@ def stgp_burgers(config_file, output_path=None):
     # from deap import creator
     # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
     # MFP0(St1D1(cobD0(u)),eps))))"
-    # opt_string = "SubCD0(delD1(flat_parD0(MFD0(SquareD0(u), 1/2))),
-    # delD1(MFD1(cobD0(u), eps))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
