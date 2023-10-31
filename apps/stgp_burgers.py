@@ -74,7 +74,7 @@ class Problem:
         return ([0.00001], [1])
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
                  u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                  num_t_points: float, num_x_points: float, dt: float,
@@ -126,7 +126,7 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     return total_err, best_sol
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
                    time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
                    S: SimplicialComplex, num_t_points: float, num_x_points: float,
@@ -138,7 +138,7 @@ def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
     return best_sols
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
              u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
              num_t_points: float, num_x_points: float, dt: float,
@@ -150,7 +150,7 @@ def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.N
     return MSE
 
 
-@ray.remote(num_cpus=2)
+@ray.remote(num_cpus=1)
 def eval_fitness(individual: Callable, epsilon: float, indlen: int,
                  time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
                  S: SimplicialComplex, num_t_points: float, num_x_points: float,
