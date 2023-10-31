@@ -323,7 +323,8 @@ square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
                'map_rule': {'category': identity, 'dimension': identity,
                             "rank": identity}}
 coch_primitives.append(generate_primitive(square_coch))
-flat_up = {'fun_info': {'name': 'flat_up', 'fun': partial(V.flat_PDD, scheme="upwind")},
+flat_up = {'fun_info': {'name': 'flat_up',
+                        'fun': partial(V.flat_PDD, scheme="upwind")},
            'input': ["C.Cochain"],
            'output': "C.Cochain",
            'att_input': {'category': ('D',), 'dimension': ('0',),
@@ -331,7 +332,8 @@ flat_up = {'fun_info': {'name': 'flat_up', 'fun': partial(V.flat_PDD, scheme="up
            'map_rule': {'category': identity, 'dimension': partial(operator.add, 1),
                         "rank": identity}}
 coch_primitives.append(generate_primitive(flat_up))
-flat_par = {'fun_info': {'name': 'flat_par', 'fun': partial(V.flat_PDD, scheme="parabolic")},
+flat_par = {'fun_info': {'name': 'flat_par',
+                         'fun': partial(V.flat_PDD, scheme="parabolic")},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('D',), 'dimension': ('0',),

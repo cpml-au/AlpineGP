@@ -4,13 +4,17 @@ import numpy as np
 import dctkit
 import alpine.data.util as u
 from dctkit import config
+import numpy.typing as npt
+from typing import Dict, Tuple
 
 data_path = os.path.dirname(os.path.realpath(__file__))
 
 config()
 
 
-def burgers_data(x_max, t_max, dx, dt, u_0, nodes_BC, epsilon, scheme="parabolic"):
+def burgers_data(x_max: float, t_max: float, dx: float, dt: float,
+                 u_0: npt.NDArray, nodes_BC: Dict, epsilon: float,
+                 scheme: str = "parabolic") -> Tuple[npt.NDArray, npt.NDArray]:
     prb = b.Burgers(x_max, t_max, dx, dt, u_0, nodes_BC, epsilon)
     prb.run(scheme)
     X = np.arange(prb.num_t_points, dtype=dctkit.int_dtype)
@@ -54,9 +58,14 @@ if __name__ == "__main__":
                 'right': np.zeros(num_t_points_norm)}
 
     u.save_dataset(data_generator=burgers_data,
-                   data_generator_kwargs={'x_max': L_norm, 't_max': T_norm, 'dx': dx_norm,
-                                          'dt': dt_norm, 'u_0': u_0/umax, 'nodes_BC': nodes_BC,
-                                          'epsilon': epsilon_norm, 'scheme': "parabolic"},
+                   data_generator_kwargs={'x_max': L_norm,
+                                          't_max': T_norm,
+                                          'dx': dx_norm,
+                                          'dt': dt_norm,
+                                          'u_0': u_0/umax,
+                                          'nodes_BC': nodes_BC,
+                                          'epsilon': epsilon_norm,
+                                          'scheme': "parabolic"},
                    perc_val=0.3,
                    perc_test=0.2,
                    format="npy")

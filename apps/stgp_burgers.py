@@ -17,7 +17,7 @@ import math
 import time
 import sys
 import yaml
-from typing import Tuple, Callable
+from typing import Tuple, Callable, List
 import numpy.typing as npt
 import warnings
 from jax import jit
@@ -43,17 +43,17 @@ class Problem:
         self.num_t_points = num_t_points
         self.func = func
         self.S = S
-        self.func_coeffs = jit(self.set_func)
+        self.jitted_func = jit(self.func_wrap)
 
-    def set_func(self, u_coeffs: npt.NDArray, epsilon: float):
+    def func_wrap(self, u_coeffs: npt.NDArray, epsilon: float) -> npt.NDArray:
         u = C.CochainD0(self.S, u_coeffs)
         return self.func(u, epsilon).coeffs
 
-    def fitness(self, epsilon: float):
+    def fitness(self, epsilon: float) -> List[float]:
         total_err = 0
         for t in range(self.num_t_points - 1):
             self.u[1:-1, t+1] = self.u[1:-1, t] + self.dt * \
-                self.func_coeffs(self.u[:, t], epsilon)[1:-1]
+                self.jitted_func(self.u[:, t], epsilon)[1:-1]
             if np.isnan(self.u[:, t+1]).any() or (np.abs(self.u[:, t+1]) > 1e5).any():
                 total_err = np.nan
                 break
@@ -70,7 +70,7 @@ class Problem:
 
         return [total_err]
 
-    def get_bounds(self):
+    def get_bounds(self) -> Tuple[List[float], List[float]]:
         return ([0.00001], [1])
 
 
@@ -78,7 +78,7 @@ class Problem:
 def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
                  u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
                  num_t_points: float, num_x_points: float, dt: float,
-                 u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
+                 u_0: C.CochainD0) -> float:
     # need to call config again before using JAX in energy evaluations to make sure
     # that the current worker has initialized JAX
     config()
@@ -133,7 +133,8 @@ def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
                    dt: float, u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
 
     _, best_sols = eval_MSE_sol(individual, epsilon, indlen, time_data,
-                                u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
+                                u_data_T, bvalues, S, num_t_points, num_x_points,
+                                dt, u_0)
 
     return best_sols
 
@@ -157,7 +158,8 @@ def eval_fitness(individual: Callable, epsilon: float, indlen: int,
                  dt: float, u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
-                                u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
+                                u_data_T, bvalues, S, num_t_points, num_x_points,
+                                dt, u_0)
 
     # penalty terms on length
     objval = total_err + penalty["reg_param"]*indlen
@@ -200,7 +202,6 @@ def stgp_burgers(config_file, output_path=None):
     L_norm = 1
     # spatial resolution
     dx = 0.05
-    dx_norm = dx/L
     #  Number of spatial grid points
     num_x_points = int(L / dx)
     num_x_points_norm = num_x_points

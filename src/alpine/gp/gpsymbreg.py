@@ -138,9 +138,11 @@ class GPSymbRegProblem():
 
         if self.ADF is None:
             toolbox.decorate(
-                "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+                "mate", gp.staticLimit(key=operator.attrgetter("height"),
+                                       max_value=17))
             toolbox.decorate(
-                "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+                "mutate", gp.staticLimit(key=operator.attrgetter("height"),
+                                         max_value=17))
             toolbox.register("expr", gp.genHalfAndHalf,
                              pset=self.pset, min_=min_, max_=max_)
             creator.create("Individual",
@@ -517,7 +519,8 @@ class GPSymbRegProblem():
             else:
                 offspring = elite_ind + \
                     algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
-                                     self.n_elitist, self.CXPB, self.MUTPB, (self.pset, self.ADF))
+                                     self.n_elitist, self.CXPB, self.MUTPB,
+                                     (self.pset, self.ADF))
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
