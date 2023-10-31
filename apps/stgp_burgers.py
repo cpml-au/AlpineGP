@@ -20,6 +20,7 @@ import yaml
 from typing import Tuple, Callable
 import numpy.typing as npt
 import warnings
+from jax import jit
 
 residual_formulation = True
 
@@ -32,7 +33,9 @@ warnings.filterwarnings("ignore")
 
 
 class Problem:
-    def __init__(self, u, u_data_T, time_data, dt, num_t_points, func, S):
+    def __init__(self, u: npt.NDArray, u_data_T: npt.NDArray, time_data: npt.NDArray,
+                 dt: float, num_t_points: npt.NDArray, func: Callable,
+                 S: SimplicialComplex):
         self.u = u
         self.u_data_T = u_data_T
         self.time_data = time_data
@@ -40,13 +43,17 @@ class Problem:
         self.num_t_points = num_t_points
         self.func = func
         self.S = S
+        self.func_coeffs = jit(self.set_func)
 
-    def fitness(self, epsilon):
+    def set_func(self, u_coeffs: npt.NDArray, epsilon: float):
+        u = C.CochainD0(self.S, u_coeffs)
+        return self.func(u, epsilon).coeffs
+
+    def fitness(self, epsilon: float):
         total_err = 0
         for t in range(self.num_t_points - 1):
-            u_coch = C.CochainD0(self.S, self.u[:, t])
             self.u[1:-1, t+1] = self.u[1:-1, t] + self.dt * \
-                self.func(u_coch, epsilon).coeffs[1:-1]
+                self.func_coeffs(self.u[:, t], epsilon)[1:-1]
             if np.isnan(self.u[:, t+1]).any() or (np.abs(self.u[:, t+1]) > 1e5).any():
                 total_err = np.nan
                 break
@@ -68,11 +75,12 @@ class Problem:
 
 
 @ray.remote(num_cpus=2)
-def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
-                 bvalues: dict, S: SimplicialComplex, num_t_points: float,
-                 num_x_points: float, dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
-    # need to call config again before using JAX in energy evaluations to make sure that
-    # the current worker has initialized JAX
+def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
+                 u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
+                 num_t_points: float, num_x_points: float, dt: float,
+                 u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
+    # need to call config again before using JAX in energy evaluations to make sure
+    # that the current worker has initialized JAX
     config()
 
     # initialize u setting initial and boundary conditions
@@ -93,9 +101,10 @@ def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     return epsilon
 
 
-def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray, u_data_T: npt.NDArray,
-                 bvalues: dict, S: SimplicialComplex, num_t_points: float,
-                 num_x_points: float, dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
+def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
+                 u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
+                 num_t_points: float, num_x_points: float, dt: float,
+                 u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
@@ -118,10 +127,10 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
 
 
 @ray.remote(num_cpus=2)
-def eval_best_sols(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
-                   u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
-                   num_t_points: float, num_x_points: float, dt: float,
-                   u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
+def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
+                   time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                   S: SimplicialComplex, num_t_points: float, num_x_points: float,
+                   dt: float, u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
 
     _, best_sols = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -142,10 +151,10 @@ def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.N
 
 
 @ray.remote(num_cpus=2)
-def eval_fitness(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
-                 u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
-                 num_t_points: float, num_x_points: float, dt: float,
-                 u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
+def eval_fitness(individual: Callable, epsilon: float, indlen: int,
+                 time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                 S: SimplicialComplex, num_t_points: float, num_x_points: float,
+                 dt: float, u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -319,7 +328,9 @@ def stgp_burgers(config_file, output_path=None):
     start = time.perf_counter()
     # from deap import creator
     # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    #  MFP0(St1D1(cobD0(u)),eps))))"
+    # MFP0(St1D1(cobD0(u)),eps))))"
+    # opt_string = "SubCD0(delD1(flat_parD0(MFD0(SquareD0(u), 1/2))),
+    # delD1(MFD1(cobD0(u), eps))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
