@@ -20,7 +20,7 @@ import yaml
 from typing import Tuple, Callable, List, Dict
 import numpy.typing as npt
 import warnings
-from jax import jit
+from jax import jit, jacfwd
 from matplotlib import cm
 
 residual_formulation = True
@@ -45,6 +45,7 @@ class Problem:
         self.func = func
         self.S = S
         self.jitted_func = jit(self.func_wrap)
+        self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
 
     def func_wrap(self, u_coeffs: npt.NDArray, epsilon: float) -> npt.NDArray:
         u = C.CochainD0(self.S, u_coeffs)
@@ -92,14 +93,17 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     u[-1, :] = bvalues['right']
 
     prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
-    algo = pg.algorithm(pg.de(gen=10))
-    prob = pg.problem(prb)
-    pop = pg.population(prob, size=100)
-    pop = algo.evolve(pop)
+    if np.linalg.norm(prb.jitted_jac(u_0.coeffs, epsilon))**2 < 1e-6:
+        total_err = prb.fitness(epsilon)[0]
+    else:
+        algo = pg.algorithm(pg.de(gen=10))
+        prob = pg.problem(prb)
+        pop = pg.population(prob, size=100)
+        pop = algo.evolve(pop)
 
-    # extract epsilon and total err
-    epsilon = pop.champion_x[0]
-    total_err = pop.champion_f[0]
+        # extract epsilon and total err
+        epsilon = pop.champion_x[0]
+        total_err = pop.champion_f[0]
 
     # penalty terms on length
     fitness = total_err + penalty["reg_param"]*indlen
@@ -356,8 +360,9 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    from deap import creator
-    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),MFP0(St1D1(cobD0(u)),eps))))"
+    # from deap import creator
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
+    # MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
@@ -365,10 +370,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,
