@@ -92,9 +92,9 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     u[-1, :] = bvalues['right']
 
     prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
-    algo = pg.algorithm(pg.sea(gen=10))
+    algo = pg.algorithm(pg.de(gen=10))
     prob = pg.problem(prb)
-    pop = pg.population(prob, size=200)
+    pop = pg.population(prob, size=100)
     pop = algo.evolve(pop)
 
     # extract epsilon and total err
@@ -127,7 +127,7 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
 
     # NOTE: since in our data we have u.T, we also store the transpose
     # of u as the best solution.
-    best_sol = u[:, time_data].T
+    best_sol = u.T
 
     return total_err, best_sol
 
@@ -142,7 +142,7 @@ def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
                                 u_data_T, bvalues, S, num_t_points, num_x_points,
                                 dt, u_0)
 
-    return best_sols
+    return best_sols[time_data, :]
 
 
 @ray.remote(num_cpus=1)
@@ -356,9 +356,8 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    # from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),eps))))"
+    from deap import creator
+    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
@@ -366,10 +365,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,
