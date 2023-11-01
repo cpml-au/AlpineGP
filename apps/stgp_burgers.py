@@ -17,7 +17,7 @@ import math
 import time
 import sys
 import yaml
-from typing import Tuple, Callable, List
+from typing import Tuple, Callable, List, Dict
 import numpy.typing as npt
 import warnings
 from jax import jit
@@ -76,9 +76,10 @@ class Problem:
 
 @ray.remote(num_cpus=1)
 def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
-                          time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                          time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                           S: SimplicialComplex, num_t_points: float,
-                          num_x_points: float, dt: float, u_0: C.CochainD0) -> float:
+                          num_x_points: float, dt: float,
+                          u_0: C.CochainD0, penalty: Dict) -> Tuple[float, Tuple]:
     # need to call config again before using JAX in energy evaluations to make sure
     # that the current worker has initialized JAX
     config()
@@ -90,20 +91,23 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     u[-1, :] = bvalues['right']
 
     prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
-    algo = pg.algorithm(pg.de(gen=10))
+    algo = pg.algorithm(pg.sea(gen=10))
     prob = pg.problem(prb)
     pop = pg.population(prob, size=200)
     pop = algo.evolve(pop)
 
-    # extract epsilon and fitness
+    # extract epsilon and total err
     epsilon = pop.champion_x[0]
     total_err = pop.champion_f[0]
 
-    return epsilon, total_err
+    # penalty terms on length
+    fitness = total_err + penalty["reg_param"]*indlen
+
+    return epsilon, (fitness,)
 
 
 def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
-                 u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
+                 u_data_T: npt.NDArray, bvalues: Dict, S: SimplicialComplex,
                  num_t_points: float, num_x_points: float, dt: float,
                  u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
 
@@ -129,9 +133,9 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
 
 @ray.remote(num_cpus=1)
 def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
-                   time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                   time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                    S: SimplicialComplex, num_t_points: float, num_x_points: float,
-                   dt: float, u_0: C.CochainD0, penalty: dict) -> npt.NDArray:
+                   dt: float, u_0: C.CochainD0, penalty: Dict) -> npt.NDArray:
 
     _, best_sols = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points,
@@ -142,9 +146,9 @@ def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
 
 @ray.remote(num_cpus=1)
 def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
-             u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
+             u_data_T: npt.NDArray, bvalues: Dict, S: SimplicialComplex,
              num_t_points: float, num_x_points: float, dt: float,
-             u_0: C.CochainD0, penalty: dict) -> float:
+             u_0: C.CochainD0, penalty: Dict) -> float:
 
     MSE, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                           u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
@@ -154,9 +158,9 @@ def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.N
 
 @ray.remote(num_cpus=1)
 def eval_fitness(individual: Callable, epsilon: float, indlen: int,
-                 time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                 time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                  S: SimplicialComplex, num_t_points: float, num_x_points: float,
-                 dt: float, u_0: C.CochainD0, penalty: dict) -> Tuple[float, ]:
+                 dt: float, u_0: C.CochainD0, penalty: Dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points,
@@ -169,7 +173,7 @@ def eval_fitness(individual: Callable, epsilon: float, indlen: int,
 
 
 # Plot best solution
-def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
+def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: Dict,
              S: SimplicialComplex, gamma: float, u_0: C.CochainD0,
              toolbox: base.Toolbox):
 
@@ -302,7 +306,8 @@ def stgp_burgers(config_file, output_path=None):
                            dt=dt_norm,
                            num_t_points=num_t_points_norm,
                            num_x_points=num_x_points_norm,
-                           u_0=u_0)
+                           u_0=u_0,
+                           penalty=penalty)
 
     # if GPprb.plot_best:
     #    GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val,
@@ -323,7 +328,7 @@ def stgp_burgers(config_file, output_path=None):
 
         for ind, eps_fit in zip(pop, eps_fits):
             ind.epsilon = eps_fit[0]
-            ind.fitness.values = (eps_fit[1],)
+            ind.fitness.values = eps_fit[1]
 
     def print_epsilon(pop):
         best = tools.selBest(pop, k=1)[0]

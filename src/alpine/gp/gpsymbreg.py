@@ -483,7 +483,6 @@ class GPSymbRegProblem():
             preprocess_fun(self.pop)
 
         if not hasattr(self.pop[0].fitness, "values"):
-            print("hello")
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
             for ind, fit in zip(self.pop, fitnesses):
@@ -532,7 +531,6 @@ class GPSymbRegProblem():
                 preprocess_fun(invalid_ind)
 
             if not hasattr(invalid_ind[0].fitness, "values"):
-                print("hello")
                 fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
                 for ind, fit in zip(invalid_ind, fitnesses):
