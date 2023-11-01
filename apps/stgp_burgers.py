@@ -21,6 +21,7 @@ from typing import Tuple, Callable, List, Dict
 import numpy.typing as npt
 import warnings
 from jax import jit
+from matplotlib import cm
 
 residual_formulation = True
 
@@ -173,29 +174,36 @@ def eval_fitness(individual: Callable, epsilon: float, indlen: int,
 
 
 # Plot best solution
-def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: Dict,
-             S: SimplicialComplex, gamma: float, u_0: C.CochainD0,
-             toolbox: base.Toolbox):
+def plot_sol(ind: gp.PrimitiveTree, time_data: npt.NDArray, u_data_T: npt.NDArray,
+             bvalues: Dict, S: SimplicialComplex, num_t_points: float,
+             num_x_points: float, dt: float, u_0: C.CochainD0,
+             full_u_data_T: npt.NDArray, umax: float, x_circ: npt.NDArray,
+             t: npt.NDArray, toolbox: base.Toolbox):
 
     indfun = toolbox.compile(expr=ind)
-    dim = X.shape[0]
 
-    _, u = eval_MSE_sol(indfun, indlen=0, X=X, bvalues=bvalues,
-                        S=S, gamma=gamma, u_0=u_0)
+    _, u_sol_T = eval_MSE_sol(indfun, ind.epsilon, len(ind), time_data,
+                              u_data_T, bvalues, S, num_t_points, num_x_points,
+                              dt, u_0)
 
-    plt.figure(10, figsize=(10, 2))
-    plt.clf()
-    fig = plt.gcf()
-    _, axes = plt.subplots(1, dim, num=10)
-    for i in range(dim):
-        axes[i].triplot(S.node_coords[:, 0], S.node_coords[:, 1],
-                        triangles=S.S[2], color="#e5f5e0")
-        axes[i].triplot(u[i][:, 0], u[i][:, 1],
-                        triangles=S.S[2], color="#a1d99b")
-        # axes[i].triplot(X[i, :, 0], X[i, :, 1],
-        #                triangles=S.S[2], color="#4daf4a")
+    # rescale u_sol_T
+    u_sol_T *= umax
+
+    fig, ax = plt.subplots(ncols=2, subplot_kw={"projection": "3d"})
+    x_mesh, t_mesh = np.meshgrid(x_circ, t)
+
+    c = np.zeros_like(full_u_data_T)
+    c[time_data, :] = 1
+
+    _ = ax[0].plot_surface(x_mesh, t_mesh, full_u_data_T, facecolors=cm.PuBu(c),
+                           rcount=len(x_circ), ccount=len(t), linewidth=0,
+                           antialiased=False)
+    _ = ax[1].plot_surface(x_mesh, t_mesh, u_sol_T, facecolors=cm.PuBu(c),
+                           rcount=len(x_circ), ccount=len(t),
+                           linewidth=0, antialiased=False)
     fig.canvas.draw()
     fig.canvas.flush_events()
+
     plt.pause(0.1)
 
 
@@ -228,6 +236,8 @@ def stgp_burgers(config_file, output_path=None):
     # number of temporal grid points
     num_t_points_norm = int(T_norm / dt_norm)
 
+    t = np.linspace(0, T, num_t_points_norm)
+
     # generate mesh
     mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
     S = util.build_complex_from_mesh(mesh)
@@ -237,6 +247,14 @@ def stgp_burgers(config_file, output_path=None):
     # load data
     time_train, time_val, time_test, u_train_T, u_val_T, u_test_T = load_dataset(
         data_path, "npy")
+
+    # reconstruct full data (only for plot)
+    full_u_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
+    full_u_data_T[time_train] = u_train_T
+    full_u_data_T[time_val] = u_val_T
+    full_u_data_T[time_test] = u_test_T
+    # rescale full_data
+    full_u_data_T *= umax
 
     # initial condition
     u_0 = C.CochainD0(S, u_0/umax)
@@ -309,10 +327,13 @@ def stgp_burgers(config_file, output_path=None):
                            u_0=u_0,
                            penalty=penalty)
 
-    # if GPprb.plot_best:
-    #    GPprb.toolbox.register("plot_best_func", plot_sol, X=X_val,
-    #                           bvalues=bvalues_val, S=S, gamma=gamma, u_0=u_0,
-    #                           toolbox=GPprb.toolbox)
+    if GPprb.plot_best:
+        GPprb.toolbox.register("plot_best_func", plot_sol, time_data=time_val,
+                               u_data_T=u_val_T, bvalues=nodes_BC, S=S,
+                               num_t_points=num_t_points_norm,
+                               num_x_points=num_x_points_norm, dt=dt, u_0=u_0,
+                               full_u_data_T=full_u_data_T, umax=umax, x_circ=x_circ,
+                               t=t, toolbox=GPprb.toolbox)
 
     if use_ADF:
         GPprb.register_map([lambda ind: ind.epsilon, lambda x: len(x[0]) + len(x[1])])
