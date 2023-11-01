@@ -75,10 +75,10 @@ class Problem:
 
 
 @ray.remote(num_cpus=1)
-def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
-                 u_data_T: npt.NDArray, bvalues: dict, S: SimplicialComplex,
-                 num_t_points: float, num_x_points: float, dt: float,
-                 u_0: C.CochainD0) -> float:
+def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
+                          time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: dict,
+                          S: SimplicialComplex, num_t_points: float,
+                          num_x_points: float, dt: float, u_0: C.CochainD0) -> float:
     # need to call config again before using JAX in energy evaluations to make sure
     # that the current worker has initialized JAX
     config()
@@ -95,10 +95,11 @@ def tune_epsilon(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     pop = pg.population(prob, size=200)
     pop = algo.evolve(pop)
 
-    # extract epsilon
+    # extract epsilon and fitness
     epsilon = pop.champion_x[0]
+    total_err = pop.champion_f[0]
 
-    return epsilon
+    return epsilon, total_err
 
 
 def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
@@ -293,7 +294,7 @@ def stgp_burgers(config_file, output_path=None):
                               test_sols=eval_best_sols.remote)
 
     # register custom functions
-    GPprb.toolbox.register("evaluate_epsilon", tune_epsilon.remote,
+    GPprb.toolbox.register("evaluate_epsilon", tune_epsilon_and_eval.remote,
                            time_data=time_train,
                            u_data_T=u_train_T,
                            bvalues=nodes_BC,
@@ -313,15 +314,16 @@ def stgp_burgers(config_file, output_path=None):
     else:
         GPprb.register_map([lambda ind: ind.epsilon, len])
 
-    def evaluate_epsilons(pop):
+    def evaluate_epsilons_and_train_fit(pop):
         if not hasattr(pop[0], "epsilon"):
             for ind in pop:
                 ind.epsilon = 1.
 
-        epsilons = GPprb.toolbox.map(GPprb.toolbox.evaluate_epsilon, pop)
+        eps_fits = GPprb.toolbox.map(GPprb.toolbox.evaluate_epsilon, pop)
 
-        for ind, epsilon in zip(pop, epsilons):
-            ind.epsilon = epsilon
+        for ind, eps_fit in zip(pop, eps_fits):
+            ind.epsilon = eps_fit[0]
+            ind.fitness.values = (eps_fit[1],)
 
     def print_epsilon(pop):
         best = tools.selBest(pop, k=1)[0]
@@ -344,7 +346,7 @@ def stgp_burgers(config_file, output_path=None):
     GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
-              output_path=output_path, preprocess_fun=evaluate_epsilons,
+              output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,
               callback_fun=print_epsilon)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")

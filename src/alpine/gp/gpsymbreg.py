@@ -482,10 +482,12 @@ class GPSymbRegProblem():
         if preprocess_fun is not None:
             preprocess_fun(self.pop)
 
-        fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
+        if not hasattr(self.pop[0].fitness, "values"):
+            print("hello")
+            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
-        for ind, fit in zip(self.pop, fitnesses):
-            ind.fitness.values = fit
+            for ind, fit in zip(self.pop, fitnesses):
+                ind.fitness.values = fit
 
         if self.early_stopping['enabled']:
             print("Using early-stopping.")
@@ -529,10 +531,12 @@ class GPSymbRegProblem():
             if preprocess_fun is not None:
                 preprocess_fun(invalid_ind)
 
-            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
+            if not hasattr(invalid_ind[0].fitness, "values"):
+                print("hello")
+                fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
-            for ind, fit in zip(invalid_ind, fitnesses):
-                ind.fitness.values = fit
+                for ind, fit in zip(invalid_ind, fitnesses):
+                    ind.fitness.values = fit
 
             if not self.overlapping_generation:
                 # The population is entirely replaced by the offspring
