@@ -20,8 +20,10 @@ import yaml
 from typing import Tuple, Callable, List, Dict
 import numpy.typing as npt
 import warnings
-from jax import jit, jacfwd
+from jax import jit, jacfwd, lax
 from matplotlib import cm
+import jax.numpy as jnp
+from functools import partial
 
 residual_formulation = True
 
@@ -38,7 +40,7 @@ class Problem:
                  dt: float, num_t_points: npt.NDArray, func: Callable,
                  S: SimplicialComplex):
         self.u = u
-        self.u_data_T = u_data_T
+        self.u_data = u_data_T.T
         self.time_data = time_data
         self.dt = dt
         self.num_t_points = num_t_points
@@ -46,29 +48,38 @@ class Problem:
         self.S = S
         self.jitted_func = jit(self.func_wrap)
         self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
+        self.full_u_data = jnp.zeros(u.shape)
+        self.full_u_data = self.full_u_data.at[:, time_data].set(self.u_data)
+        self.jit_loop = jit(self.main_loop)
 
     def func_wrap(self, u_coeffs: npt.NDArray, epsilon: float) -> npt.NDArray:
         u = C.CochainD0(self.S, u_coeffs)
         return self.func(u, epsilon).coeffs
 
-    def fitness(self, epsilon: float) -> List[float]:
-        total_err = 0
-        for t in range(self.num_t_points - 1):
-            self.u[1:-1, t+1] = self.u[1:-1, t] + self.dt * \
-                self.jitted_func(self.u[:, t], epsilon)[1:-1]
-            if np.isnan(self.u[:, t+1]).any() or (np.abs(self.u[:, t+1]) > 1e5).any():
-                total_err = np.nan
-                break
+    def body_fun(self, u_t, t, epsilon):
+        balance = self.jitted_func(u_t, epsilon)
+        balance = balance.at[0].set(0)
+        balance = balance.at[-1].set(0)
+        u_tp1 = u_t + self.dt*balance
+        current_err = jnp.linalg.norm(u_tp1 - self.full_u_data[:, t+1])**2
+        return u_tp1, current_err
 
-        if math.isnan(total_err):
+    def main_loop(self, epsilon):
+        errors_0 = 0
+
+        u_update, errors = lax.scan(
+            partial(self.body_fun, epsilon=epsilon), self.u[:, 0], jnp.arange(self.num_t_points - 1))
+        errors = jnp.insert(errors, 0, errors_0)
+
+        return u_update, errors
+
+    def fitness(self, epsilon):
+        _, errors = self.jit_loop(epsilon)
+
+        if jnp.isnan(errors).any():
             total_err = 1e5
-
         else:
-            # evaluate errors
-            u_data = self.u_data_T.T
-            errors = self.u[:, self.time_data] - u_data
-
-            total_err = np.mean(np.linalg.norm(errors, axis=0)**2)
+            total_err = jnp.mean(errors[self.time_data])
 
         return [total_err]
 
@@ -96,9 +107,9 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     if np.linalg.norm(prb.jitted_jac(u_0.coeffs, epsilon))**2 < 1e-6:
         total_err = prb.fitness(epsilon)[0]
     else:
-        algo = pg.algorithm(pg.de(gen=10))
+        algo = pg.algorithm(pg.de(gen=20))
         prob = pg.problem(prb)
-        pop = pg.population(prob, size=100)
+        pop = pg.population(prob, size=200)
         pop = algo.evolve(pop)
 
         # extract epsilon and total err
@@ -283,7 +294,7 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dx, float, name="dx")
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
-        # pset.addTerminal(0.1, float, name="0.1")
+        # pset.addTerminal(0.005, float, name="0.005")
         # rename arguments
         pset.renameArguments(ARG0="u")
         pset.renameArguments(ARG1="eps")
