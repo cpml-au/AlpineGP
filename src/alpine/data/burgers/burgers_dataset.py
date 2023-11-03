@@ -24,13 +24,13 @@ def burgers_data(x_max: float, t_max: float, dx: float, dt: float,
 
 if __name__ == "__main__":
     # SPACE PARAMS
-    L = 5
+    L = 5.05
     L_norm = 1
     # spatial resolution
     dx = 0.05
     dx_norm = dx/L
     #  Number of spatial grid points
-    num_x_points = int(L / dx)
+    num_x_points = int(-(-L // dx))
     num_x_points_norm = num_x_points
 
     # vector containing spatial points
@@ -48,7 +48,8 @@ if __name__ == "__main__":
     dt = 0.01
     dt_norm = dt*umax/L
     # number of temporal grid points
-    num_t_points_norm = int(T_norm / dt_norm)
+    num_t_points_norm = int(-(-T_norm // dt_norm))
+    print(num_t_points_norm)
 
     # Viscosity
     epsilon = 0.05

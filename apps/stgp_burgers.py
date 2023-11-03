@@ -385,9 +385,11 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    from deap import creator
-    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),0.005))))"
-    # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)), delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
+    # from deap import creator
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
+    # MFP0(St1D1(cobD0(u)),0.005))))"
+    # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)),
+    # delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
@@ -395,10 +397,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,
