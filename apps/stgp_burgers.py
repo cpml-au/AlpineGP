@@ -9,18 +9,15 @@ from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit as dt_
 import pygmo as pg
-
 import ray
-
 import numpy as np
-import math
 import time
 import sys
 import yaml
 from typing import Tuple, Callable, List, Dict
 import numpy.typing as npt
 import warnings
-from jax import jit, jacfwd, lax
+from jax import jit, jacfwd, lax, Array
 from matplotlib import cm
 import jax.numpy as jnp
 from functools import partial
@@ -38,7 +35,7 @@ warnings.filterwarnings("ignore")
 class Problem:
     def __init__(self, u: npt.NDArray, u_data_T: npt.NDArray, time_data: npt.NDArray,
                  dt: float, num_t_points: npt.NDArray, func: Callable,
-                 S: SimplicialComplex):
+                 S: SimplicialComplex, update_u: bool):
         self.u = u
         self.u_data = u_data_T.T
         self.time_data = time_data
@@ -46,35 +43,45 @@ class Problem:
         self.num_t_points = num_t_points
         self.func = func
         self.S = S
+        self.update_u = update_u
         self.jitted_func = jit(self.func_wrap)
         self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
         self.full_u_data = jnp.zeros(u.shape)
         self.full_u_data = self.full_u_data.at[:, time_data].set(self.u_data)
         self.jit_loop = jit(self.main_loop)
 
-    def func_wrap(self, u_coeffs: npt.NDArray, epsilon: float) -> npt.NDArray:
+    def func_wrap(self, u_coeffs: npt.NDArray | Array, epsilon: float) -> npt.NDArray:
         u = C.CochainD0(self.S, u_coeffs)
         return self.func(u, epsilon).coeffs
 
-    def body_fun(self, u_t, t, epsilon):
+    def body_fun(self, u_t: npt.NDArray | Array, t: float, epsilon: float):
         balance = self.jitted_func(u_t, epsilon)
         balance = balance.at[0].set(0)
         balance = balance.at[-1].set(0)
         u_tp1 = u_t + self.dt*balance
         current_err = jnp.linalg.norm(u_tp1 - self.full_u_data[:, t+1])**2
-        return u_tp1, current_err
+        return u_tp1, (current_err, u_tp1)
 
-    def main_loop(self, epsilon):
+    def main_loop(self, epsilon: float):
         errors_0 = 0
 
-        u_update, errors = lax.scan(
-            partial(self.body_fun, epsilon=epsilon), self.u[:, 0], jnp.arange(self.num_t_points - 1))
+        # perform Euler's forward integration in time
+        _, errors_u = lax.scan(partial(self.body_fun, epsilon=epsilon),
+                               self.u[:, 0], jnp.arange(self.num_t_points - 1))
+
+        errors = errors_u[0]
+        u_1 = errors_u[1]
+        # NOTE: errors is the error vector from the second instant of time, i.e.
+        # len(errors) = num_t_points - 1. We have to manually had the error at time
+        # t = 0, which is always 0 due to initial conditions
         errors = jnp.insert(errors, 0, errors_0)
 
-        return u_update, errors
+        return errors, u_1
 
-    def fitness(self, epsilon):
-        _, errors = self.jit_loop(epsilon)
+    def fitness(self, epsilon: float):
+        errors, u_1 = self.jit_loop(epsilon)
+        if self.update_u:
+            self.u[:, 1:] = u_1.T
 
         if jnp.isnan(errors).any():
             total_err = 1e5
@@ -103,8 +110,10 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
-    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S, False)
     if np.linalg.norm(prb.jitted_jac(u_0.coeffs, epsilon))**2 < 1e-6:
+        # in this case since the gradient w.r.t. epsilon is too small, the function
+        #  will not depend on epsilon, hence we do not perform autotune
         total_err = prb.fitness(epsilon)[0]
     else:
         algo = pg.algorithm(pg.de(gen=20))
@@ -137,12 +146,15 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
-    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S)
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S, True)
     total_err = prb.fitness(epsilon)[0]
 
     # NOTE: since in our data we have u.T, we also store the transpose
     # of u as the best solution.
-    best_sol = u.T
+    best_sol = prb.u.T
+
+    # round total_err to 4 decimal digits
+    total_err = float("{:.4f}".format(total_err))
 
     return total_err, best_sol
 
@@ -204,7 +216,9 @@ def plot_sol(ind: gp.PrimitiveTree, time_data: npt.NDArray, u_data_T: npt.NDArra
     # rescale u_sol_T
     u_sol_T *= umax
 
-    fig, ax = plt.subplots(ncols=2, subplot_kw={"projection": "3d"})
+    plt.clf()
+    fig = plt.gcf()
+    _, ax = plt.subplots(ncols=2, subplot_kw={"projection": "3d"}, num=1)
     x_mesh, t_mesh = np.meshgrid(x_circ, t)
 
     c = np.zeros_like(full_u_data_T)
@@ -294,7 +308,7 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dx, float, name="dx")
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
-        # pset.addTerminal(0.005, float, name="0.005")
+        pset.addTerminal(0.005, float, name="0.005")
         # rename arguments
         pset.renameArguments(ARG0="u")
         pset.renameArguments(ARG1="eps")
@@ -371,9 +385,9 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    # from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),eps))))"
+    from deap import creator
+    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),0.005))))"
+    # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)), delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
     # opt_string_MAIN = "St1P1(cobP0(MFP0(SquareP0(St1D1(ADF(u))),-1/2))))"
     # opt_string_ADF = "int_up(inter_up(u))"
@@ -381,10 +395,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,
