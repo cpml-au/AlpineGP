@@ -36,7 +36,7 @@ warnings.filterwarnings("ignore")
 class Problem:
     def __init__(self, u: npt.NDArray, u_data_T: npt.NDArray, time_data: npt.NDArray,
                  dt: float, num_t_points: npt.NDArray, func: Callable,
-                 S: SimplicialComplex, update_u: bool):
+                 S: SimplicialComplex, skip_dx: float, skip_dt: float, update_u: bool):
         self.u = u
         self.u_data = u_data_T.T
         self.time_data = time_data
@@ -48,7 +48,8 @@ class Problem:
         self.jitted_func = jit(self.func_wrap)
         self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
         self.full_u_data = jnp.zeros(u.shape)
-        self.full_u_data = self.full_u_data.at[:, time_data].set(self.u_data)
+        self.full_u_data = self.full_u_data.at[::skip_dx,
+                                               time_data*skip_dt].set(self.u_data)
         self.jit_loop = jit(self.main_loop)
 
     def func_wrap(self, u_coeffs: npt.NDArray | Array, epsilon: float) -> npt.NDArray:
@@ -99,7 +100,7 @@ class Problem:
 def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
                           time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                           S: SimplicialComplex, num_t_points: float,
-                          num_x_points: float, dt: float,
+                          num_x_points: float, dt: float, skip_dx: float, skip_dt: float,
                           u_0: C.CochainD0, penalty: Dict) -> Tuple[float, Tuple]:
     # need to call config again before using JAX in energy evaluations to make sure
     # that the current worker has initialized JAX
@@ -111,7 +112,8 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
-    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S, False)
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points,
+                  func, S, skip_dx, skip_dt, False)
     if np.linalg.norm(prb.jitted_jac(u_0.coeffs, epsilon))**2 < 1e-6:
         # in this case since the gradient w.r.t. epsilon is too small, the function
         #  will not depend on epsilon, hence we do not perform autotune
@@ -134,8 +136,8 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
 
 def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
                  u_data_T: npt.NDArray, bvalues: Dict, S: SimplicialComplex,
-                 num_t_points: float, num_x_points: float, dt: float,
-                 u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
+                 num_t_points: float, num_x_points: float, dt: float, skip_dx: float,
+                 skip_dt: float, u_0: C.CochainD0) -> Tuple[float, npt.NDArray]:
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
@@ -147,7 +149,8 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
     u[0, :] = bvalues['left']
     u[-1, :] = bvalues['right']
 
-    prb = Problem(u, u_data_T, time_data, dt, num_t_points, func, S, True)
+    prb = Problem(u, u_data_T, time_data, dt, num_t_points,
+                  func, S, skip_dx, skip_dt, True)
     total_err = prb.fitness(epsilon)[0]
 
     # NOTE: since in our data we have u.T, we also store the transpose
@@ -164,11 +167,12 @@ def eval_MSE_sol(func: Callable, epsilon: float, indlen: int, time_data: npt.NDA
 def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
                    time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                    S: SimplicialComplex, num_t_points: float, num_x_points: float,
-                   dt: float, u_0: C.CochainD0, penalty: Dict) -> npt.NDArray:
+                   dt: float, skip_dx: float, skip_dt: float, u_0: C.CochainD0,
+                   penalty: Dict) -> npt.NDArray:
 
     _, best_sols = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points,
-                                dt, u_0)
+                                dt, skip_dx, skip_dt, u_0)
 
     return best_sols[time_data, :]
 
@@ -177,10 +181,11 @@ def eval_best_sols(individual: Callable, epsilon: float, indlen: int,
 def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.NDArray,
              u_data_T: npt.NDArray, bvalues: Dict, S: SimplicialComplex,
              num_t_points: float, num_x_points: float, dt: float,
-             u_0: C.CochainD0, penalty: Dict) -> float:
+             u_0: C.CochainD0, skip_dx: float, skip_dt: float, penalty: Dict) -> float:
 
     MSE, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
-                          u_data_T, bvalues, S, num_t_points, num_x_points, dt, u_0)
+                          u_data_T, bvalues, S, num_t_points, num_x_points,
+                          dt, skip_dx, skip_dt, u_0)
 
     return MSE
 
@@ -189,11 +194,12 @@ def eval_MSE(individual: Callable, epsilon: float, indlen: int, time_data: npt.N
 def eval_fitness(individual: Callable, epsilon: float, indlen: int,
                  time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                  S: SimplicialComplex, num_t_points: float, num_x_points: float,
-                 dt: float, u_0: C.CochainD0, penalty: Dict) -> Tuple[float, ]:
+                 dt: float, skip_dx: float, skip_dt: float,
+                 u_0: C.CochainD0, penalty: Dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, epsilon, indlen, time_data,
                                 u_data_T, bvalues, S, num_t_points, num_x_points,
-                                dt, u_0)
+                                dt, skip_dx, skip_dt, u_0)
 
     # penalty terms on length
     objval = total_err + penalty["reg_param"]*indlen
@@ -241,10 +247,11 @@ def stgp_burgers(config_file, output_path=None):
     global residual_formulation
 
     # SPACE PARAMS
-    L = 5.05
-    L_norm = 1
     # spatial resolution
-    dx = 0.05
+    dx = 5/2**8
+    L = 5 + dx
+    dx_norm = dx/L
+    L_norm = 1
     #  Number of spatial grid points
     num_x_points = int(math.ceil(L / dx))
     num_x_points_norm = num_x_points
@@ -261,12 +268,16 @@ def stgp_burgers(config_file, output_path=None):
     T = 2
     T_norm = T*umax/L
     # temporal resolution
-    dt = 0.01
+    dt = 2/2**10
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
 
     t = np.linspace(0, T, num_t_points_norm)
+
+    # define skip_dx and skip_dt
+    skip_dx = 2**1
+    skip_dt = 2**5
 
     # generate mesh
     mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
@@ -280,9 +291,9 @@ def stgp_burgers(config_file, output_path=None):
 
     # reconstruct full data (only for plot)
     full_u_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
-    full_u_data_T[time_train] = u_train_T
-    full_u_data_T[time_val] = u_val_T
-    full_u_data_T[time_test] = u_test_T
+    full_u_data_T[time_train*skip_dt, ::skip_dx] = u_train_T
+    full_u_data_T[time_val*skip_dt, ::skip_dx] = u_val_T
+    full_u_data_T[time_test*skip_dt, ::skip_dx] = u_test_T
     # rescale full_data
     full_u_data_T *= umax
 
@@ -309,7 +320,7 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dx, float, name="dx")
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
-        pset.addTerminal(0.005, float, name="0.005")
+        # pset.addTerminal(0.005, float, name="0.005")
         # rename arguments
         pset.renameArguments(ARG0="u")
         pset.renameArguments(ARG1="eps")
@@ -334,7 +345,9 @@ def stgp_burgers(config_file, output_path=None):
                                     'dt': dt_norm,
                                     'num_t_points': num_t_points_norm,
                                     'num_x_points': num_x_points_norm,
-                                    'u_0': u_0})
+                                    'u_0': u_0,
+                                    'skip_dx': skip_dx,
+                                    'skip_dt': skip_dt})
 
     params_names = ('time_data', 'u_data_T')
     datasets = {'train': [time_train, u_train_T],
@@ -355,7 +368,9 @@ def stgp_burgers(config_file, output_path=None):
                            num_t_points=num_t_points_norm,
                            num_x_points=num_x_points_norm,
                            u_0=u_0,
-                           penalty=penalty)
+                           penalty=penalty,
+                           skip_dx=skip_dx,
+                           skip_dt=skip_dt)
 
     if GPprb.plot_best:
         GPprb.toolbox.register("plot_best_func", plot_sol, time_data=time_val,
@@ -386,9 +401,8 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    # from deap import creator
-    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),eps))))"
+    from deap import creator
+    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)),
     # delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
@@ -398,10 +412,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    # opt_individ = creator.Individual.from_string(opt_string, pset)
-    # seed = [opt_individ]
+    opt_individ = creator.Individual.from_string(opt_string, pset)
+    seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
+    GPprb.run(print_log=True, seed=seed,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,

@@ -1,9 +1,9 @@
 # template for Burgers parameters file
 gp:
-  NINDIVIDUALS: 500
-  NGEN: 100
-  CXPB: 0.2
-  MUTPB: 0.8
+  NINDIVIDUALS: 1
+  NGEN: 1
+  CXPB: 0.
+  MUTPB: 1.0
   frac_elitist: 0
   min_: 2
   max_: 5
@@ -38,7 +38,7 @@ gp:
     {"name": "MulF", "dimension": None, "rank": None},
     {"name": "Div", "dimension": None, "rank": None},
     {"name": "SquareF", "dimension": None, "rank": None},
-    {"name": "SqrtF", "dimension": None, "rank": None},
+    #{"name": "SqrtF", "dimension": None, "rank": None},
     #{"name": "SinF", "dimension": None, "rank": None},
     #{"name": "ArcsinF", "dimension": None, "rank": None},
     #{"name": "CosF", "dimension": None, "rank": None},
@@ -52,7 +52,7 @@ gp:
     {"name": "del", "dimension": ["1"], "rank": ["SC"]},
     {"name": "St1", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "Square", "dimension": ["0","1"], "rank": ["SC"]},
-    {"name": "Sqrt", "dimension": ["0","1"], "rank": ["SC"]},
+    #{"name": "Sqrt", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "MF", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "InvM", "dimension": ["0","1"], "rank": ["SC"]},
     {"name": "CMul", "dimension": ["0","1"], "rank": ["SC"]},
