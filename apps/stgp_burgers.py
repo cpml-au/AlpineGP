@@ -21,6 +21,7 @@ from jax import jit, jacfwd, lax, Array
 from matplotlib import cm
 import jax.numpy as jnp
 from functools import partial
+import math
 
 residual_formulation = True
 
@@ -240,12 +241,12 @@ def stgp_burgers(config_file, output_path=None):
     global residual_formulation
 
     # SPACE PARAMS
-    L = 5
+    L = 5.05
     L_norm = 1
     # spatial resolution
     dx = 0.05
     #  Number of spatial grid points
-    num_x_points = int(L / dx)
+    num_x_points = int(math.ceil(L / dx))
     num_x_points_norm = num_x_points
 
     # vector containing spatial points
@@ -263,7 +264,7 @@ def stgp_burgers(config_file, output_path=None):
     dt = 0.01
     dt_norm = dt*umax/L
     # number of temporal grid points
-    num_t_points_norm = int(T_norm / dt_norm)
+    num_t_points_norm = int(math.ceil(T_norm / dt_norm))
 
     t = np.linspace(0, T, num_t_points_norm)
 
@@ -387,7 +388,7 @@ def stgp_burgers(config_file, output_path=None):
     start = time.perf_counter()
     # from deap import creator
     # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
-    # MFP0(St1D1(cobD0(u)),0.005))))"
+    # MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)),
     # delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"

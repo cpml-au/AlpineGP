@@ -1,6 +1,6 @@
 # template for Burgers parameters file
 gp:
-  NINDIVIDUALS: 1000
+  NINDIVIDUALS: 500
   NGEN: 100
   CXPB: 0.2
   MUTPB: 0.8
