@@ -170,7 +170,7 @@ coboundary = {'fun_info': {'name': 'cob', 'fun': C.coboundary},
               'input': ["C.Cochain"],
               'output': "C.Cochain",
               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
-                            "rank": ("SC",)},
+                            "rank": ("SC", "V", "T")},
               'map_rule': {'category': identity, 'dimension': partial(operator.add, 1),
                            "rank": identity}}
 coch_primitives.append(generate_primitive(coboundary))
@@ -178,7 +178,7 @@ codifferential = {'fun_info': {'name': 'del', 'fun': C.codifferential},
                   'input': ["C.Cochain"],
                   'output': "C.Cochain",
                   'att_input': {'category': ('P', 'D'), 'dimension': ('1', '2'),
-                                "rank": ("SC",)},
+                                "rank": ("SC", "V", "T")},
                   'map_rule': {'category': identity, 'dimension':
                                partial(operator.add, -1), "rank": identity}}
 coch_primitives.append(generate_primitive(codifferential))
@@ -186,7 +186,7 @@ tr_coch = {'fun_info': {'name': 'tr', 'fun': C.trace},
            'input': ["C.Cochain"],
            'output': "C.Cochain",
            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                         "rank": ("T",)},
+                         "rank": ("SC", "V", "T")},
            'map_rule': {'category': identity, 'dimension': identity,
                         "rank": rank_downgrade}}
 coch_primitives.append(generate_primitive(tr_coch))
@@ -240,7 +240,7 @@ star_1 = {'fun_info': {'name': 'St1', 'fun': C.star},
           'input': ["C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
-                        "rank": ("SC", "T")},
+                        "rank": ("SC", "V", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
                        'dimension': partial(star_dim, max_dim=1), "rank": identity}}
 coch_primitives.append(generate_primitive(star_1))
@@ -248,7 +248,7 @@ star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
           'input': ["C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                        "rank": ("SC", "T")},
+                        "rank": ("SC", "V", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
                        'dimension': partial(star_dim, max_dim=2), "rank": identity}}
 coch_primitives.append(generate_primitive(star_2))
@@ -256,7 +256,7 @@ inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                               "rank": ("SC", "T")},
+                               "rank": ("SC", "V", "T")},
                  'map_rule': {'category': empty_string, 'dimension': empty_string,
                               "rank": empty_string}}
 coch_primitives.append(generate_primitive(inner_product))
@@ -264,7 +264,7 @@ sin_coch = {'fun_info': {'name': 'Sin', 'fun': C.sin},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC",)},
+                          "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity,
                          "rank": identity}}
 coch_primitives.append(generate_primitive(sin_coch))
@@ -272,7 +272,7 @@ arcsin_coch = {'fun_info': {'name': 'ArcSin', 'fun': C.arcsin},
                'input': ["C.Cochain"],
                'output': "C.Cochain",
                'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC",)},
+                             "rank": ("SC", "V", "T")},
                'map_rule': {'category': identity, 'dimension': identity,
                             "rank": identity}}
 coch_primitives.append(generate_primitive(arcsin_coch))
@@ -280,7 +280,7 @@ cos_coch = {'fun_info': {'name': 'Cos', 'fun': C.cos},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC",)},
+                          "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity,
                          "rank": identity}}
 coch_primitives.append(generate_primitive(cos_coch))
@@ -288,7 +288,7 @@ arccos_coch = {'fun_info': {'name': 'ArcCos', 'fun': C.arccos},
                'input': ["C.Cochain"],
                'output': "C.Cochain",
                'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC",)},
+                             "rank": ("SC", "V", "T")},
                'map_rule': {'category': identity, 'dimension': identity,
                             "rank": identity}}
 coch_primitives.append(generate_primitive(arccos_coch))
@@ -296,21 +296,21 @@ exp_coch = {'fun_info': {'name': 'Exp', 'fun': C.exp},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC",)},
+                          "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(exp_coch))
 log_coch = {'fun_info': {'name': 'Log', 'fun': C.log},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC",)},
+                          "rank": ("SC", "V", "T")},
             'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(log_coch))
 sqrt_coch = {'fun_info': {'name': 'Sqrt', 'fun': C.sqrt},
              'input': ["C.Cochain"],
              'output': "C.Cochain",
              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                           "rank": ("SC",)},
+                           "rank": ("SC", "V", "T")},
              'map_rule': {'category': identity, 'dimension': identity,
                           "rank": identity}}
 coch_primitives.append(generate_primitive(sqrt_coch))
@@ -318,7 +318,7 @@ square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
                'input': ["C.Cochain"],
                'output': "C.Cochain",
                'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC",)},
+                             "rank": ("SC", "V", "T")},
                'map_rule': {'category': identity, 'dimension': identity,
                             "rank": identity}}
 coch_primitives.append(generate_primitive(square_coch))
