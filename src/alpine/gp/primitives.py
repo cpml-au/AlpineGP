@@ -186,7 +186,7 @@ tr_coch = {'fun_info': {'name': 'tr', 'fun': C.trace},
            'input': ["C.Cochain"],
            'output': "C.Cochain",
            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                         "rank": ("SC", "V", "T")},
+                         "rank": ("T",)},
            'map_rule': {'category': identity, 'dimension': identity,
                         "rank": rank_downgrade}}
 coch_primitives.append(generate_primitive(tr_coch))
@@ -194,14 +194,14 @@ mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
           'input': ["C.Cochain", "float"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                        "rank": ("SC", "T")},
+                        "rank": ("SC", "V", "T")},
           'map_rule': {'category': identity, 'dimension': identity, "rank": identity}}
 coch_primitives.append(generate_primitive(mul_FT))
 inv_mul_FT = {'fun_info': {'name': 'InvM', 'fun': inv_scalar_mul},
               'input': ["C.Cochain", "float"],
               'output': "C.Cochain",
               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                            "rank": ("SC", "T")},
+                            "rank": ("SC", "V", "T")},
               'map_rule': {'category': identity, 'dimension': identity,
                            "rank": identity}}
 coch_primitives.append(generate_primitive(inv_mul_FT))
