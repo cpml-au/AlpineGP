@@ -76,4 +76,5 @@ if __name__ == "__main__":
                                           'scheme': "parabolic"},
                    perc_val=0.3,
                    perc_test=0.2,
-                   format="npy")
+                   format="npy",
+                   shuffle=False)

@@ -64,7 +64,7 @@ class Problem:
         balance = balance.at[0].set(0)
         balance = balance.at[-1].set(0)
         u_tp1 = u_t + self.dt*balance
-        current_err = jnp.linalg.norm(u_tp1[::self.skip_dx] - 
+        current_err = jnp.linalg.norm(u_tp1[::self.skip_dx] -
                                       self.full_u_data[::self.skip_dx, t+1])**2
         return u_tp1, (current_err, u_tp1)
 
@@ -104,8 +104,9 @@ class Problem:
 def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
                           time_data: npt.NDArray, u_data_T: npt.NDArray, bvalues: Dict,
                           S: SimplicialComplex, num_t_points: float,
-                          num_x_points: float, dt: float, skip_dx: float, skip_dt: float,
-                          u_0: C.CochainD0, penalty: Dict) -> Tuple[float, Tuple]:
+                          num_x_points: float, dt: float, skip_dx: float,
+                          skip_dt: float, u_0: C.CochainD0,
+                          penalty: Dict) -> Tuple[float, Tuple]:
     # need to call config again before using JAX in energy evaluations to make sure
     # that the current worker has initialized JAX
     config()
@@ -254,7 +255,6 @@ def stgp_burgers(config_file, output_path=None):
     # spatial resolution
     dx = 5/2**8
     L = 5 + dx
-    dx_norm = dx/L
     L_norm = 1
     #  Number of spatial grid points
     num_x_points = int(math.ceil(L / dx))
@@ -326,7 +326,7 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
         # pset.addTerminal(0.05/(L*umax), float, name="eps_true")
-        
+
         # rename arguments
         pset.renameArguments(ARG0="u")
         pset.renameArguments(ARG1="eps")
