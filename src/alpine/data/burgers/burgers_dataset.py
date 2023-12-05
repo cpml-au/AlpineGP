@@ -27,7 +27,7 @@ def burgers_data(x_max: float, t_max: float, dx: float, dt: float,
 if __name__ == "__main__":
     # SPACE PARAMS
     # spatial resolution
-    dx = 5/2**9
+    dx = 5/2**8
     L = 5 + dx
     dx_norm = dx/L
     L_norm = 1
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     T = 2
     T_norm = T*umax/L
     # temporal resolution
-    dt = 2/2**12
+    dt = 2/2**10
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
@@ -57,8 +57,8 @@ if __name__ == "__main__":
     epsilon_norm = epsilon/(L*umax)
 
     # define skip_dx and skip_dt
-    skip_dx = 4
-    skip_dt = 32
+    skip_dx = 2**2
+    skip_dt = 2**5
 
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}

@@ -44,12 +44,15 @@ class Problem:
         self.num_t_points = num_t_points
         self.func = func
         self.S = S
+        self.skip_dx = skip_dx
+        self.skip_dt = skip_dt
         self.update_u = update_u
+
         self.jitted_func = jit(self.func_wrap)
         self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
         self.full_u_data = jnp.zeros(u.shape)
-        self.full_u_data = self.full_u_data.at[::skip_dx,
-                                               time_data*skip_dt].set(self.u_data)
+        self.full_u_data = self.full_u_data.at[::self.skip_dx,
+                                               time_data*self.skip_dt].set(self.u_data)
         self.jit_loop = jit(self.main_loop)
 
     def func_wrap(self, u_coeffs: npt.NDArray | Array, epsilon: float) -> npt.NDArray:
@@ -61,7 +64,8 @@ class Problem:
         balance = balance.at[0].set(0)
         balance = balance.at[-1].set(0)
         u_tp1 = u_t + self.dt*balance
-        current_err = jnp.linalg.norm(u_tp1 - self.full_u_data[:, t+1])**2
+        current_err = jnp.linalg.norm(u_tp1[::self.skip_dx] - 
+                                      self.full_u_data[::self.skip_dx, t+1])**2
         return u_tp1, (current_err, u_tp1)
 
     def main_loop(self, epsilon: float):
@@ -85,10 +89,10 @@ class Problem:
         if self.update_u:
             self.u[:, 1:] = u_1.T
 
-        if jnp.isnan(errors).any():
+        if jnp.isnan(errors[self.time_data*self.skip_dt]).any():
             total_err = 1e5
         else:
-            total_err = jnp.mean(errors[self.time_data])
+            total_err = jnp.mean(errors[self.time_data*self.skip_dt])
 
         return [total_err]
 
@@ -276,7 +280,7 @@ def stgp_burgers(config_file, output_path=None):
     t = np.linspace(0, T, num_t_points_norm)
 
     # define skip_dx and skip_dt
-    skip_dx = 2**1
+    skip_dx = 2**2
     skip_dt = 2**5
 
     # generate mesh
@@ -288,6 +292,7 @@ def stgp_burgers(config_file, output_path=None):
     # load data
     time_train, time_val, time_test, u_train_T, u_val_T, u_test_T = load_dataset(
         data_path, "npy")
+    print(time_train)
 
     # reconstruct full data (only for plot)
     full_u_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
@@ -320,7 +325,8 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dx, float, name="dx")
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
-        # pset.addTerminal(0.005, float, name="0.005")
+        # pset.addTerminal(0.05/(L*umax), float, name="eps_true")
+        
         # rename arguments
         pset.renameArguments(ARG0="u")
         pset.renameArguments(ARG1="eps")
