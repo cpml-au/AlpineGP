@@ -53,12 +53,12 @@ if __name__ == "__main__":
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
 
     # Viscosity
-    epsilon = 0.05
+    epsilon = 0.005*(L*umax)
     epsilon_norm = epsilon/(L*umax)
 
     # define skip_dx and skip_dt
-    skip_dx = 2**2
-    skip_dt = 2**5
+    skip_dx = 2**1
+    skip_dt = 2**0
 
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}

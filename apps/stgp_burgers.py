@@ -280,8 +280,8 @@ def stgp_burgers(config_file, output_path=None):
     t = np.linspace(0, T, num_t_points_norm)
 
     # define skip_dx and skip_dt
-    skip_dx = 2**2
-    skip_dt = 2**5
+    skip_dx = 2**1
+    skip_dt = 2**0
 
     # generate mesh
     mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
@@ -292,7 +292,6 @@ def stgp_burgers(config_file, output_path=None):
     # load data
     time_train, time_val, time_test, u_train_T, u_val_T, u_test_T = load_dataset(
         data_path, "npy")
-    print(time_train)
 
     # reconstruct full data (only for plot)
     full_u_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
@@ -407,8 +406,9 @@ def stgp_burgers(config_file, output_path=None):
         print("The best individual's epsilon is: ", best.epsilon)
 
     start = time.perf_counter()
-    from deap import creator
-    opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))), MFP0(St1D1(cobD0(u)),eps))))"
+    # from deap import creator
+    # opt_string = "St1P1(cobP0(AddCP0(St1D1(flat_parD0(MFD0(SquareD0(u), -1/2))),
+    # MFP0(St1D1(cobD0(u)),eps))))"
     # opt_string = "SubCD0(delD1(MFD1(flat_parD0(SquareD0(u)), eps)),
     # delD1(CMulD1(flat_parD0(SqrtD0(u)), cobD0(SqrtD0(u)))))"
     # opt_string = "St1P1(cobP0(MFP0(SquareP0(St1D1(flat_upD0(u))),-1/2))))"
@@ -418,10 +418,10 @@ def stgp_burgers(config_file, output_path=None):
     # opt_individ_MAIN = creator.Tree.from_string(opt_string_MAIN, pset)
     # opt_individ_ADF = creator.Tree.from_string(opt_string_ADF, ADF)
     # opt_individ = creator.Individual([opt_individ_MAIN, opt_individ_ADF])
-    opt_individ = creator.Individual.from_string(opt_string, pset)
-    seed = [opt_individ]
+    # opt_individ = creator.Individual.from_string(opt_string, pset)
+    # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=seed,
+    GPprb.run(print_log=True, seed=None,
               save_best_individual=True, save_train_fit_history=True,
               save_best_test_sols=True, X_test_param_name="u_data_T",
               output_path=output_path, preprocess_fun=evaluate_epsilons_and_train_fit,

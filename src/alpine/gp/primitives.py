@@ -137,19 +137,22 @@ add_coch = {'fun_info': {'name': 'AddC', 'fun': C.add},
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                           "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                         "rank": lambda x: x}}
 sub_coch = {'fun_info': {'name': 'SubC', 'fun': C.sub},
             'input': ["C.Cochain", "C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                           "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                         "rank": lambda x: x}}
 coboundary = {'fun_info': {'name': 'cob', 'fun': C.coboundary},
               'input': ["C.Cochain"],
               'output': "C.Cochain",
               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
                             "rank": ("SC", "V", "T")},
-              'map_rule': {'category': lambda x: x, 'dimension': partial(operator.add, 1),
+              'map_rule': {'category': lambda x: x,
+                           'dimension': partial(operator.add, 1),
                            "rank": lambda x: x}}
 codifferential = {'fun_info': {'name': 'del', 'fun': C.codifferential},
                   'input': ["C.Cochain"],
@@ -170,7 +173,8 @@ mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                         "rank": ("SC", "V", "T")},
-          'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+          'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                       "rank": lambda x: x}}
 inv_mul_FT = {'fun_info': {'name': 'InvM', 'fun': inv_scalar_mul},
               'input': ["C.Cochain", "float"],
               'output': "C.Cochain",
@@ -204,21 +208,24 @@ sym_coch = {'fun_info': {'name': 'sym', 'fun': C.sym},
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                           "rank": ("T",)},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                         "rank": lambda x: x}}
 star_1 = {'fun_info': {'name': 'St1', 'fun': C.star},
           'input': ["C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
                         "rank": ("SC", "V", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': partial(lambda x, y: y - x, y=1), "rank": lambda x: x}}
+                       'dimension': partial(lambda x, y: y - x, y=1),
+                       "rank": lambda x: x}}
 star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
           'input': ["C.Cochain"],
           'output': "C.Cochain",
           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                         "rank": ("SC", "V", "T")},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': partial(lambda x, y: y-x, y=2), "rank": lambda x: x}}
+                       'dimension': partial(lambda x, y: y-x, y=2),
+                       "rank": lambda x: x}}
 inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
@@ -259,13 +266,15 @@ exp_coch = {'fun_info': {'name': 'Exp', 'fun': C.exp},
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                           "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                         "rank": lambda x: x}}
 log_coch = {'fun_info': {'name': 'Log', 'fun': C.log},
             'input': ["C.Cochain"],
             'output': "C.Cochain",
             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
                           "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x, "rank": lambda x: x}}
+            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+                         "rank": lambda x: x}}
 sqrt_coch = {'fun_info': {'name': 'Sqrt', 'fun': C.sqrt},
              'input': ["C.Cochain"],
              'output': "C.Cochain",
@@ -285,8 +294,8 @@ def_gradient = {'fun_info': {'name': 'def_grad', 'fun': C.deformation_gradient},
                 'output': "C.Cochain",
                 'att_input': {'category': ('P'), 'dimension': ('0'),
                               "rank": ("V",)},
-                'map_rule': {'category': partial(switch_category, ('P', 'D')), 'dimension': lambda x: x,
-                             "rank": lambda x: "T"}}
+                'map_rule': {'category': partial(switch_category, ('P', 'D')),
+                             'dimension': lambda x: x, "rank": lambda x: "T"}}
 flat_up = {'fun_info': {'name': 'flat_up',
                         'fun': partial(V.flat_PDD, scheme="upwind")},
            'input': ["C.Cochain"],
@@ -346,7 +355,8 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List) -> No
                 # dimension/rank
                 # FIXME: change this!
                 if sum([typed_primitive.count(obj)
-                        for obj in non_feasible_objects]) == 0 or typed_primitive.count("ST") == 1:
+                        for obj in non_feasible_objects]) == 0 or (
+                            typed_primitive.count("ST") == 1):
                     op = primitives[typed_primitive].op
                     in_types = primitives[typed_primitive].in_types
                     out_type = primitives[typed_primitive].out_type
