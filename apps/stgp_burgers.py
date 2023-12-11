@@ -50,9 +50,9 @@ class Problem:
 
         self.jitted_func = jit(self.func_wrap)
         self.jitted_jac = jit(jacfwd(self.func_wrap, argnums=1))
-        self.full_u_data = jnp.zeros(u.shape)
-        self.full_u_data = self.full_u_data.at[::self.skip_dx,
-                                               time_data*self.skip_dt].set(self.u_data)
+        self.full_u_dot = jnp.zeros(u.shape)
+        self.full_u_dot = self.full_u_dot.at[::self.skip_dx,
+                                             time_data*self.skip_dt].set(self.u_data)
         self.jit_loop = jit(self.main_loop)
 
     def func_wrap(self, u_coeffs: npt.NDArray | Array, epsilon: float) -> npt.NDArray:
@@ -64,8 +64,9 @@ class Problem:
         balance = balance.at[0].set(0)
         balance = balance.at[-1].set(0)
         u_tp1 = u_t + self.dt*balance
-        current_err = jnp.linalg.norm(u_tp1[::self.skip_dx] -
-                                      self.full_u_data[::self.skip_dx, t+1])**2
+        u_dot_tp1 = balance
+        current_err = jnp.linalg.norm(u_dot_tp1[::self.skip_dx] -
+                                      self.full_u_dot[::self.skip_dx, t+1])**2
         return u_tp1, (current_err, u_tp1)
 
     def main_loop(self, epsilon: float):
@@ -253,53 +254,62 @@ def stgp_burgers(config_file, output_path=None):
 
     # SPACE PARAMS
     # spatial resolution
-    dx = 5/2**8
-    L = 5 + dx
+    dx = 2**4/2**9
+    L = 2**4 + dx
+    dx_norm = dx/L
     L_norm = 1
     #  Number of spatial grid points
     num_x_points = int(math.ceil(L / dx))
     num_x_points_norm = num_x_points
 
     # vector containing spatial points
-    x = np.linspace(0, L, num_x_points)
+    # x = np.linspace(0, L, num_x_points)
+    x = np.linspace(-L/2, L/2, num_x_points)
     x_circ = (x[:-1] + x[1:])/2
 
     # initial velocity
-    u_0 = 2 * np.exp(-2 * (x_circ - 0.5 * L)**2)
+    # u_0 = 2 * np.exp(-2 * (x_circ - 0.5 * L)**2)
+    u_0 = 1 * np.exp(-1 * (x_circ + 0.5 * L/4)**2)
     umax = np.max(u_0)
 
     # TIME PARAMS
-    T = 2
+    T = 10
     T_norm = T*umax/L
     # temporal resolution
-    dt = 2/2**10
+    dt = 10/2**12
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
+    num_t_points = num_t_points_norm
 
-    t = np.linspace(0, T, num_t_points_norm)
+    t = np.linspace(0, T, num_t_points)
+    t_norm = np.linspace(0, T_norm, num_t_points_norm)
 
-    # define skip_dx and skip_dt
-    skip_dx = 2**1
-    skip_dt = 2**0
+    nodes_BC = {'left': np.zeros(num_t_points_norm),
+                'right': np.zeros(num_t_points_norm)}
 
-    # generate mesh
-    mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
+    skip_dx = 2**4
+    skip_dt = 2**8
+
+    # generate complex
+    mesh, _ = util.generate_line_mesh(num_x_points, L, x_min=-L/2)
     S = util.build_complex_from_mesh(mesh)
     S.get_hodge_star()
     S.get_flat_PDP_weights()
 
     # load data
-    time_train, time_val, time_test, u_train_T, u_val_T, u_test_T = load_dataset(
-        data_path, "npy")
+    data = load_dataset(data_path, "npy")
+    time_train, time_val, time_test = data[:3]
+    u_dot_train_T, u_dot_val_T, u_dot_test_T = data[3:]
 
     # reconstruct full data (only for plot)
-    full_u_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
-    full_u_data_T[time_train*skip_dt, ::skip_dx] = u_train_T
-    full_u_data_T[time_val*skip_dt, ::skip_dx] = u_val_T
-    full_u_data_T[time_test*skip_dt, ::skip_dx] = u_test_T
+    full_u_dot_data_T = np.zeros((num_t_points_norm, num_x_points_norm-1))
+    full_u_dot_data_T[time_train*skip_dt, ::skip_dx] = u_dot_train_T
+    full_u_dot_data_T[time_val*skip_dt, ::skip_dx] = u_dot_val_T
+    full_u_dot_data_T[time_test*skip_dt, ::skip_dx] = u_dot_test_T
+
     # rescale full_data
-    full_u_data_T *= umax
+    # full_u_data_T *= umax
 
     # initial condition
     u_0 = C.CochainD0(S, u_0/umax)
@@ -355,9 +365,9 @@ def stgp_burgers(config_file, output_path=None):
                                     'skip_dt': skip_dt})
 
     params_names = ('time_data', 'u_data_T')
-    datasets = {'train': [time_train, u_train_T],
-                'val': [time_val, u_val_T],
-                'test': [time_test, u_test_T]}
+    datasets = {'train': [time_train, u_dot_train_T],
+                'val': [time_val, u_dot_val_T],
+                'test': [time_test, u_dot_test_T]}
     GPprb.store_eval_dataset_params(params_names, datasets)
 
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
@@ -366,7 +376,7 @@ def stgp_burgers(config_file, output_path=None):
     # register custom functions
     GPprb.toolbox.register("evaluate_epsilon", tune_epsilon_and_eval.remote,
                            time_data=time_train,
-                           u_data_T=u_train_T,
+                           u_data_T=u_dot_train_T,
                            bvalues=nodes_BC,
                            S=S,
                            dt=dt_norm,
@@ -379,10 +389,10 @@ def stgp_burgers(config_file, output_path=None):
 
     if GPprb.plot_best:
         GPprb.toolbox.register("plot_best_func", plot_sol, time_data=time_val,
-                               u_data_T=u_val_T, bvalues=nodes_BC, S=S,
+                               u_data_T=u_dot_val_T, bvalues=nodes_BC, S=S,
                                num_t_points=num_t_points_norm,
                                num_x_points=num_x_points_norm, dt=dt, u_0=u_0,
-                               full_u_data_T=full_u_data_T, umax=umax, x_circ=x_circ,
+                               full_u_data_T=full_u_dot_data_T, umax=umax, x_circ=x_circ,
                                t=t, toolbox=GPprb.toolbox)
 
     if use_ADF:
@@ -391,9 +401,8 @@ def stgp_burgers(config_file, output_path=None):
         GPprb.register_map([lambda ind: ind.epsilon, len])
 
     def evaluate_epsilons_and_train_fit(pop):
-        if not hasattr(pop[0], "epsilon"):
-            for ind in pop:
-                ind.epsilon = 1.
+        for ind in pop:
+            ind.epsilon = 1.
 
         eps_fits = GPprb.toolbox.map(GPprb.toolbox.evaluate_epsilon, pop)
 

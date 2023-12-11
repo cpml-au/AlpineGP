@@ -566,9 +566,9 @@ class GPSymbRegProblem():
             if self.early_stopping['enabled']:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
                     "valid_fit")
-                self.val_fit_history = self.logbook.chapters["valid"].select(
-                    "valid_fit")
-                self.min_valerr = min(self.val_fit_history)
+                self.val_MSE_history = self.logbook.chapters["valid"].select(
+                    "valid_err")
+                self.min_valerr = min(self.val_MSE_history)
 
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
                 self.__plot_history()
@@ -618,7 +618,7 @@ class GPSymbRegProblem():
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
         if self.early_stopping['enabled']:
-            print(f"The best fitness on the validation set is {self.min_valerr}")
+            print(f"The best MSE on the validation set is {self.min_valerr}")
 
         if self.plot_best_genealogy:
             self.__plot_genealogy(best)

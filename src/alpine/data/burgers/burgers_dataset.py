@@ -7,28 +7,47 @@ from dctkit import config
 import numpy.typing as npt
 from typing import Dict, Tuple
 import math
+from dctkit.dec import cochain as C
+from dctkit.dec.vector import flat_PDD as flat
+from dctkit.mesh import util
+from dctkit.mesh.simplex import SimplicialComplex
+
 
 data_path = os.path.dirname(os.path.realpath(__file__))
 
 config()
 
 
-def burgers_data(x_max: float, t_max: float, dx: float, dt: float,
+def burgers_data(S: SimplicialComplex, t_max: float, dt: float,
                  u_0: npt.NDArray, nodes_BC: Dict, epsilon: float,
                  skip_dx: float, skip_dt: float,
                  scheme: str = "parabolic") -> Tuple[npt.NDArray, npt.NDArray]:
-    prb = b.Burgers(x_max, t_max, dx, dt, u_0, nodes_BC, epsilon)
+    # compute the solution u
+    prb = b.Burgers(S, t_max, dt, u_0, nodes_BC, epsilon)
     prb.run(scheme)
+    # compute u_dot (boundary nodes are treated separately)
+    u_coch = C.CochainD0(S, prb.u)
+    u_sq = C.scalar_mul(C.square(u_coch), -1/2)
+    dissipation = C.scalar_mul(C.star(C.coboundary(u_coch)), epsilon)
+    flux = C.star(flat(u_sq, "parabolic"))
+    total_flux = C.add(flux, dissipation)
+    u_dot = C.star(C.coboundary(total_flux)).coeffs
+    u_dot = u_dot.at[0, :].set(0.)
+    u_dot = u_dot.at[-1, :].set(0.)
+
+    # extract data
     X = np.arange(prb.num_t_points/skip_dt, dtype=dctkit.int_dtype)
-    y = prb.u.T[::skip_dt, ::skip_dx]
+    # y = prb.u.T[::skip_dt, ::skip_dx]
+    y = u_dot.T[::skip_dt, ::skip_dx]
+
     return X, y
 
 
 if __name__ == "__main__":
     # SPACE PARAMS
     # spatial resolution
-    dx = 5/2**8
-    L = 5 + dx
+    dx = 2**4/2**9
+    L = 2**4 + dx
     dx_norm = dx/L
     L_norm = 1
     #  Number of spatial grid points
@@ -36,37 +55,48 @@ if __name__ == "__main__":
     num_x_points_norm = num_x_points
 
     # vector containing spatial points
-    x = np.linspace(0, L, num_x_points)
+    # x = np.linspace(0, L, num_x_points)
+    x = np.linspace(-L/2, L/2, num_x_points)
     x_circ = (x[:-1] + x[1:])/2
 
     # initial velocity
-    u_0 = 2 * np.exp(-2 * (x_circ - 0.5 * L)**2)
+    # u_0 = 2 * np.exp(-2 * (x_circ - 0.5 * L)**2)
+    u_0 = 1 * np.exp(-1 * (x_circ + 0.5 * L/4)**2)
     umax = np.max(u_0)
 
     # TIME PARAMS
-    T = 2
+    T = 10
     T_norm = T*umax/L
     # temporal resolution
-    dt = 2/2**10
+    dt = 10/2**12
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
+    num_t_points = num_t_points_norm
+
+    t = np.linspace(0, T, num_t_points)
+    t_norm = np.linspace(0, T_norm, num_t_points_norm)
 
     # Viscosity
-    epsilon = 0.005*(L*umax)
+    # epsilon = 0.005*(L*umax)
+    epsilon = 0.1
     epsilon_norm = epsilon/(L*umax)
-
-    # define skip_dx and skip_dt
-    skip_dx = 2**1
-    skip_dt = 2**0
 
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}
 
+    skip_dx = 2**4
+    skip_dt = 2**8
+
+    # generate complex
+    mesh, _ = util.generate_line_mesh(num_x_points, L, x_min=-L/2)
+    S = util.build_complex_from_mesh(mesh)
+    S.get_hodge_star()
+    S.get_flat_PDP_weights()
+
     u.save_dataset(data_generator=burgers_data,
-                   data_generator_kwargs={'x_max': L_norm,
+                   data_generator_kwargs={'S': S,
                                           't_max': T_norm,
-                                          'dx': dx_norm,
                                           'dt': dt_norm,
                                           'u_0': u_0/umax,
                                           'nodes_BC': nodes_BC,
@@ -74,7 +104,7 @@ if __name__ == "__main__":
                                           'skip_dx': skip_dx,
                                           'skip_dt': skip_dt,
                                           'scheme': "parabolic"},
-                   perc_val=0.3,
-                   perc_test=0.2,
+                   perc_val=0.1,
+                   perc_test=0.1,
                    format="npy",
                    shuffle=False)
