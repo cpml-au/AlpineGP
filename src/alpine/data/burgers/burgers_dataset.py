@@ -89,7 +89,7 @@ if __name__ == "__main__":
     skip_dt = 2**8
 
     # generate complex
-    mesh, _ = util.generate_line_mesh(num_x_points, L, x_min=-L/2)
+    mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
     S = util.build_complex_from_mesh(mesh)
     S.get_hodge_star()
     S.get_flat_PDP_weights()
