@@ -7,8 +7,6 @@ from dctkit import config
 import numpy.typing as npt
 from typing import Dict, Tuple
 import math
-from dctkit.dec import cochain as C
-from dctkit.dec.vector import flat_PDD as flat
 from dctkit.mesh import util
 from dctkit.mesh.simplex import SimplicialComplex
 
@@ -25,20 +23,10 @@ def burgers_data(S: SimplicialComplex, t_max: float, dt: float,
     # compute the solution u
     prb = b.Burgers(S, t_max, dt, u_0, nodes_BC, epsilon)
     prb.run(scheme)
-    # compute u_dot (boundary nodes are treated separately)
-    u_coch = C.CochainD0(S, prb.u)
-    u_sq = C.scalar_mul(C.square(u_coch), -1/2)
-    dissipation = C.scalar_mul(C.star(C.coboundary(u_coch)), epsilon)
-    flux = C.star(flat(u_sq, "parabolic"))
-    total_flux = C.add(flux, dissipation)
-    u_dot = C.star(C.coboundary(total_flux)).coeffs
-    u_dot = u_dot.at[0, :].set(0.)
-    u_dot = u_dot.at[-1, :].set(0.)
 
     # extract data
     X = np.arange(prb.num_t_points/skip_dt, dtype=dctkit.int_dtype)
-    # y = prb.u.T[::skip_dt, ::skip_dx]
-    y = u_dot.T[::skip_dt, ::skip_dx]
+    y = prb.u_dot.T[::skip_dt, ::skip_dx]
 
     return X, y
 

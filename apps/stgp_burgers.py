@@ -60,17 +60,16 @@ class Problem:
         return self.func(u, epsilon).coeffs
 
     def body_fun(self, u_t: npt.NDArray | Array, t: float, epsilon: float):
-        balance = self.jitted_func(u_t, epsilon)
-        balance = balance.at[0].set(0)
-        balance = balance.at[-1].set(0)
-        u_tp1 = u_t + self.dt*balance
-        u_dot_tp1 = balance
-        current_err = jnp.linalg.norm(u_dot_tp1[::self.skip_dx] -
-                                      self.full_u_dot[::self.skip_dx, t+1])**2
+        u_dot_t = self.jitted_func(u_t, epsilon)
+        u_dot_t = u_dot_t.at[0].set(0)
+        u_dot_t = u_dot_t.at[-1].set(0)
+        u_tp1 = u_t + self.dt*u_dot_t
+        current_err = jnp.linalg.norm(u_dot_t[::self.skip_dx] -
+                                      self.full_u_dot[::self.skip_dx, t])**2
         return u_tp1, (current_err, u_tp1)
 
     def main_loop(self, epsilon: float):
-        errors_0 = 0
+        # errors_0 = 0
 
         # perform Euler's forward integration in time
         _, errors_u = lax.scan(partial(self.body_fun, epsilon=epsilon),
@@ -81,7 +80,13 @@ class Problem:
         # NOTE: errors is the error vector from the second instant of time, i.e.
         # len(errors) = num_t_points - 1. We have to manually had the error at time
         # t = 0, which is always 0 due to initial conditions
-        errors = jnp.insert(errors, 0, errors_0)
+        # errors = jnp.insert(errors, 0, errors_0)
+
+        # NOTE: we have to compute u_dot at the last time step
+        u_dot_last = self.jitted_func(self.u[:, -1], epsilon)
+        last_error = jnp.linalg.norm(
+            u_dot_last[::self.skip_dx] - self.full_u_dot[::self.skip_dx, -1])**2
+        errors = jnp.insert(errors, -1, last_error)
 
         return errors, u_1
 
@@ -256,7 +261,7 @@ def stgp_burgers(config_file, output_path=None):
     # spatial resolution
     dx = 2**4/2**9
     L = 2**4 + dx
-    dx_norm = dx/L
+    # dx_norm = dx/L
     L_norm = 1
     #  Number of spatial grid points
     num_x_points = int(math.ceil(L / dx))
@@ -283,7 +288,7 @@ def stgp_burgers(config_file, output_path=None):
     num_t_points = num_t_points_norm
 
     t = np.linspace(0, T, num_t_points)
-    t_norm = np.linspace(0, T_norm, num_t_points_norm)
+    # t_norm = np.linspace(0, T_norm, num_t_points_norm)
 
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}
@@ -312,7 +317,7 @@ def stgp_burgers(config_file, output_path=None):
     # full_u_data_T *= umax
 
     # initial condition
-    u_0 = C.CochainD0(S, u_0/umax)
+    u_0_coch = C.CochainD0(S, u_0/umax)
 
     # boundary conditions
     nodes_BC = {'left': np.zeros(num_t_points_norm),
@@ -334,7 +339,7 @@ def stgp_burgers(config_file, output_path=None):
         # pset.addTerminal(dx, float, name="dx")
         # pset.addTerminal(dt, float, name="dt")
         # pset.addTerminal(10., float, name="10.")
-        # pset.addTerminal(0.05/(L*umax), float, name="eps_true")
+        # pset.addTerminal(0.1/(L*umax), float, name="eps_true")
 
         # rename arguments
         pset.renameArguments(ARG0="u")
@@ -360,7 +365,7 @@ def stgp_burgers(config_file, output_path=None):
                                     'dt': dt_norm,
                                     'num_t_points': num_t_points_norm,
                                     'num_x_points': num_x_points_norm,
-                                    'u_0': u_0,
+                                    'u_0': u_0_coch,
                                     'skip_dx': skip_dx,
                                     'skip_dt': skip_dt})
 
@@ -382,7 +387,7 @@ def stgp_burgers(config_file, output_path=None):
                            dt=dt_norm,
                            num_t_points=num_t_points_norm,
                            num_x_points=num_x_points_norm,
-                           u_0=u_0,
+                           u_0=u_0_coch,
                            penalty=penalty,
                            skip_dx=skip_dx,
                            skip_dt=skip_dt)
@@ -391,9 +396,9 @@ def stgp_burgers(config_file, output_path=None):
         GPprb.toolbox.register("plot_best_func", plot_sol, time_data=time_val,
                                u_data_T=u_dot_val_T, bvalues=nodes_BC, S=S,
                                num_t_points=num_t_points_norm,
-                               num_x_points=num_x_points_norm, dt=dt, u_0=u_0,
-                               full_u_data_T=full_u_dot_data_T, umax=umax, x_circ=x_circ,
-                               t=t, toolbox=GPprb.toolbox)
+                               num_x_points=num_x_points_norm, dt=dt, u_0=u_0_coch,
+                               full_u_data_T=full_u_dot_data_T, umax=umax,
+                               x_circ=x_circ, t=t, toolbox=GPprb.toolbox)
 
     if use_ADF:
         GPprb.register_map([lambda ind: ind.epsilon, lambda x: len(x[0]) + len(x[1])])
