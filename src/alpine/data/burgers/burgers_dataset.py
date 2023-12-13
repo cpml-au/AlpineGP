@@ -34,7 +34,7 @@ def burgers_data(S: SimplicialComplex, t_max: float, dt: float,
 if __name__ == "__main__":
     # SPACE PARAMS
     # spatial resolution
-    dx = 2**4/2**9
+    dx = 2**4/2**8
     L = 2**4 + dx
     dx_norm = dx/L
     L_norm = 1
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     T = 10
     T_norm = T*umax/L
     # temporal resolution
-    dt = 10/2**12
+    dt = 10/2**9
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
@@ -73,8 +73,8 @@ if __name__ == "__main__":
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}
 
-    skip_dx = 2**4
-    skip_dt = 2**8
+    skip_dx = 2**3
+    skip_dt = 2**5
 
     # generate complex
     mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)

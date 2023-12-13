@@ -132,7 +132,7 @@ def tune_epsilon_and_eval(func: Callable, epsilon: float, indlen: int,
     else:
         algo = pg.algorithm(pg.de(gen=20))
         prob = pg.problem(prb)
-        pop = pg.population(prob, size=200)
+        pop = pg.population(prob, size=300)
         pop = algo.evolve(pop)
 
         # extract epsilon and total err
@@ -259,7 +259,7 @@ def stgp_burgers(config_file, output_path=None):
 
     # SPACE PARAMS
     # spatial resolution
-    dx = 2**4/2**9
+    dx = 2**4/2**8
     L = 2**4 + dx
     # dx_norm = dx/L
     L_norm = 1
@@ -281,7 +281,7 @@ def stgp_burgers(config_file, output_path=None):
     T = 10
     T_norm = T*umax/L
     # temporal resolution
-    dt = 10/2**12
+    dt = 10/2**9
     dt_norm = dt*umax/L
     # number of temporal grid points
     num_t_points_norm = int(math.ceil(T_norm / dt_norm))
@@ -293,8 +293,8 @@ def stgp_burgers(config_file, output_path=None):
     nodes_BC = {'left': np.zeros(num_t_points_norm),
                 'right': np.zeros(num_t_points_norm)}
 
-    skip_dx = 2**4
-    skip_dt = 2**8
+    skip_dx = 2**3
+    skip_dt = 2**5
 
     # generate complex
     mesh, _ = util.generate_line_mesh(num_x_points_norm, L_norm)
