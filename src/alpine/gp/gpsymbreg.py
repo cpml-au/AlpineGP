@@ -37,7 +37,8 @@ class GPSymbRegProblem():
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
-                 use_ray=True):
+                 use_ray=True,
+                 ADF=None):
         """Symbolic regression problem via Genetic Programming.
 
             Args:
@@ -54,6 +55,7 @@ class GPSymbRegProblem():
                     for survival.
         """
         self.pset = pset
+        self.ADF = ADF
         if config_file_data is not None:
             self.load_config_data(config_file_data)
         else:
@@ -80,7 +82,10 @@ class GPSymbRegProblem():
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
-        self.stats_size = tools.Statistics(len)
+        if self.ADF is None:
+            self.stats_size = tools.Statistics(len)
+        else:
+            self.stats_size = tools.Statistics(lambda x: len(x[0]) + len(x[1]))
         self.mstats = tools.MultiStatistics(fitness=self.stats_fit,
                                             size=self.stats_size)
         self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
@@ -130,31 +135,49 @@ class GPSymbRegProblem():
         toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
         toolbox.register("mutate",
                          eval(mutate_fun), **mutate_kargs)
-        toolbox.decorate(
-            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-        toolbox.decorate(
-            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
-        toolbox.register("expr", gp.genHalfAndHalf,
-                         pset=self.pset, min_=min_, max_=max_)
-        toolbox.register("expr_pop",
-                         gp.genHalfAndHalf,
-                         pset=self.pset,
-                         min_=min_,
-                         max_=max_,
-                         is_pop=True)
-        creator.create("Individual",
-                       gp.PrimitiveTree,
-                       fitness=creator.FitnessMin)
-        createIndividual = creator.Individual
-        toolbox.register("individual", tools.initIterate,
-                         createIndividual, toolbox.expr)
+        if self.ADF is None:
+            toolbox.decorate(
+                "mate", gp.staticLimit(key=operator.attrgetter("height"),
+                                       max_value=17))
+            toolbox.decorate(
+                "mutate", gp.staticLimit(key=operator.attrgetter("height"),
+                                         max_value=17))
+            toolbox.register("expr", gp.genHalfAndHalf,
+                             pset=self.pset, min_=min_, max_=max_)
+            creator.create("Individual",
+                           gp.PrimitiveTree,
+                           fitness=creator.FitnessMin)
+            createIndividual = creator.Individual
+            toolbox.register("individual", tools.initIterate,
+                             createIndividual, toolbox.expr)
 
-        # toolbox.register("individual_pop", tools.initIterate,
-        #                 createIndividual, toolbox.expr_pop)
-        toolbox.register("population", tools.initRepeat,
-                         list, toolbox.individual)
-        toolbox.register("compile", gp.compile, pset=self.pset)
+            toolbox.register("population", tools.initRepeat,
+                             list, toolbox.individual)
+            toolbox.register("compile", gp.compile, pset=self.pset)
+
+        else:
+            min_ADF = config_file_data["gp"]["ADF"]["min_ADF"]
+            max_ADF = config_file_data["gp"]["ADF"]["max_ADF"]
+
+            creator.create("Individual", list, fitness=creator.FitnessMin)
+            creator.create("Tree", gp.PrimitiveTree)
+            createIndividual = creator.Individual
+
+            toolbox.register("adf_expr", gp.genHalfAndHalf,
+                             pset=self.ADF, min_=min_ADF, max_=max_ADF)
+            toolbox.register("main_expr", gp.genHalfAndHalf,
+                             pset=self.pset, min_=min_, max_=max_)
+            toolbox.register("adf", tools.initIterate,
+                             creator.Tree, toolbox.adf_expr)
+            toolbox.register("main", tools.initIterate,
+                             creator.Tree, toolbox.main_expr)
+            func_cycle = [toolbox.main, toolbox.adf]
+            toolbox.register('individual', tools.initCycle,
+                             createIndividual, func_cycle)
+            toolbox.register('population', tools.initRepeat, list, toolbox.individual)
+
+            toolbox.register("compile", gp.compileADF, psets=(self.pset, self.ADF))
 
         self.toolbox = toolbox
         self.createIndividual = createIndividual
@@ -172,12 +195,10 @@ class GPSymbRegProblem():
         self.stochastic_tournament = \
             config_file_data["gp"]["select"]["stochastic_tournament"]
 
-        if len(config_file_data["gp"]['primitives']) == 0:
-            addPrimitivesToPset(self.pset)
-        else:
-            addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
-
+        addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
         self.__creator_toolbox_config(config_file_data=config_file_data)
+        if self.ADF is not None:
+            addPrimitivesToPset(self.ADF, config_file_data["gp"]['ADF']['primitives'])
 
         self.early_stopping = config_file_data["gp"]["early_stopping"]
         self.plot_best = config_file_data["plot"]["plot_best"]
@@ -380,6 +401,7 @@ class GPSymbRegProblem():
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def register_map(self, individ_feature_extractors: List[Callable] | None = None):
+
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
@@ -452,9 +474,6 @@ class GPSymbRegProblem():
             print("Seeding population with individuals...", flush=True)
             self.pop[:len(seed)] = seed
 
-        # print(len(self.pop))
-        # print(self.pop[0])
-        # print([ind for ind in self.pop])
         print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the fitness of the entire population on the training set
@@ -463,10 +482,11 @@ class GPSymbRegProblem():
         if preprocess_fun is not None:
             preprocess_fun(self.pop)
 
-        fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
+        if not hasattr(self.pop[0].fitness, "values"):
+            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
-        for ind, fit in zip(self.pop, fitnesses):
-            ind.fitness.values = fit
+            for ind, fit in zip(self.pop, fitnesses):
+                ind.fitness.values = fit
 
         if self.early_stopping['enabled']:
             print("Using early-stopping.")
@@ -493,9 +513,15 @@ class GPSymbRegProblem():
 
             # Apply crossover and mutation to the offspring, except elite individuals
             elite_ind = tools.selBest(offspring, self.n_elitist)
-            offspring = elite_ind + \
-                algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
-                                 self.n_elitist, self.CXPB, self.MUTPB)
+            if self.ADF is None:
+                offspring = elite_ind + \
+                    algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
+                                     self.n_elitist, self.CXPB, self.MUTPB)
+            else:
+                offspring = elite_ind + \
+                    algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
+                                     self.n_elitist, self.CXPB, self.MUTPB,
+                                     (self.pset, self.ADF))
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)
@@ -504,10 +530,11 @@ class GPSymbRegProblem():
             if preprocess_fun is not None:
                 preprocess_fun(invalid_ind)
 
-            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
+            if not hasattr(invalid_ind[0].fitness, "values"):
+                fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
-            for ind, fit in zip(invalid_ind, fitnesses):
-                ind.fitness.values = fit
+                for ind, fit in zip(invalid_ind, fitnesses):
+                    ind.fitness.values = fit
 
             if not self.overlapping_generation:
                 # The population is entirely replaced by the offspring
@@ -525,7 +552,11 @@ class GPSymbRegProblem():
                                     overfit_measure=self.early_stopping['enabled'],
                                     print_log=print_log)
 
-            print(f"The best individual of this generation is: {best}")
+            if self.ADF is None:
+                print(f"The best individual of this generation is: {best}")
+            else:
+                print(f"The best individual of this generation is: {best[0]}")
+                print(f"ADF = {best[1]}")
 
             if callback_fun is not None:
                 callback_fun(self.pop)
@@ -535,9 +566,9 @@ class GPSymbRegProblem():
             if self.early_stopping['enabled']:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
                     "valid_fit")
-                self.val_fit_history = self.logbook.chapters["valid"].select(
-                    "valid_fit")
-                self.min_valerr = min(self.val_fit_history)
+                self.val_MSE_history = self.logbook.chapters["valid"].select(
+                    "valid_err")
+                self.min_valerr = min(self.val_MSE_history)
 
             if plot_history and (cgen % plot_freq == 0 or cgen == 1):
                 self.__plot_history()
@@ -558,7 +589,11 @@ class GPSymbRegProblem():
                                                        training_fit) >= 1e-1:
                     m += 1
 
-                print(f"The best until now is: {self.best}")
+                if self.ADF is None:
+                    print(f"The best until now is: {self.best}")
+                else:
+                    print(f"The best until now is: {self.best[0]}")
+                    print(f"ADF = {self.best[1]}")
 
                 self.last_improvement = training_fit
 
@@ -575,11 +610,15 @@ class GPSymbRegProblem():
 
         print("> MODEL TRAINING/SELECTION COMPLETED", flush=True)
 
-        print(f"The best individual is {self.best}", flush=True)
+        if self.ADF is None:
+            print(f"The best individual is {self.best}", flush=True)
+        else:
+            print(f"The best individual is: {self.best[0]}")
+            print(f"ADF = {self.best[1]}")
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
         if self.early_stopping['enabled']:
-            print(f"The best fitness on the validation set is {self.min_valerr}")
+            print(f"The best MSE on the validation set is {self.min_valerr}")
 
         if self.plot_best_genealogy:
             self.__plot_genealogy(best)
@@ -610,7 +649,10 @@ class GPSymbRegProblem():
 
     def plot_best_individual_tree(self):
         """Plots the tree of the best individual."""
-        nodes, edges, labels = gp.graph(self.best)
+        if self.ADF is None:
+            nodes, edges, labels = gp.graph(self.best)
+        else:
+            nodes, edges, labels = gp.graph(self.best[0])
         graph = nx.Graph()
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)

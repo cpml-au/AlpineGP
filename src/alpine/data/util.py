@@ -8,7 +8,7 @@ from functools import partial
 # FIXME: FIX THE DOCS
 
 
-def split_dataset(X, y, perc_val, perc_test):
+def split_dataset(X, y, perc_val, perc_test, shuffle=True):
     """Split the dataset in training, validation and test set (double hold out).
     Args:
         X (np.array): samples of the dataset
@@ -23,12 +23,12 @@ def split_dataset(X, y, perc_val, perc_test):
 
     # split the dataset in training and test set
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=perc_test, random_state=42)
+        X, y, test_size=perc_test, random_state=42, shuffle=shuffle)
 
     # split X_train in training and validation set
 
     X_t, X_valid, y_t, y_valid = train_test_split(
-        X_train, y_train, test_size=perc_val, random_state=42)
+        X_train, y_train, test_size=perc_val, random_state=42, shuffle=shuffle)
 
     X = (X_t, X_valid, X_test)
     y = (y_t, y_valid, y_test)
@@ -37,7 +37,7 @@ def split_dataset(X, y, perc_val, perc_test):
 
 
 def save_dataset(data_generator: Callable, data_generator_kwargs: Dict,
-                 perc_val: float, perc_test: float, format: str = "csv"):
+                 perc_val: float, perc_test: float, format: str = "csv", shuffle=True):
     """Generate, split and save the dataset.
 
     Args:
@@ -51,7 +51,7 @@ def save_dataset(data_generator: Callable, data_generator_kwargs: Dict,
         noise (np.array): noise to perturb the solution vector.
     """
     data_X, data_y = data_generator(**data_generator_kwargs)
-    X, y = split_dataset(data_X, data_y, perc_val, perc_test)
+    X, y = split_dataset(data_X, data_y, perc_val, perc_test, shuffle)
     X_train, X_valid, X_test = X
     y_train, y_valid, y_test = y
     if format == "csv":

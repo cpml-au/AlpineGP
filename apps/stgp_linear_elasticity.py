@@ -85,8 +85,6 @@ def eval_MSE_sol(func: Callable, indlen: int, X: npt.NDArray,
         # minimize the objective
         x_flatten = prb.solve(x0=u_0.coeffs.flatten(), maxeval=5000,
                               ftol_abs=1e-12, ftol_rel=1e-12)
-        # reshape x to have a tensor
-        # x = x_flatten.reshape(S.node_coords.shape)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -169,8 +167,6 @@ def plot_sol(ind: gp.PrimitiveTree, X: npt.NDArray, bvalues: dict,
                         triangles=S.S[2], color="#e5f5e0")
         axes[i].triplot(u[i][:, 0], u[i][:, 1],
                         triangles=S.S[2], color="#a1d99b")
-        # axes[i].triplot(X[i, :, 0], X[i, :, 1],
-        #                triangles=S.S[2], color="#4daf4a")
     fig.canvas.draw()
     fig.canvas.flush_events()
     plt.pause(0.1)
