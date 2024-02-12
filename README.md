@@ -1,20 +1,22 @@
 [![Documentation Status](https://readthedocs.org/projects/alpine/badge/?version=latest)](https://alpine.readthedocs.io/en/latest/?badge=latest)
 
-# alpine
+# AlpineGP
 
-_Alpine_ is a Python library that helps to build algorithms that learn *symbolic* models
+_AlpineGP_ is a Python library that helps to build algorithms that learn *symbolic* models
 of _physical systems_ starting from data. It combines the _Discrete Calculus_ framework
 implemented in the library [`dctkit`](https://github.com/alucantonio/dctkit) with the
-Strongly-Typed Genetic Programming approach to symbolic regression _via_ the
+Strongly-Typed Genetic Programming approach to _symbolic regression_ via the
 [`DEAP`](https://github.com/alucantonio/DEAP) library.
 
 ## Installation
 
-Dependencies should be installed within a `conda` environment. To create a suitable
+Dependencies should be installed within a `conda` environment. We recommend using
+[`mamba`](https://github.com/mamba-org/mamba) since it is much faster than `conda` at
+solving the environment and downloading the dependencies. To create a suitable
 environment based on the provided `.yaml` file, use the command
 
 ```bash
-$ conda env create -f environment.yaml
+$ mamba env create -f environment.yaml
 ```
 
 Otherwise, update an existing environment using the same `.yaml` file.
@@ -25,7 +27,7 @@ After activating the environment, clone the git repository and launch the follow
 $ pip install -e .
 ```
 
-to install a development version of the `alpine` library.
+to install a development version of the library.
 
 Running the tests:
 
