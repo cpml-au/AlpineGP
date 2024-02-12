@@ -2,11 +2,13 @@
 
 # AlpineGP
 
-_AlpineGP_ is a Python library that helps to build algorithms that learn *symbolic* models
-of _physical systems_ starting from data. It combines the _Discrete Calculus_ framework
-implemented in the library [`dctkit`](https://github.com/alucantonio/dctkit) with the
-Strongly-Typed Genetic Programming approach to _symbolic regression_ via the
-[`DEAP`](https://github.com/alucantonio/DEAP) library.
+_AlpineGP_ is a Python library that helps to build algorithms that can identify _symbolic_ models
+of _physical systems_ starting from data. It performs **symbolic regression** using a
+_strongly-typed genetic programming_ approach implemented in the [`DEAP`](https://github.com/alucantonio/DEAP)
+library. As a natural language for expressing physical models, it leverages the
+**discrete calculus** framework
+defined and implemented in the library [`dctkit`](https://github.com/alucantonio/dctkit).
+
 
 ## Installation
 
