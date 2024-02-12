@@ -1,0 +1,43 @@
+# template for Poisson parameters file
+gp:
+  NINDIVIDUALS: 100
+  NGEN: 20
+  CXPB: 0.2
+  MUTPB: 0.8
+  frac_elitist: 0
+  min_: 2
+  max_: 5
+  overlapping_generation: True
+  early_stopping: { "enabled": False, "max_overfit": 10 }
+  parsimony_pressure:
+    { "enabled": False, "fitness_first": True, "parsimony_size": 1.5 }
+  penalty: { "method": "length", "reg_param": 0.1 }
+  select:
+    tournsize: 2
+    stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  primitives:
+    [
+      { "name": "AddF", "dimension": None, "rank": None },
+      { "name": "SubF", "dimension": None, "rank": None },
+      { "name": "MulF", "dimension": None, "rank": None },
+      { "name": "Div", "dimension": None, "rank": None },
+      { "name": "AddC", "dimension": ["0", "1"], "rank": ["SC"] },
+      { "name": "SubC", "dimension": ["0", "1"], "rank": ["SC"] },
+      { "name": "cob", "dimension": ["0", "1"], "rank": ["SC"] },
+      { "name": "del", "dimension": ["1"], "rank": ["SC"] },
+      { "name": "St1", "dimension": ["0", "1"], "rank": ["SC"] },
+      { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
+      { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
+    ]
+
+plot:
+  plot_best: False
+  plot_best_genealogy: False
