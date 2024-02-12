@@ -37,7 +37,8 @@ class GPSymbRegProblem():
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
-                 use_ray=True):
+                 use_ray=True,
+                 test_mode=False):
         """Symbolic regression problem via Genetic Programming.
 
             Args:
@@ -103,7 +104,7 @@ class GPSymbRegProblem():
         self.history = tools.History()
 
         self.use_ray = use_ray
-        if use_ray:
+        if use_ray and not test_mode:
             ray.init()
 
         self.plot_initialized = False
