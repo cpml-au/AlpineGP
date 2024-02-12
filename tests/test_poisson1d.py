@@ -45,7 +45,8 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
     best_sols = []
 
     for i, vec_y in enumerate(y):
-        # set additional arguments of the objective function (apart from the vector of unknowns)
+        # set additional arguments of the objective function
+        # (apart from the vector of unknowns)
         args = {'y': vec_y}
         prb.set_obj_args(args)
 
@@ -74,7 +75,8 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
 
 @ray.remote
 def eval_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-              S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
+              S: SimplicialComplex, u_0: C.CochainP0,
+              penalty: dict) -> List[npt.NDArray]:
 
     _, best_sols = eval_MSE_sol(individual, X, y, S, u_0)
 
@@ -83,7 +85,8 @@ def eval_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
 @ray.remote
 def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-                 S: SimplicialComplex, u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
+                 S: SimplicialComplex, u_0: C.CochainP0,
+                 penalty: dict) -> Tuple[float, ]:
 
     total_err, _ = eval_MSE_sol(individual, X, y, S, u_0)
 
