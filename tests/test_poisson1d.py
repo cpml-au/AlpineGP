@@ -13,6 +13,7 @@ import yaml
 from typing import Tuple, Callable, List
 import numpy.typing as npt
 import os
+import pytest
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
@@ -96,8 +97,11 @@ def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArr
     return objval,
 
 
-def test_poisson1d(set_test_dir):
-    yamlfile = "poisson1d_1.yaml"
+cases = ['poisson1d_1.yaml', 'poisson1d_2.yaml']
+
+
+@pytest.mark.parametrize('yamlfile', cases)
+def test_poisson1d(set_test_dir, yamlfile):
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
     with open(filename) as config_file:
         config_file_data = yaml.safe_load(config_file)
@@ -147,7 +151,9 @@ def test_poisson1d(set_test_dir):
 
     feature_extractors = [len]
     GPprb.register_map(feature_extractors)
-    GPprb.run(print_log=True, plot_best_individual_tree=False)
+    GPprb.run(print_log=True, plot_best_individual_tree=False,
+              save_best_individual=True, save_best_test_sols=True,
+              save_train_fit_history=True)
 
     u_best = GPprb.toolbox.map(GPprb.toolbox.evaluate_test_sols, (GPprb.best,))[0]
 

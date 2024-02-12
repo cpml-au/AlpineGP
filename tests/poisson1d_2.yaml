@@ -13,7 +13,7 @@ gp:
   penalty: { "method": "length", "reg_param": 0.1 }
   select:
     tournsize: 2
-    stochastic_tournament: { "enabled": False, "prob": [0.7, 0.3] }
+    stochastic_tournament: { "enabled": True, "prob": [0.7, 0.3] }
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
