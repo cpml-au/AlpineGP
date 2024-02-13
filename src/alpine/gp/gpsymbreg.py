@@ -21,6 +21,24 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
 
 
 class GPSymbRegProblem():
+    """Symbolic regression problem via Genetic Programming.
+
+        Args:
+            pset: set of primitives and terminals (loosely or strongly typed).
+            toolbox: set to None if `config_file_data` is provided.
+            individualCreator: set to None if `config_file_data` is provided.
+            NINDIVIDUALS: number of individuals in the parent population.
+            NGEN: number of generations.
+            CXPB: cross-over probability.
+            MUTPB: mutation probability.
+            frac_elitist: best individuals to keep expressed as a percentage of the
+                population (ex. 0.1 = keep top 10% individuals)
+            overlapping_generation: True if the offspring competes with the parents
+                for survival.
+            tournsize: number of individuals competing in each tournament when
+                selection of the parents is carried out.
+    """
+
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
                  toolbox: base.Toolbox = None,
@@ -36,23 +54,6 @@ class GPSymbRegProblem():
                  config_file_data: Dict | None = None,
                  use_ray=True,
                  test_mode=False):
-        """Symbolic regression problem via Genetic Programming.
-
-            Attributes:
-                pset: set of primitives and terminals (loosely or strongly typed).
-                toolbox: set to None if `config_file_data` is provided.
-                individualCreator: set to None if `config_file_data` is provided.
-                NINDIVIDUALS: number of individuals in the parent population.
-                NGEN: number of generations.
-                CXPB: cross-over probability.
-                MUTPB: mutation probability.
-                frac_elitist: best individuals to keep expressed as a percentage of the
-                    population (ex. 0.1 = keep top 10% individuals)
-                overlapping_generation: True if the offspring competes with the parents
-                    for survival.
-                tournsize: number of individuals competing in each tournament when
-                    selection of the parents is carried out.
-        """
         self.pset = pset
         if config_file_data is not None:
             self.load_config_data(config_file_data)
