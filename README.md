@@ -9,6 +9,10 @@ library. As a natural language for expressing physical models, it leverages the
 **discrete calculus** framework
 defined and implemented in the library [`dctkit`](https://github.com/alucantonio/dctkit).
 
+_AlpineGP_ has been introduced in the paper [_Discovering interpretable physical models
+with symbolic regression and discrete exterior calculus_](https://iopscience.iop.org/article/10.1088/2632-2153/ad1af2),
+along with several benchmark problems.
+
 
 ## Installation
 
@@ -138,3 +142,19 @@ ray.shutdown()
 ```
 
 A complete example notebook can be found in the `examples` directory.
+
+## Citing
+```
+@article{Manti_2024,
+    doi = {10.1088/2632-2153/ad1af2},
+    url = {https://dx.doi.org/10.1088/2632-2153/ad1af2},
+    year = {2024},
+    publisher = {IOP Publishing},
+    volume = {5},
+    number = {1},
+    pages = {015005},
+    author = {Simone Manti and Alessandro Lucantonio},
+    title = {Discovering interpretable physical models using symbolic regression and discrete exterior calculus},
+    journal = {Machine Learning: Science and Technology}
+}
+```
