@@ -210,7 +210,7 @@ def stgp_poisson(config_file, output_path=None):
     pset.renameArguments(ARG1="f")
 
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
+    GPprb = gps.GPSymbolicRegressor(pset=pset, config_file_data=config_file)
 
     penalty = config_file["gp"]["penalty"]
 

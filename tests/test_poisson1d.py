@@ -2,7 +2,7 @@ from dctkit.dec import cochain as C
 from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
-from deap import gp, creator
+from deap import gp
 from alpine.gp import gpsymbreg as gps
 from dctkit import config
 import dctkit
@@ -149,22 +149,23 @@ def test_poisson1d(set_test_dir, yamlfile):
     penalty = config_file_data["gp"]["penalty"]
     common_params = {'S': S, 'u_0': u_0, 'penalty': penalty}
 
-    GPprb = gps.GPSymbRegProblem(
+    gpsr = gps.GPSymbolicRegressor(
         pset=pset, fitness=eval_fitness.remote,
-        error_metric=eval_MSE.remote, config_file_data=config_file_data,
+        error_metric=eval_MSE.remote, eval_sols=eval_sols.remote,
+        config_file_data=config_file_data,
         common_data=common_params, feature_extractors=[len],
         seed=seed_str, test_mode=True)
 
     param_names = ('X', 'y')
 
-    GPprb.fit(X_train, y_train, param_names)
+    gpsr.fit(X_train, y_train, param_names)
 
-    # GPprb.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
-    #           save_best_individual=True, save_best_test_sols=True,
-    #           save_train_fit_history=True, X_test_param_name="X",
-    #           output_path="./", seed=seed, print_best_test_MSE=True)
+    gpsr.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
+             save_best_individual=True, save_best_test_sols=True,
+             save_train_fit_history=True, X_test_param_name="X",
+             output_path="./", seed=gpsr.seed, print_best_test_MSE=True)
 
-    u_best = GPprb.predict(X_train, y_train, param_names, eval_sols.remote)
+    u_best = gpsr.predict(X_train, y_train, param_names)
 
     ray.shutdown()
     assert np.allclose(u.coeffs, np.ravel(u_best))
