@@ -31,9 +31,6 @@ class GPSymbRegProblem():
                  MUTPB: float = 0.2,
                  frac_elitist: float = 0.,
                  overlapping_generation: bool = False,
-                 parsimony_pressure={'enabled': False,
-                                     'fitness_first': True,
-                                     'parsimony_size': 1.5},
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  config_file_data: Dict | None = None,
@@ -41,10 +38,10 @@ class GPSymbRegProblem():
                  test_mode=False):
         """Symbolic regression problem via Genetic Programming.
 
-            Args:
-                pset: set of primitives and terminals.
-                toolbox: Set to None if `config_file_data` is provided.
-                individualCreator: Set to None if `config_file_data` is provided.
+            Attributes:
+                pset: set of primitives and terminals (loosely or strongly typed).
+                toolbox: set to None if `config_file_data` is provided.
+                individualCreator: set to None if `config_file_data` is provided.
                 NINDIVIDUALS: number of individuals in the parent population.
                 NGEN: number of generations.
                 CXPB: cross-over probability.
@@ -53,6 +50,8 @@ class GPSymbRegProblem():
                     population (ex. 0.1 = keep top 10% individuals)
                 overlapping_generation: True if the offspring competes with the parents
                     for survival.
+                tournsize: number of individuals competing in each tournament when
+                    selection of the parents is carried out.
         """
         self.pset = pset
         if config_file_data is not None:
@@ -64,7 +63,6 @@ class GPSymbRegProblem():
             self.MUTPB = MUTPB
 
             self.overlapping_generation = overlapping_generation
-            self.parsimony_pressure = parsimony_pressure
             self.tournsize = tournsize
             self.stochastic_tournament = stochastic_tournament
             self.early_stopping = {'enabled': False, 'max_overfit': 0}
@@ -168,7 +166,6 @@ class GPSymbRegProblem():
         self.MUTPB = config_file_data["gp"]["MUTPB"]
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
-        self.parsimony_pressure = config_file_data["gp"]["parsimony_pressure"]
         self.tournsize = config_file_data["gp"]["select"]["tournsize"]
         self.stochastic_tournament = \
             config_file_data["gp"]["select"]["stochastic_tournament"]
@@ -313,16 +310,6 @@ class GPSymbRegProblem():
 
         bestind = tools.selBest(individuals, self.n_elitist)
 
-        if self.parsimony_pressure['enabled']:
-            return bestind + tools.selDoubleTournament(individuals, n_tournament,
-                                                       fitness_size=n_tournament,
-                                                       fitness_first=self.
-                                                       parsimony_pressure
-                                                       ['fitness_first'],
-                                                       parsimony_size=self.
-                                                       parsimony_pressure
-                                                       ['parsimony_size'])
-
         if self.stochastic_tournament['enabled']:
             return bestind + tools.selStochasticTournament(individuals, n_tournament,
                                                            tournsize=self.tournsize,
@@ -400,8 +387,8 @@ class GPSymbRegProblem():
             seed: List | None = None,
             preprocess_fun: Callable | None = None,
             callback_fun: Callable | None = None,
-            plot_best_individual_tree: bool = True,
-            print_best_test_MSE: bool = True,
+            plot_best_individual_tree: bool = False,
+            print_best_test_MSE: bool = False,
             save_best_individual: bool = False,
             save_train_fit_history: bool = False,
             save_best_test_sols: bool = False,
@@ -602,12 +589,10 @@ class GPSymbRegProblem():
             self.save_best_test_sols(output_path, X_test_param_name)
             print("Best individual solution evaluated over the test set saved to disk.")
 
-        if self.use_ray:
-            # ray.shutdown()
-            pass
+        # NOTE: ray.shutdown should be manually called by the user
 
     def plot_best_individual_tree(self):
-        """Plots the tree of the best individual."""
+        """Plots the tree of the best individual at the end of the evolution."""
         nodes, edges, labels = gp.graph(self.best)
         graph = nx.Graph()
         graph.add_nodes_from(nodes)
@@ -636,6 +621,12 @@ class GPSymbRegProblem():
     def save_best_test_sols(self, output_path: str, X_test_param_name: str):
         """Saves solutions (.npy) corresponding to the best individual evaluated
         over the test dataset.
+
+        Args:
+            output_path: path where the solutions should be saved (one .npy file for
+                each sample in the test dataset).
+            X_test_param_name: name of the X parameter in the test dataset (check the
+                `store_eval_dataset_params' function.
         """
         best_test_sols = self.toolbox.map(self.toolbox.evaluate_test_sols,
                                           (self.best,))[0]
