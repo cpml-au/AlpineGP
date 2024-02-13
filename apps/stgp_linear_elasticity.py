@@ -262,7 +262,7 @@ def stgp_linear_elasticity(config_file, output_path=None):
     pset.renameArguments(ARG0="F")
 
     # create symbolic regression problem instance
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file)
+    GPprb = gps.GPSymbolicRegressor(pset=pset, config_file_data=config_file)
 
     penalty = config_file["gp"]["penalty"]
 

@@ -20,7 +20,7 @@ os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                            "intra_op_parallelism_threads=1")
 
 
-class GPSymbRegProblem():
+class GPSymbolicRegressor():
     """Symbolic regression problem via Genetic Programming.
 
         Args:
@@ -43,6 +43,7 @@ class GPSymbRegProblem():
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
                  fitness: Callable,
                  error_metric: Callable | None = None,
+                 eval_sols: Callable | None = None,
                  common_data: Dict | None = None,
                  feature_extractors: List = [],
                  toolbox: base.Toolbox = None,
@@ -57,13 +58,13 @@ class GPSymbRegProblem():
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  seed=None,
                  config_file_data: Dict | None = None,
-                 use_ray=True,
                  test_mode=False):
 
         self.pset = pset
 
         self.fitness = fitness
         self.error_metric = error_metric
+        self.eval_sols = eval_sols
 
         self.data_store = dict()
 
@@ -117,8 +118,7 @@ class GPSymbRegProblem():
         # Create history object to build the genealogy tree
         self.history = tools.History()
 
-        self.use_ray = use_ray
-        if use_ray and not test_mode:
+        if not test_mode:
             ray.init()
 
         self.register_map(feature_extractors)
@@ -243,17 +243,6 @@ class GPSymbRegProblem():
             data[key] = ray.put(value)
         self.data_store[label] = data
 
-    # def __set_eval_args(self, test_data_present=False):
-    #     """Sets the keyword arguments of the evaluation functions."""
-    #     store = self.data_store
-    #     if self.early_stopping['enabled']:
-    #         self.args_val = store['common'] | store['val']
-    #     self.args_train = store['common'] | store['train']
-    #     if test_data_present:
-    #         self.args_test_MSE = store['common'] | store['test']
-    #         self.args_test_sols = self.args_test_MSE
-    #     self.args_set = True
-
     def register_fitness_func(self, fitness: Callable):
         if not hasattr(self, "args_train"):
             store = self.data_store
@@ -275,33 +264,6 @@ class GPSymbRegProblem():
             self.args_test_sols = store['common'] | store['test']
         self.toolbox.register("evaluate_test_sols", test_eval,
                               **self.args_test_sols)
-
-    # def register_eval_funcs(self, fitness: Callable,
-    #                         error_metric: Callable | None = None,
-    #                         eval_sol: Callable | None = None):
-    #     """Register functions for the evaluation of the fitness, the error metric and
-    #     the prediction associated to an individual.
-    #     """
-    #     if not hasattr(self, "args_set") or not self.args_set:
-    #         if eval_sol is not None:
-    #             self.__set_eval_args(test_data_present=True)
-    #         else:
-    #             self.__set_eval_args()
-
-    #     if self.early_stopping['enabled']:
-    #         self.toolbox.register(
-    #             "evaluate_val_fit", fitness, **self.args_val)
-    #         self.toolbox.register(
-    #             "evaluate_val_MSE", error_metric, **self.args_val)
-
-    #     self.toolbox.register("evaluate_train", fitness, **self.args_train)
-
-    #     if error_metric is not None:
-    #         self.toolbox.register("evaluate_test_MSE", error_metric,
-    #                               **self.args_test_MSE)
-    #     if eval_sol is not None:
-    #         self.toolbox.register("evaluate_test_sols", eval_sol,
-    #                               **self.args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -443,7 +405,6 @@ class GPSymbRegProblem():
 
     def fit(self, X_train, y_train, param_names, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        # param_names = ('X', 'y')
         datasets = {'train': [X_train, y_train], 'val': [X_train, y_train]}
         self.store_eval_dataset_params(param_names, datasets)
         self.register_fitness_func(self.fitness)
@@ -451,11 +412,10 @@ class GPSymbRegProblem():
             self.register_val_funcs(self.fitness, self.error_metric)
         self.run(seed=self.seed)
 
-    def predict(self, X_test, y_test, param_names, eval_func):
-        # NOTE: assuming we call predict after fit
+    def predict(self, X_test, y_test, param_names):
         datasets = {'test': [X_test, y_test]}
         self.store_eval_dataset_params(param_names, datasets)
-        self.register_test_eval_func(eval_func)
+        self.register_test_eval_func(self.eval_sols)
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols,
                                   (self.best,))[0]
         return u_best
@@ -714,8 +674,7 @@ class GPSymbRegProblem():
                                           (self.best,))[0]
 
         X_test = self.data_store['test'][X_test_param_name]
-        if self.use_ray:
-            X_test = ray.get(X_test)
+        X_test = ray.get(X_test)
 
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)

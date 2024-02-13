@@ -337,7 +337,7 @@ def stgp_elastica(config_file_data, output_path=None):
     pset.renameArguments(ARG0="theta")
     pset.renameArguments(ARG1="FL2_EI0")
 
-    GPprb = gps.GPSymbRegProblem(pset=pset, config_file_data=config_file_data)
+    GPprb = gps.GPSymbolicRegressor(pset=pset, config_file_data=config_file_data)
 
     penalty = config_file_data["gp"]['penalty']
 
