@@ -41,6 +41,10 @@ class GPSymbRegProblem():
 
     def __init__(self,
                  pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
+                 fitness: Callable,
+                 error_metric: Callable | None = None,
+                 common_data: Dict | None = None,
+                 feature_extractors: List = [],
                  toolbox: base.Toolbox = None,
                  individualCreator: gp.PrimitiveTree = None,
                  NINDIVIDUALS: int = 10,
@@ -51,10 +55,21 @@ class GPSymbRegProblem():
                  overlapping_generation: bool = False,
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
+                 seed=None,
                  config_file_data: Dict | None = None,
                  use_ray=True,
                  test_mode=False):
+
         self.pset = pset
+
+        self.fitness = fitness
+        self.error_metric = error_metric
+
+        self.data_store = dict()
+
+        if common_data is not None:
+            self.store_eval_common_params(common_data)
+
         if config_file_data is not None:
             self.load_config_data(config_file_data)
         else:
@@ -75,8 +90,10 @@ class GPSymbRegProblem():
 
             self.toolbox = toolbox
 
+        self.seed = [self.createIndividual.from_string(seed, pset)]
+
         # FIXME: move this instruction in the initialization of the toolbox
-        self.toolbox.register("select", self.select_with_elitism)
+        self.toolbox.register("select", self.tournament_with_elitism)
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
@@ -92,8 +109,6 @@ class GPSymbRegProblem():
 
         self.train_fit_history = []
 
-        self.data_store = dict()
-
         # best validation score among all the populations
         self.bvp = None
         # best training score among all the populations
@@ -105,6 +120,8 @@ class GPSymbRegProblem():
         self.use_ray = use_ray
         if use_ray and not test_mode:
             ray.init()
+
+        self.register_map(feature_extractors)
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -183,11 +200,29 @@ class GPSymbRegProblem():
         self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
     def store_eval_common_params(self, data: Dict):
-        self.__store_eval_params('common', data)
+        """Store names and values of the parameters that are in common between
+        the fitness and the error metric functions in the common object space.
+
+        Args:
+            data: dictionary containing paramter names and values.
+        """
+        self.__store_ray_objects('common', data)
 
     def store_eval_dataset_params(self, params_names: List[str],
                                   datasets: Dict):
+        """Store names and values of the parameters associated to the datasets
+        (Xs and ys), for training and possibly validation (if early stopping
+        is enabled).
 
+        Args:
+            params_names: list of parameter names (i.e. ("X","y")).
+            datasets: the keys are 'train' and 'val' denoting the training and the
+                validation datasets, respectively. The associated values are lists
+                containing the values of the parameters (i.e. [X_train, y_train])
+                for each dataset.
+        """
+        # when early stopping is disabled we are not performing validation, but
+        # we can use the validation set together with the training one for training.
         if not self.early_stopping['enabled'] and 'val' in datasets:
             for i, _ in enumerate(datasets['train']):
                 try:
@@ -201,45 +236,72 @@ class GPSymbRegProblem():
 
         for dataset_label in datasets.keys():
             keys_values = dict(zip(params_names, datasets[dataset_label]))
-            self.__store_eval_params(dataset_label, keys_values)
+            self.__store_ray_objects(dataset_label, keys_values)
 
-    def __store_eval_params(self, label: str, data: Dict):
+    def __store_ray_objects(self, label: str, data: Dict):
         for key, value in data.items():
             data[key] = ray.put(value)
         self.data_store[label] = data
 
-    def set_eval_args(self):
-        store = self.data_store
-        if self.early_stopping['enabled']:
-            self.args_val = store['common'] | store['val']
-        self.args_train = store['common'] | store['train']
-        self.args_test_MSE = store['common'] | store['test']
-        self.args_test_sols = self.args_test_MSE
-        self.args_set = True
+    # def __set_eval_args(self, test_data_present=False):
+    #     """Sets the keyword arguments of the evaluation functions."""
+    #     store = self.data_store
+    #     if self.early_stopping['enabled']:
+    #         self.args_val = store['common'] | store['val']
+    #     self.args_train = store['common'] | store['train']
+    #     if test_data_present:
+    #         self.args_test_MSE = store['common'] | store['test']
+    #         self.args_test_sols = self.args_test_MSE
+    #     self.args_set = True
 
-    def register_eval_funcs(self, fitness: Callable,
-                            error_metric: Callable | None = None,
-                            test_sols: Callable | None = None):
-        """Register functions for the evaluation of the fitness of the individuals over
-        the datasets.
-        """
-        if not hasattr(self, "args_set") or not self.args_set:
-            self.set_eval_args()
-
-        if self.early_stopping['enabled']:
-            self.toolbox.register(
-                "evaluate_val_fit", fitness, **self.args_val)
-            self.toolbox.register(
-                "evaluate_val_MSE", error_metric, **self.args_val)
-
+    def register_fitness_func(self, fitness: Callable):
+        if not hasattr(self, "args_train"):
+            store = self.data_store
+            self.args_train = store['common'] | store['train']
         self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
-        if error_metric is not None:
-            self.toolbox.register("evaluate_test_MSE", error_metric,
-                                  **self.args_test_MSE)
-        if test_sols is not None:
-            self.toolbox.register("evaluate_test_sols", test_sols,
-                                  **self.args_test_sols)
+    def register_val_funcs(self, fitness: Callable, error_metric: Callable):
+        if not hasattr(self, "args_val"):
+            store = self.data_store
+            self.args_val = store['common'] | store['val']
+        self.toolbox.register(
+            "evaluate_val_fit", fitness, **self.args_val)
+        self.toolbox.register(
+            "evaluate_val_MSE", error_metric, **self.args_val)
+
+    def register_test_eval_func(self, test_eval: Callable):
+        if not hasattr(self, "args_test_sols"):
+            store = self.data_store
+            self.args_test_sols = store['common'] | store['test']
+        self.toolbox.register("evaluate_test_sols", test_eval,
+                              **self.args_test_sols)
+
+    # def register_eval_funcs(self, fitness: Callable,
+    #                         error_metric: Callable | None = None,
+    #                         eval_sol: Callable | None = None):
+    #     """Register functions for the evaluation of the fitness, the error metric and
+    #     the prediction associated to an individual.
+    #     """
+    #     if not hasattr(self, "args_set") or not self.args_set:
+    #         if eval_sol is not None:
+    #             self.__set_eval_args(test_data_present=True)
+    #         else:
+    #             self.__set_eval_args()
+
+    #     if self.early_stopping['enabled']:
+    #         self.toolbox.register(
+    #             "evaluate_val_fit", fitness, **self.args_val)
+    #         self.toolbox.register(
+    #             "evaluate_val_MSE", error_metric, **self.args_val)
+
+    #     self.toolbox.register("evaluate_train", fitness, **self.args_train)
+
+    #     if error_metric is not None:
+    #         self.toolbox.register("evaluate_test_MSE", error_metric,
+    #                               **self.args_test_MSE)
+    #     if eval_sol is not None:
+    #         self.toolbox.register("evaluate_test_sols", eval_sol,
+    #                               **self.args_test_sols)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -298,7 +360,7 @@ class GPSymbRegProblem():
             # Print statistics for the current population
             print(self.logbook.stream, flush=True)
 
-    def select_with_elitism(self, individuals):
+    def tournament_with_elitism(self, individuals):
         """Performs tournament selection with elitism.
 
             Args:
@@ -378,6 +440,25 @@ class GPSymbRegProblem():
             return fitnesses
 
         self.toolbox.register("map", ray_mapper, toolbox=self.toolbox)
+
+    def fit(self, X_train, y_train, param_names, X_val=None, y_val=None):
+        """Fits the training data using GP-based symbolic regression."""
+        # param_names = ('X', 'y')
+        datasets = {'train': [X_train, y_train], 'val': [X_train, y_train]}
+        self.store_eval_dataset_params(param_names, datasets)
+        self.register_fitness_func(self.fitness)
+        if self.error_metric is not None:
+            self.register_val_funcs(self.fitness, self.error_metric)
+        self.run(seed=self.seed)
+
+    def predict(self, X_test, y_test, param_names, eval_func):
+        # NOTE: assuming we call predict after fit
+        datasets = {'test': [X_test, y_test]}
+        self.store_eval_dataset_params(param_names, datasets)
+        self.register_test_eval_func(eval_func)
+        u_best = self.toolbox.map(self.toolbox.evaluate_test_sols,
+                                  (self.best,))[0]
+        return u_best
 
     def run(self,
             plot_history: bool = False,
