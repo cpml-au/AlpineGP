@@ -144,37 +144,27 @@ def test_poisson1d(set_test_dir, yamlfile):
     pset.renameArguments(ARG0="u")
     pset.renameArguments(ARG1="f")
 
-    GPprb = gps.GPSymbRegProblem(
-        pset=pset, config_file_data=config_file_data, test_mode=True)
+    seed_str = "AddCP0(delP1(cobP0(u)),f)"
 
     penalty = config_file_data["gp"]["penalty"]
+    common_params = {'S': S, 'u_0': u_0, 'penalty': penalty}
 
-    # store shared objects refs
+    GPprb = gps.GPSymbRegProblem(
+        pset=pset, fitness=eval_fitness.remote,
+        error_metric=eval_MSE.remote, config_file_data=config_file_data,
+        common_data=common_params, feature_extractors=[len],
+        seed=seed_str, test_mode=True)
 
-    GPprb.store_eval_common_params({'S': S, 'u_0': u_0, 'penalty': penalty})
     param_names = ('X', 'y')
-    datasets = {'train': [X_train, y_train], 'val': [X_train, y_train],
-                'test': [X_train, y_train]}
 
-    GPprb.store_eval_dataset_params(param_names, datasets)
+    GPprb.fit(X_train, y_train, param_names)
 
-    GPprb.register_eval_funcs(fitness=eval_fitness.remote,
-                              error_metric=eval_MSE.remote,
-                              test_sols=eval_sols.remote)
+    # GPprb.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
+    #           save_best_individual=True, save_best_test_sols=True,
+    #           save_train_fit_history=True, X_test_param_name="X",
+    #           output_path="./", seed=seed, print_best_test_MSE=True)
 
-    feature_extractors = [len]
-    GPprb.register_map(feature_extractors)
-    seed_str = "AddCP0(delP1(cobP0(u)),f)"
-    seed_ind = creator.Individual.from_string(seed_str, pset)
-    seed = [seed_ind]
-    GPprb.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
-              save_best_individual=True, save_best_test_sols=True,
-              save_train_fit_history=True, X_test_param_name="X",
-              output_path="./", seed=seed, print_best_test_MSE=True)
-
-    GPprb.run(seed=seed)
-
-    u_best = GPprb.toolbox.map(GPprb.toolbox.evaluate_test_sols, (GPprb.best,))[0]
+    u_best = GPprb.predict(X_train, y_train, param_names, eval_sols.remote)
 
     ray.shutdown()
     assert np.allclose(u.coeffs, np.ravel(u_best))

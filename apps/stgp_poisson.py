@@ -225,7 +225,7 @@ def stgp_poisson(config_file, output_path=None):
     GPprb.store_eval_dataset_params(params_names, datasets)
 
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
-                              test_sols=eval_best_sols.remote)
+                              eval_sol=eval_best_sols.remote)
 
     if GPprb.plot_best:
         triang = tri.Triangulation(S.node_coords[:, 0], S.node_coords[:, 1], S.S[2])

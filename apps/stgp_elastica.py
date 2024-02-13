@@ -350,7 +350,7 @@ def stgp_elastica(config_file_data, output_path=None):
     GPprb.store_eval_dataset_params(param_names, datasets)
 
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
-                              test_sols=eval_best_sols.remote)
+                              eval_sol=eval_best_sols.remote)
 
     # register custom functions
     GPprb.toolbox.register("evaluate_EI0", tune_EI0.remote, FL2=Fs_train[0],
