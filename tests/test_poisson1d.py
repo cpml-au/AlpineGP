@@ -160,10 +160,10 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     gpsr.fit(X_train, y_train, param_names)
 
-    gpsr.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
-             save_best_individual=True, save_best_test_sols=True,
-             save_train_fit_history=True, X_test_param_name="X",
-             output_path="./", seed=gpsr.seed, print_best_test_MSE=True)
+    # gpsr.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
+    #          save_best_individual=True, save_best_test_sols=True,
+    #          save_train_fit_history=True, X_test_param_name="X",
+    #          output_path="./", seed=gpsr.seed, print_best_test_MSE=True)
 
     u_best = gpsr.predict(X_train, y_train, param_names)
 

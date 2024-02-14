@@ -347,7 +347,7 @@ def stgp_elastica(config_file_data, output_path=None):
     datasets = {'train': [thetas_train, Fs_train, theta_in_all['train']],
                 'val': [thetas_val, Fs_val, theta_in_all['val']],
                 'test': [thetas_test, Fs_test, theta_in_all['test']]}
-    GPprb.store_eval_dataset_params(param_names, datasets)
+    GPprb.store_datasets_params(param_names, datasets)
 
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
                               eval_sol=eval_best_sols.remote)
@@ -371,7 +371,7 @@ def stgp_elastica(config_file_data, output_path=None):
 
     feature_extractors = [lambda ind: ind.EI0, len]
 
-    GPprb.register_map(feature_extractors)
+    GPprb.__register_map(feature_extractors)
 
     def evaluate_EI0s(pop):
         if not hasattr(pop[0], "EI0"):
@@ -389,10 +389,10 @@ def stgp_elastica(config_file_data, output_path=None):
 
     start = time.perf_counter()
 
-    GPprb.run(print_log=True, seed=None, save_train_fit_history=True,
-              save_best_individual=True, save_best_test_sols=True,
-              X_test_param_name='thetas_true', output_path=output_path,
-              preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
+    GPprb.__run(print_log=True, seed=None, save_train_fit_history=True,
+                save_best_individual=True, save_best_test_sols=True,
+                X_test_param_name='thetas_true', output_path=output_path,
+                preprocess_fun=evaluate_EI0s, callback_fun=print_EI0)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 

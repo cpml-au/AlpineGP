@@ -56,8 +56,22 @@ class GPSymbolicRegressor():
                  overlapping_generation: bool = False,
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
-                 seed=None,
+                 seed: List | None = None,
                  config_file_data: Dict | None = None,
+                 plot_history: bool = False,
+                 print_log: bool = False,
+                 plot_best: bool | None = None,
+                 plot_freq: int = 5,
+                 plot_best_genealogy: bool | None = None,
+                 preprocess_fun: Callable | None = None,
+                 callback_fun: Callable | None = None,
+                 plot_best_individual_tree: bool = False,
+                 print_best_test_MSE: bool = False,
+                 save_best_individual: bool = False,
+                 save_train_fit_history: bool = False,
+                 save_best_test_sols: bool = False,
+                 X_test_param_name: str | None = None,
+                 output_path: str | None = None,
                  test_mode=False):
 
         self.pset = pset
@@ -67,6 +81,25 @@ class GPSymbolicRegressor():
         self.eval_sols = eval_sols
 
         self.data_store = dict()
+
+        if plot_best is not None:
+            self.plot_best = plot_best
+
+        if plot_best_genealogy is not None:
+            self.plot_best_genealogy = plot_best_genealogy
+
+        self.plot_history = plot_history
+        self.print_log = print_log
+        self.plot_freq = plot_freq
+        self.preprocess_fun = preprocess_fun
+        self.callback_fun = callback_fun
+        self.is_plot_best_individual_tree = plot_best_individual_tree
+        self.is_print_best_test_MSE = print_best_test_MSE
+        self.is_save_best_individual = save_best_individual
+        self.is_save_train_fit_history = save_train_fit_history
+        self.is_save_best_test_sols = save_best_test_sols
+        self.X_test_param_name = X_test_param_name
+        self.output_path = output_path
 
         if common_data is not None:
             self.store_eval_common_params(common_data)
@@ -121,7 +154,12 @@ class GPSymbolicRegressor():
         if not test_mode:
             ray.init()
 
-        self.register_map(feature_extractors)
+        if self.plot_best_genealogy:
+            # Decorators for history
+            self.toolbox.decorate("mate", self.history.decorator)
+            self.toolbox.decorate("mutate", self.history.decorator)
+
+        self.__register_map(feature_extractors)
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -208,11 +246,12 @@ class GPSymbolicRegressor():
         """
         self.__store_ray_objects('common', data)
 
-    def store_eval_dataset_params(self, params_names: List[str],
-                                  datasets: Dict):
+    def store_datasets_params(self, params_names: List[str],
+                              datasets: Dict):
         """Store names and values of the parameters associated to the datasets
         (Xs and ys), for training and possibly validation (if early stopping
-        is enabled).
+        is enabled). The parameters are passed to the fitness and possibly the
+        error metric evaluation functions.
 
         Args:
             params_names: list of parameter names (i.e. ("X","y")).
@@ -250,6 +289,8 @@ class GPSymbolicRegressor():
         self.toolbox.register("evaluate_train", fitness, **self.args_train)
 
     def register_val_funcs(self, fitness: Callable, error_metric: Callable):
+        """Register the functions needed for validation, i.e. the error metric and the
+        fitness function."""
         if not hasattr(self, "args_val"):
             store = self.data_store
             self.args_val = store['common'] | store['val']
@@ -258,12 +299,12 @@ class GPSymbolicRegressor():
         self.toolbox.register(
             "evaluate_val_MSE", error_metric, **self.args_val)
 
-    def register_test_eval_func(self, test_eval: Callable):
-        if not hasattr(self, "args_test_sols"):
+    def register_predict_func(self, test_eval: Callable):
+        if not hasattr(self, "args_predict_func"):
             store = self.data_store
-            self.args_test_sols = store['common'] | store['test']
+            self.args_predict_func = store['common'] | store['test']
         self.toolbox.register("evaluate_test_sols", test_eval,
-                              **self.args_test_sols)
+                              **self.args_predict_func)
 
     def __init_logbook(self, overfit_measure=False):
         # Initialize logbook to collect statistics
@@ -392,7 +433,7 @@ class GPSymbolicRegressor():
         # Save genealogy to file
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
-    def register_map(self, individ_feature_extractors: List[Callable] | None = None):
+    def __register_map(self, individ_feature_extractors: List[Callable] | None = None):
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
@@ -406,36 +447,21 @@ class GPSymbolicRegressor():
     def fit(self, X_train, y_train, param_names, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
         datasets = {'train': [X_train, y_train], 'val': [X_train, y_train]}
-        self.store_eval_dataset_params(param_names, datasets)
+        self.store_datasets_params(param_names, datasets)
         self.register_fitness_func(self.fitness)
         if self.error_metric is not None:
             self.register_val_funcs(self.fitness, self.error_metric)
-        self.run(seed=self.seed)
+        self.__run()
 
     def predict(self, X_test, y_test, param_names):
         datasets = {'test': [X_test, y_test]}
-        self.store_eval_dataset_params(param_names, datasets)
-        self.register_test_eval_func(self.eval_sols)
+        self.store_datasets_params(param_names, datasets)
+        self.register_predict_func(self.eval_sols)
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols,
                                   (self.best,))[0]
         return u_best
 
-    def run(self,
-            plot_history: bool = False,
-            print_log: bool = False,
-            plot_best: bool | None = None,
-            plot_freq: int = 5,
-            plot_best_genealogy: bool | None = None,
-            seed: List | None = None,
-            preprocess_fun: Callable | None = None,
-            callback_fun: Callable | None = None,
-            plot_best_individual_tree: bool = False,
-            print_best_test_MSE: bool = False,
-            save_best_individual: bool = False,
-            save_train_fit_history: bool = False,
-            save_best_test_sols: bool = False,
-            X_test_param_name: str | None = None,
-            output_path: str | None = None):
+    def __run(self):
         """Runs symbolic regression.
 
             Args:
@@ -452,16 +478,6 @@ class GPSymbolicRegressor():
                 callback_fun: function to call after evaluating the fitness of the
                     individuals of each generation.
         """
-        if plot_best is not None:
-            self.plot_best = plot_best
-
-        if plot_best_genealogy is not None:
-            self.plot_best_genealogy = plot_best_genealogy
-
-        if self.plot_best_genealogy:
-            # Decorators for history
-            self.toolbox.decorate("mate", self.history.decorator)
-            self.toolbox.decorate("mutate", self.history.decorator)
 
         print("> MODEL TRAINING/SELECTION STARTED", flush=True)
 
@@ -478,17 +494,17 @@ class GPSymbolicRegressor():
         # Initialize logbook for statistics
         self.__init_logbook(overfit_measure=self.early_stopping['enabled'])
 
-        if seed is not None:
+        if self.seed is not None:
             print("Seeding population with individuals...", flush=True)
-            self.pop[:len(seed)] = seed
+            self.pop[:len(self.seed)] = self.seed
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population...", flush=True)
 
-        if preprocess_fun is not None:
-            preprocess_fun(self.pop)
+        if self.preprocess_fun is not None:
+            self.preprocess_fun(self.pop)
 
         fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop)
 
@@ -528,8 +544,8 @@ class GPSymbolicRegressor():
             # mutation)
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
 
-            if preprocess_fun is not None:
-                preprocess_fun(invalid_ind)
+            if self.preprocess_fun is not None:
+                self.preprocess_fun(invalid_ind)
 
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
 
@@ -550,12 +566,12 @@ class GPSymbolicRegressor():
                                     cgen,
                                     len(invalid_ind),
                                     overfit_measure=self.early_stopping['enabled'],
-                                    print_log=print_log)
+                                    print_log=self.print_log)
 
             print(f"The best individual of this generation is: {best}")
 
-            if callback_fun is not None:
-                callback_fun(self.pop)
+            if self.callback_fun is not None:
+                self.callback_fun(self.pop)
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
@@ -566,11 +582,11 @@ class GPSymbolicRegressor():
                     "valid_fit")
                 self.min_valerr = min(self.val_fit_history)
 
-            if plot_history and (cgen % plot_freq == 0 or cgen == 1):
+            if self.plot_history and (cgen % self.plot_freq == 0 or cgen == 1):
                 self.__plot_history()
 
             if self.plot_best and (self.toolbox.plot_best_func is not None) \
-                    and (cgen % plot_freq == 0 or cgen == 1 or cgen == self.NGEN):
+                    and (cgen % self.plot_freq == 0 or cgen == 1 or cgen == self.NGEN):
                 self.toolbox.plot_best_func(best)
 
             if self.early_stopping['enabled']:
@@ -611,24 +627,24 @@ class GPSymbolicRegressor():
         if self.plot_best_genealogy:
             self.__plot_genealogy(best)
 
-        if plot_best_individual_tree:
+        if self.is_plot_best_individual_tree:
             self.plot_best_individual_tree()
 
-        if print_best_test_MSE and hasattr(self.toolbox, "evaluate_test_MSE"):
+        if self.is_print_best_test_MSE and hasattr(self.toolbox, "evaluate_test_MSE"):
             self.print_best_test_MSE()
 
-        if save_best_individual and output_path is not None:
-            self.save_best_individual(output_path)
+        if self.is_save_best_individual and self.output_path is not None:
+            self.save_best_individual(self.output_path)
             print("String of the best individual saved to disk.")
 
-        if save_train_fit_history and output_path is not None:
-            self.save_train_fit_history(output_path)
+        if self.is_save_train_fit_history and self.output_path is not None:
+            self.save_train_fit_history(self.output_path)
             print("Training fitness history saved to disk.")
 
-        if save_best_test_sols and output_path is not None and \
+        if self.is_save_best_test_sols and self.output_path is not None and \
             hasattr(self.toolbox, "evaluate_test_sols")\
-                and X_test_param_name is not None:
-            self.save_best_test_sols(output_path, X_test_param_name)
+                and self.X_test_param_name is not None:
+            self.save_best_test_sols(self.output_path, self.X_test_param_name)
             print("Best individual solution evaluated over the test set saved to disk.")
 
         # NOTE: ray.shutdown should be manually called by the user
