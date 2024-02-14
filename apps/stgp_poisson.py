@@ -222,7 +222,7 @@ def stgp_poisson(config_file, output_path=None):
     datasets = {'train': [X_train, y_train, bvalues_train],
                 'val': [X_val, y_val, bvalues_val],
                 'test': [X_test, y_test, bvalues_test]}
-    GPprb.store_eval_dataset_params(params_names, datasets)
+    GPprb.store_datasets_params(params_names, datasets)
 
     GPprb.register_eval_funcs(fitness=eval_fitness.remote, error_metric=eval_MSE.remote,
                               eval_sol=eval_best_sols.remote)
@@ -234,7 +234,7 @@ def stgp_poisson(config_file, output_path=None):
                                gamma=gamma, u_0=u_0,
                                toolbox=GPprb.toolbox, triang=triang)
 
-    GPprb.register_map([len])
+    GPprb.__register_map([len])
 
     start = time.perf_counter()
     # opt_string = "SquareF(InnP0(InvMulP0(u, InnP0(u, fk)), delP1(dP0(u))))"
@@ -242,10 +242,10 @@ def stgp_poisson(config_file, output_path=None):
     # opt_individ = creator.Individual.from_string(opt_string, pset)
     # seed = [opt_individ]
 
-    GPprb.run(print_log=True, seed=None,
-              save_best_individual=True, save_train_fit_history=True,
-              save_best_test_sols=True, X_test_param_name="X",
-              output_path=output_path)
+    GPprb.__run(print_log=True, seed=None,
+                save_best_individual=True, save_train_fit_history=True,
+                save_best_test_sols=True, X_test_param_name="X",
+                output_path=output_path)
 
     print(f"Elapsed time: {round(time.perf_counter() - start, 2)}")
 
