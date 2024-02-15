@@ -70,6 +70,7 @@ class GPSymbolicRegressor():
                  overlapping_generation: bool = False,
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
+                 validate: bool = False,
                  seed: List | None = None,
                  config_file_data: Dict | None = None,
                  plot_history: bool = False,
@@ -129,7 +130,7 @@ class GPSymbolicRegressor():
             self.overlapping_generation = overlapping_generation
             self.tournsize = tournsize
             self.stochastic_tournament = stochastic_tournament
-            self.validate = {'enabled': False, 'max_overfit': 0}
+            self.validate = validate
 
             # Elitism settings
             self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
@@ -156,11 +157,6 @@ class GPSymbolicRegressor():
         self.__init_logbook()
 
         self.train_fit_history = []
-
-        # best validation score among all the populations
-        self.bvp = None
-        # best training score among all the populations
-        self.tbtp = None
 
         # Create history object to build the genealogy tree
         self.history = tools.History()
@@ -247,7 +243,7 @@ class GPSymbolicRegressor():
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
-        self.validate = config_file_data["gp"]["early_stopping"]
+        self.validate = config_file_data["gp"]["validate"]
         self.plot_best = config_file_data["plot"]["plot_best"]
         self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
@@ -276,7 +272,7 @@ class GPSymbolicRegressor():
         """
         # when early stopping is disabled we are not performing validation, but
         # we can use the validation set together with the training one for training.
-        if not self.validate['enabled'] and 'val' in datasets:
+        if not self.validate and 'val' in datasets:
             for i, _ in enumerate(datasets['train']):
                 try:
                     datasets['train'][i] = \
@@ -296,60 +292,43 @@ class GPSymbolicRegressor():
             data[key] = ray.put(value)
         self.data_store[label] = data
 
-    def __init_logbook(self, overfit_measure=False):
+    def __init_logbook(self):
         # Initialize logbook to collect statistics
         self.logbook = tools.Logbook()
         # Headers of fields to be printed during log
-        if overfit_measure:
+        if self.validate:
             self.logbook.header = "gen", "evals", "fitness", "size", "valid"
-            self.logbook.chapters["valid"].header = "overfit", "valid_fit", "valid_err"
+            self.logbook.chapters["valid"].header = "valid_fit", "valid_err"
         else:
             self.logbook.header = "gen", "evals", "fitness", "size"
         self.logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.logbook.chapters["size"].header = "min", "avg", "max", "std"
 
-    def __overfit_measure(self, training_fit, validation_fit):
-        if (training_fit > validation_fit):
-            overfit = 0
-        elif (validation_fit < self.bvp):
-            overfit = 0
-            self.bvp = validation_fit
-            self.tbtp = training_fit
-        else:
-            overfit = np.abs(training_fit - validation_fit) - \
-                np.abs(self.tbtp - self.bvp)
-        return overfit
-
-    def __compute_valid_stats(self, overfit_measure=False):
+    def __compute_valid_stats(self):
         best = tools.selBest(self.pop, k=1)
         # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
         # single-valued tuple as eval_val_fit
         valid_fit = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
         valid_err = self.toolbox.map(self.toolbox.evaluate_val_MSE, best)[0]
-        overfit = 0
-        if overfit_measure:
-            training_fit = best[0].fitness.values[0]
-            overfit = self.__overfit_measure(training_fit, valid_fit)
-        return overfit, valid_fit, valid_err
 
-    def __stats(self, pop, gen, evals, overfit_measure=False,
-                print_log=False):
+        return valid_fit, valid_err
+
+    def __stats(self, pop, gen, evals):
         """Computes and prints statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
 
-        # Record the statistics in the logbook
-        if overfit_measure:
-            # Compute satistics related to the validation set
-            overfit, valid_fit, valid_err = self.__compute_valid_stats(overfit_measure)
-            record["valid"] = {"overfit": overfit,
-                               "valid_fit": valid_fit,
+        # record the statistics in the logbook
+        if self.validate:
+            # compute satistics related to the validation set
+            valid_fit, valid_err = self.__compute_valid_stats()
+            record["valid"] = {"valid_fit": valid_fit,
                                "valid_err": valid_err}
 
         self.logbook.record(gen=gen, evals=evals, **record)
 
-        if print_log:
+        if self.print_log:
             # Print statistics for the current population
             print(self.logbook.stream, flush=True)
 
@@ -391,7 +370,7 @@ class GPSymbolicRegressor():
         # Array of generations starts from 1
         x = range(1, len(self.train_fit_history) + 1)
         plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
-        if self.validate['enabled']:
+        if self.validate:
             plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
             fig.legend(loc='upper right')
 
@@ -500,7 +479,7 @@ class GPSymbolicRegressor():
             self.history.update(self.pop)
 
         # Initialize logbook for statistics
-        self.__init_logbook(overfit_measure=self.validate['enabled'])
+        self.__init_logbook()
 
         if self.seed is not None:
             print("Seeding population with individuals...", flush=True)
@@ -519,20 +498,8 @@ class GPSymbolicRegressor():
         for ind, fit in zip(self.pop, fitnesses):
             ind.fitness.values = fit
 
-        if self.validate['enabled']:
+        if self.validate:
             print("Using validation dataset.")
-            # TODO: these calculations seem to be repeating and could be grouped in a
-            # function
-            best = tools.selBest(self.pop, k=1)
-            self.tbtp = best[0].fitness.values[0]
-            # Evaluate fitness on the validation set
-            self.bvp = self.toolbox.map(self.toolbox.evaluate_val_fit, best)[0][0]
-            self.best = best[0]
-            self.last_improvement = self.tbtp
-            # initialize overfit index m
-            m = 0
-            # initialize last generation without overfitting
-            self.last_gen_no_overfit = 0
 
         print("DONE.", flush=True)
 
@@ -570,11 +537,7 @@ class GPSymbolicRegressor():
             # select the best individual in the current population
             best = tools.selBest(self.pop, k=1)[0]
             # compute and print population statistics
-            self.__stats(self.pop,
-                         cgen,
-                         len(invalid_ind),
-                         overfit_measure=self.validate['enabled'],
-                         print_log=self.print_log)
+            self.__stats(self.pop, cgen, len(invalid_ind))
 
             print(f"The best individual of this generation is: {best}")
 
@@ -583,7 +546,7 @@ class GPSymbolicRegressor():
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
-            if self.validate['enabled']:
+            if self.validate:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
                     "valid_fit")
                 self.val_fit_history = self.logbook.chapters["valid"].select(
@@ -597,29 +560,7 @@ class GPSymbolicRegressor():
                     and (cgen % self.plot_freq == 0 or cgen == 1 or cgen == self.NGEN):
                 self.toolbox.plot_best_func(best)
 
-            if self.validate['enabled']:
-                training_fit = best.fitness.values[0]
-                # Retrieve last overtfit value
-                overfit = self.logbook.chapters["valid"].select("overfit")[-1]
-                if overfit == 0:
-                    m = 0
-                    self.last_gen_no_overfit = cgen
-                    self.best = best
-                elif np.abs(overfit) > 1e-3 and np.abs(self.last_improvement -
-                                                       training_fit) >= 1e-1:
-                    m += 1
-
-                print(f"The best until now is: {self.best}")
-
-                self.last_improvement = training_fit
-
-                if m == self.validate['max_overfit']:
-                    self.NGEN = self.last_gen_no_overfit
-                    print("-= EARLY STOPPED =-")
-                    break
-
-            else:
-                self.best = best
+            self.best = best
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
@@ -629,7 +570,7 @@ class GPSymbolicRegressor():
         print(f"The best individual is {self.best}", flush=True)
         print(f"The best fitness on the training set is {self.train_fit_history[-1]}")
 
-        if self.validate['enabled']:
+        if self.validate:
             print(f"The best fitness on the validation set is {self.min_valerr}")
 
         if self.plot_best_genealogy:
@@ -681,7 +622,7 @@ class GPSymbolicRegressor():
     def save_train_fit_history(self, output_path: str):
         np.save(join(output_path, "train_fit_history.npy"),
                 self.train_fit_history)
-        if self.validate['enabled']:
+        if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
     def save_best_test_sols(self, output_path: str, X_test_param_name: str):

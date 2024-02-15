@@ -7,7 +7,7 @@ gp:
   min_: 1
   max_: 4
   overlapping_generation: True
-  early_stopping: { "enabled": False, "max_overfit": 10 }
+  validate: False
   penalty: { "method": "length", "reg_param": 0.1 }
   select:
     tournsize: 2
