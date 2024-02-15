@@ -151,7 +151,7 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     gpsr = gps.GPSymbolicRegressor(
         pset=pset, fitness=eval_fitness.remote,
-        error_metric=eval_MSE.remote, eval_sols=eval_sols.remote,
+        error_metric=eval_MSE.remote, predict_func=eval_sols.remote,
         config_file_data=config_file_data,
         common_data=common_params, feature_extractors=[len],
         seed=seed_str, test_mode=True)
