@@ -41,9 +41,9 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
 
     prb = oc.OptimizationProblem(dim=num_nodes, state_dim=num_nodes, objfun=obj)
 
-    total_err = 0.
+    MSE = 0.
 
-    best_sols = []
+    u = []
 
     for i, vec_y in enumerate(y):
         # set additional arguments of the objective function
@@ -62,36 +62,36 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
             current_err = math.nan
 
         if math.isnan(current_err):
-            total_err = 1e5
+            MSE = 1e5
             break
 
-        total_err += current_err
+        MSE += current_err
 
-        best_sols.append(x)
+        u.append(x)
 
-    total_err *= 1/X.shape[0]
+    MSE *= 1/X.shape[0]
 
-    return total_err, best_sols
-
-
-@ray.remote
-def eval_sols(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-              S: SimplicialComplex, u_0: C.CochainP0,
-              penalty: dict) -> List[npt.NDArray]:
-
-    _, best_sols = eval_MSE_sol(individual, X, y, S, u_0)
-
-    return best_sols
+    return MSE, u
 
 
 @ray.remote
-def eval_MSE(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-             S: SimplicialComplex, u_0: C.CochainP0,
-             penalty: dict) -> List[npt.NDArray]:
+def predict(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+            S: SimplicialComplex, u_0: C.CochainP0,
+            penalty: dict) -> List[npt.NDArray]:
 
-    total_err, _ = eval_MSE_sol(individual, X, y, S, u_0)
+    _, u = eval_MSE_sol(individual, X, y, S, u_0)
 
-    return total_err
+    return u
+
+
+@ray.remote
+def score(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+          S: SimplicialComplex, u_0: C.CochainP0,
+          penalty: dict) -> List[npt.NDArray]:
+
+    MSE, _ = eval_MSE_sol(individual, X, y, S, u_0)
+
+    return MSE
 
 
 @ray.remote
@@ -144,26 +144,21 @@ def test_poisson1d(set_test_dir, yamlfile):
     pset.renameArguments(ARG0="u")
     pset.renameArguments(ARG1="f")
 
-    seed_str = "AddCP0(delP1(cobP0(u)),f)"
+    seed_str = ["AddCP0(delP1(cobP0(u)),f)"]
 
     penalty = config_file_data["gp"]["penalty"]
     common_params = {'S': S, 'u_0': u_0, 'penalty': penalty}
 
     gpsr = gps.GPSymbolicRegressor(
         pset=pset, fitness=eval_fitness.remote,
-        error_metric=eval_MSE.remote, predict_func=eval_sols.remote,
+        error_metric=score.remote, predict_func=predict.remote,
         config_file_data=config_file_data,
         common_data=common_params, feature_extractors=[len],
-        seed=seed_str, test_mode=True)
+        seed=seed_str)
 
     param_names = ('X', 'y')
 
-    gpsr.fit(X_train, y_train, param_names)
-
-    # gpsr.run(print_log=True, plot_history=True, plot_best_individual_tree=True,
-    #          save_best_individual=True, save_best_test_sols=True,
-    #          save_train_fit_history=True, X_test_param_name="X",
-    #          output_path="./", seed=gpsr.seed, print_best_test_MSE=True)
+    gpsr.fit(X_train, y_train, param_names, X_val=X_train, y_val=y_train)
 
     u_best = gpsr.predict(X_train, y_train, param_names)
 
