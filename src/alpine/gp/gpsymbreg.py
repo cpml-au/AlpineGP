@@ -398,28 +398,32 @@ class GPSymbolicRegressor():
         # Save genealogy to file
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
-    def __register_fitness_func(self, fitness: Callable):
-        if not hasattr(self, "args_train"):
-            store = self.data_store
-            self.args_train = store['common'] | store['train']
-        self.toolbox.register("evaluate_train", fitness, **self.args_train)
+    def __register_fitness_func(self):
+        store = self.data_store
+        args_train = store['common'] | store['train']
+        self.toolbox.register("evaluate_train", self.fitness, **args_train)
 
-    def register_val_funcs(self, fitness: Callable, error_metric: Callable):
+    def __register_val_funcs(self):
         """Register the functions needed for validation, i.e. the error metric and the
             fitness function. Must be called after storing the datasets in the common
             obj space.
         """
-        if not hasattr(self, "args_val"):
-            store = self.data_store
-            self.args_val = store['common'] | store['val']
-        self.toolbox.register("evaluate_val_fit", fitness, **self.args_val)
-        self.toolbox.register("evaluate_val_MSE", error_metric, **self.args_val)
+        store = self.data_store
+        args_val = store['common'] | store['val']
+        self.toolbox.register("evaluate_val_fit", self.fitness, **args_val)
+        self.toolbox.register("evaluate_val_MSE", self.error_metric, **args_val)
 
-    def __register_predict_func(self, test_eval: Callable):
-        if not hasattr(self, "args_predict_func"):
-            store = self.data_store
-            self.args_predict_func = store['common'] | store['test']
-        self.toolbox.register("evaluate_test_sols", test_eval, **self.args_predict_func)
+    def __register_score_func(self):
+        store = self.data_store
+        args_score_func = store['common'] | store['test']
+        self.toolbox.register("evaluate_test_score",
+                              self.error_metric, **args_score_func)
+
+    def __register_predict_func(self):
+        store = self.data_store
+        args_predict_func = store['common'] | store['test']
+        self.toolbox.register("evaluate_test_sols",
+                              self.predict_func, **args_predict_func)
 
     def __register_map(self, individ_feature_extractors: List[Callable] | None = None):
         def ray_mapper(f, individuals, toolbox):
@@ -439,23 +443,27 @@ class GPSymbolicRegressor():
         else:
             datasets = {'train': [X_train, y_train]}
         self.store_datasets_params(param_names, datasets)
-        self.__register_fitness_func(self.fitness)
+        self.__register_fitness_func()
         if self.validate and self.error_metric is not None:
-            self.register_val_funcs(self.fitness, self.error_metric)
+            self.__register_val_funcs()
         self.__run()
 
     def predict(self, X_test, y_test, param_names):
         datasets = {'test': [X_test, y_test]}
         self.store_datasets_params(param_names, datasets)
-        self.__register_predict_func(self.predict_func)
+        self.__register_predict_func()
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols, (self.best,))[0]
         return u_best
 
-    def score(self):
+    def score(self, X_test, y_test, param_names):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
             on a given dataset.
         """
-        pass
+        datasets = {'test': [X_test, y_test]}
+        self.store_datasets_params(param_names, datasets)
+        self.__register_score_func()
+        score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
+        return score
 
     def __run(self):
         """Runs symbolic regression."""
