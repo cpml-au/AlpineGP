@@ -95,16 +95,16 @@ def score(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
 
 
 @ray.remote
-def eval_fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-                 S: SimplicialComplex, u_0: C.CochainP0,
-                 penalty: dict) -> Tuple[float, ]:
+def fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
+            S: SimplicialComplex, u_0: C.CochainP0,
+            penalty: dict) -> Tuple[float, ]:
 
-    total_err, _ = eval_MSE_sol(individual, X, y, S, u_0)
+    MSE, _ = eval_MSE_sol(individual, X, y, S, u_0)
 
     # add penalty on length of the tree to promote simpler solutions
-    objval = total_err + penalty["reg_param"]*indlen
+    fitness = MSE + penalty["reg_param"]*indlen
 
-    return objval,
+    return fitness,
 
 
 cases = ['poisson1d_1.yaml', 'poisson1d_2.yaml']
@@ -150,7 +150,7 @@ def test_poisson1d(set_test_dir, yamlfile):
     common_params = {'S': S, 'u_0': u_0, 'penalty': penalty}
 
     gpsr = gps.GPSymbolicRegressor(
-        pset=pset, fitness=eval_fitness.remote,
+        pset=pset, fitness=fitness.remote,
         error_metric=score.remote, predict_func=predict.remote,
         config_file_data=config_file_data,
         common_data=common_params, feature_extractors=[len],
@@ -162,5 +162,8 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     u_best = gpsr.predict(X_train, y_train, param_names)
 
+    fit_score = gpsr.score(X_train, y_train, param_names)
+
     ray.shutdown()
     assert np.allclose(u.coeffs, np.ravel(u_best))
+    assert fit_score <= 1e-12
