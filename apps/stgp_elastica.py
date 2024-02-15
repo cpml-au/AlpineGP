@@ -13,7 +13,7 @@ import dctkit as dt
 from alpine.data.util import load_dataset
 from alpine.data.elastica.elastica_dataset import data_path
 from alpine.gp import gpsymbreg as gps
-from alpine.util import get_positions_from_angles
+from apps.util import get_positions_from_angles
 import matplotlib.pyplot as plt
 import math
 import sys

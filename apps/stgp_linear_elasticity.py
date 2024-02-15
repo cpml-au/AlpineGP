@@ -7,7 +7,7 @@ from alpine.data.util import load_dataset
 from alpine.data.linear_elasticity.linear_elasticity_dataset import data_path
 from dctkit.mesh import util
 from alpine.gp import gpsymbreg as gps
-from alpine.util import get_LE_boundary_values
+from apps.util import get_LE_boundary_values
 from dctkit import config
 import dctkit
 
