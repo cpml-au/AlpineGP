@@ -35,7 +35,3 @@ gp:
       { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
       { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
     ]
-
-plot:
-  plot_best: False
-  plot_best_genealogy: False
