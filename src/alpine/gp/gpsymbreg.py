@@ -6,6 +6,7 @@ from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
 from .primitives import addPrimitivesToPset
+from alpine.data import Dataset
 import os
 import ray
 
@@ -84,7 +85,6 @@ class GPSymbolicRegressor():
                  save_best_individual: bool = False,
                  save_train_fit_history: bool = False,
                  save_best_test_sols: bool = False,
-                 X_test_param_name: str | None = None,
                  output_path: str | None = None):
 
         self.pset = pset
@@ -110,11 +110,10 @@ class GPSymbolicRegressor():
         self.is_save_best_individual = save_best_individual
         self.is_save_train_fit_history = save_train_fit_history
         self.is_save_best_test_sols = save_best_test_sols
-        self.X_test_param_name = X_test_param_name
         self.output_path = output_path
 
         if common_data is not None:
-            self.store_eval_common_params(common_data)
+            self.store_fit_error_common_args(common_data)
 
         if config_file_data is not None:
             self.__load_config_data(config_file_data)
@@ -244,44 +243,41 @@ class GPSymbolicRegressor():
         self.plot_best = config_file_data["plot"]["plot_best"]
         self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
-    def store_eval_common_params(self, data: Dict):
-        """Store names and values of the parameters that are in common between
+    def store_fit_error_common_args(self, data: Dict):
+        """Store names and values of the arguments that are in common between
         the fitness and the error metric functions in the common object space.
 
         Args:
-            data: dictionary containing paramter names and values.
+            data: dictionary containing arguments names and values.
         """
         self.__store_ray_objects('common', data)
 
-    def store_datasets_params(self, params_names: List[str], datasets: Dict):
-        """Store names and values of the parameters associated to the datasets
-        (Xs and ys), for training and possibly validation (if early stopping
-        is enabled). The parameters are passed to the fitness and possibly the
-        error metric evaluation functions.
+    def store_datasets(self, datasets: Dict[str, Dataset]):
+        """Store datasets with the corresponding label ("train", "val" or "test")
+            in the common object space. The datasets are passed as parameters to
+            the fitness, and possibly to the error metric and the prediction functions.
 
         Args:
-            params_names: list of parameter names (i.e. ("X","y")).
-            datasets: the keys are 'train' and 'val' denoting the training and the
-                validation datasets, respectively. The associated values are lists
-                containing the values of the parameters (i.e. [X_train, y_train])
-                for each dataset.
+            datasets: the keys are 'train', 'val' and 'test' denoting the training,
+                the validation and the test datasets, respectively. The associated
+                values are `Dataset` objects.
         """
         # when early stopping is disabled we are not performing validation, but
         # we can use the validation set together with the training one for training.
-        if not self.validate and 'val' in datasets:
-            for i, _ in enumerate(datasets['train']):
-                try:
-                    datasets['train'][i] = \
-                        np.vstack((datasets['train'][i], datasets['val'][i]))
-                # FIXME: this could be avoided if the dataset is appropriately
-                # structured even in the case of a single sample
-                except ValueError:
-                    datasets['train'][i] = \
-                        np.hstack((datasets['train'][i], datasets['val'][i]))
+        # if not self.validate and 'val' in datasets:
+        #     for i, _ in enumerate(datasets['train']):
+        #         try:
+        #             datasets['train'][i] = \
+        #                 np.vstack((datasets['train'][i], datasets['val'][i]))
+        #         # FIXME: this could be avoided if the dataset is appropriately
+        #         # structured even in the case of a single sample
+        #         except ValueError:
+        #             datasets['train'][i] = \
+        #                 np.hstack((datasets['train'][i], datasets['val'][i]))
 
         for dataset_label in datasets.keys():
-            keys_values = dict(zip(params_names, datasets[dataset_label]))
-            self.__store_ray_objects(dataset_label, keys_values)
+            dataset_name_data = {datasets[dataset_label].name: datasets[dataset_label]}
+            self.__store_ray_objects(dataset_label, dataset_name_data)
 
     def __store_ray_objects(self, label: str, data: Dict):
         for key, value in data.items():
@@ -436,31 +432,31 @@ class GPSymbolicRegressor():
 
         self.toolbox.register("map", ray_mapper, toolbox=self.toolbox)
 
-    def fit(self, X_train, y_train, param_names, X_val=None, y_val=None):
+    def fit(self, train_data: Dataset, val_data: Dataset | None = None):
         """Fits the training data using GP-based symbolic regression."""
-        if self.validate and X_val is not None and y_val is not None:
-            datasets = {'train': [X_train, y_train], 'val': [X_val, y_val]}
+        if self.validate and val_data is not None:
+            datasets = {'train': train_data, 'val': val_data}
         else:
-            datasets = {'train': [X_train, y_train]}
-        self.store_datasets_params(param_names, datasets)
+            datasets = {'train': train_data}
+        self.store_datasets(datasets)
         self.__register_fitness_func()
         if self.validate and self.error_metric is not None:
             self.__register_val_funcs()
         self.__run()
 
-    def predict(self, X_test, y_test, param_names):
-        datasets = {'test': [X_test, y_test]}
-        self.store_datasets_params(param_names, datasets)
+    def predict(self, test_data: Dataset):
+        datasets = {'test': test_data}
+        self.store_datasets(datasets)
         self.__register_predict_func()
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols, (self.best,))[0]
         return u_best
 
-    def score(self, X_test, y_test, param_names):
+    def score(self, test_data: Dataset):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
             on a given dataset.
         """
-        datasets = {'test': [X_test, y_test]}
-        self.store_datasets_params(param_names, datasets)
+        datasets = {'test': test_data}
+        self.store_datasets(datasets)
         self.__register_score_func()
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
         return score
@@ -587,9 +583,8 @@ class GPSymbolicRegressor():
             print("Training fitness history saved to disk.")
 
         if self.is_save_best_test_sols and self.output_path is not None and \
-            hasattr(self.toolbox, "evaluate_test_sols")\
-                and self.X_test_param_name is not None:
-            self.save_best_test_sols(self.output_path, self.X_test_param_name)
+                hasattr(self.toolbox, "evaluate_test_sols"):
+            self.save_best_test_sols(self.output_path)
             print("Best individual solution evaluated over the test set saved to disk.")
 
         # NOTE: ray.shutdown should be manually called by the user
@@ -621,22 +616,15 @@ class GPSymbolicRegressor():
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
-    def save_best_test_sols(self, output_path: str, X_test_param_name: str):
+    def save_best_test_sols(self, test_data: Dataset, output_path: str):
         """Saves solutions (.npy) corresponding to the best individual evaluated
         over the test dataset.
 
         Args:
             output_path: path where the solutions should be saved (one .npy file for
                 each sample in the test dataset).
-            X_test_param_name: name of the X parameter in the test dataset (check the
-                `store_eval_dataset_params' function.
         """
-        best_test_sols = self.toolbox.map(self.toolbox.evaluate_test_sols,
-                                          (self.best,))[0]
-
-        X_test = self.data_store['test'][X_test_param_name]
-        X_test = ray.get(X_test)
+        best_test_sols = self.predict(test_data)
 
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
-            np.save(join(output_path, "true_sol_test_" + str(i) + ".npy"), X_test[i])
