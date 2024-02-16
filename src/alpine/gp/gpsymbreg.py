@@ -76,9 +76,9 @@ class GPSymbolicRegressor():
                  config_file_data: Dict | None = None,
                  plot_history: bool = False,
                  print_log: bool = False,
-                 plot_best: bool | None = None,
+                 plot_best: bool = False,
                  plot_freq: int = 5,
-                 plot_best_genealogy: bool | None = None,
+                 plot_best_genealogy: bool = False,
                  preprocess_func: Callable | None = None,
                  callback_func: Callable | None = None,
                  plot_best_individual_tree: bool = False,
@@ -94,11 +94,9 @@ class GPSymbolicRegressor():
 
         self.data_store = dict()
 
-        if plot_best is not None:
-            self.plot_best = plot_best
+        self.plot_best = plot_best
 
-        if plot_best_genealogy is not None:
-            self.plot_best_genealogy = plot_best_genealogy
+        self.plot_best_genealogy = plot_best_genealogy
 
         self.plot_history = plot_history
         self.print_log = print_log
@@ -111,6 +109,7 @@ class GPSymbolicRegressor():
         self.output_path = output_path
 
         if common_data is not None:
+            # FIXME: does everything work when the functions do not have common args?
             self.store_fit_error_common_args(common_data)
 
         if config_file_data is not None:
@@ -238,8 +237,6 @@ class GPSymbolicRegressor():
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
         self.validate = config_file_data["gp"]["validate"]
-        self.plot_best = config_file_data["plot"]["plot_best"]
-        self.plot_best_genealogy = config_file_data["plot"]["plot_best_genealogy"]
 
     def store_fit_error_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
