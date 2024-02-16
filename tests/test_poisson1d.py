@@ -150,9 +150,10 @@ def test_poisson1d(set_test_dir, yamlfile):
     gpsr = gps.GPSymbolicRegressor(
         pset=pset, fitness=fitness.remote,
         error_metric=score.remote, predict_func=predict.remote,
-        config_file_data=config_file_data,
+        config_file_data=config_file_data, print_log=True,
         common_data=common_params, feature_extractors=[len],
-        seed=seed_str)
+        seed=seed_str, plot_history=True, save_best_individual=True,
+        save_train_fit_history=True, output_path="./")
 
     train_data = Dataset("D", X_train, y_train)
 
@@ -161,6 +162,8 @@ def test_poisson1d(set_test_dir, yamlfile):
     u_best = gpsr.predict(train_data)
 
     fit_score = gpsr.score(train_data)
+
+    gpsr.save_best_test_sols(train_data, "./")
 
     ray.shutdown()
     assert np.allclose(u.coeffs, np.ravel(u_best))
