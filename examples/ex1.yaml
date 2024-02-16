@@ -2,7 +2,7 @@
 gp:
   NINDIVIDUALS: 100
   NGEN: 20
-  CXPB: 0.2
+  crossover_prob: 0.2
   MUTPB: 0.8
   frac_elitist: 0
   min_: 2
