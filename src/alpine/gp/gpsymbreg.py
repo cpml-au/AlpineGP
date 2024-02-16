@@ -84,7 +84,6 @@ class GPSymbolicRegressor():
                  plot_best_individual_tree: bool = False,
                  save_best_individual: bool = False,
                  save_train_fit_history: bool = False,
-                 save_best_test_sols: bool = False,
                  output_path: str | None = None):
 
         self.pset = pset
@@ -109,7 +108,6 @@ class GPSymbolicRegressor():
         self.is_plot_best_individual_tree = plot_best_individual_tree
         self.is_save_best_individual = save_best_individual
         self.is_save_train_fit_history = save_train_fit_history
-        self.is_save_best_test_sols = save_best_test_sols
         self.output_path = output_path
 
         if common_data is not None:
@@ -582,11 +580,6 @@ class GPSymbolicRegressor():
             self.save_train_fit_history(self.output_path)
             print("Training fitness history saved to disk.")
 
-        if self.is_save_best_test_sols and self.output_path is not None and \
-                hasattr(self.toolbox, "evaluate_test_sols"):
-            self.save_best_test_sols(self.output_path)
-            print("Best individual solution evaluated over the test set saved to disk.")
-
         # NOTE: ray.shutdown should be manually called by the user
 
     def plot_best_individual_tree(self):
@@ -617,14 +610,17 @@ class GPSymbolicRegressor():
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
     def save_best_test_sols(self, test_data: Dataset, output_path: str):
-        """Saves solutions (.npy) corresponding to the best individual evaluated
-        over the test dataset.
+        """Compute and save the predictions corresponding to the best individual
+            at the end of the evolution, evaluated over the test dataset.
 
         Args:
-            output_path: path where the solutions should be saved (one .npy file for
+            test_data: test dataset.
+            output_path: path where the predictions should be saved (one .npy file for
                 each sample in the test dataset).
         """
         best_test_sols = self.predict(test_data)
 
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
+
+        print("Best individual solution evaluated over the test set saved to disk.")
