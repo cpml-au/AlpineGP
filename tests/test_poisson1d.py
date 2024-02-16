@@ -4,6 +4,7 @@ from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
 from deap import gp
 from alpine.gp import gpsymbreg as gps
+from alpine.data import Dataset
 from dctkit import config
 import dctkit
 import numpy as np
@@ -20,10 +21,10 @@ import pytest
 config()
 
 
-def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
-                 S: SimplicialComplex, u_0: C.CochainP0) -> float:
+def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
+                 u_0: C.CochainP0) -> float:
 
-    num_nodes = X.shape[1]
+    num_nodes = D.X.shape[1]
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
@@ -45,10 +46,10 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
 
     u = []
 
-    for i, vec_y in enumerate(y):
+    for i, curr_y in enumerate(D.y):
         # set additional arguments of the objective function
         # (apart from the vector of unknowns)
-        args = {'y': vec_y}
+        args = {'y': curr_y}
         prb.set_obj_args(args)
 
         # minimize the objective
@@ -57,7 +58,7 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
 
-            current_err = np.linalg.norm(x-X[i, :])**2
+            current_err = np.linalg.norm(x-D.X[i, :])**2
         else:
             current_err = math.nan
 
@@ -69,37 +70,34 @@ def eval_MSE_sol(residual: Callable, X: npt.NDArray, y: npt.NDArray,
 
         u.append(x)
 
-    MSE *= 1/X.shape[0]
+    MSE *= 1/D.X.shape[0]
 
     return MSE, u
 
 
 @ray.remote
-def predict(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-            S: SimplicialComplex, u_0: C.CochainP0,
-            penalty: dict) -> List[npt.NDArray]:
+def predict(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
+            u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
 
-    _, u = eval_MSE_sol(individual, X, y, S, u_0)
+    _, u = eval_MSE_sol(individual, D, S, u_0)
 
     return u
 
 
 @ray.remote
-def score(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-          S: SimplicialComplex, u_0: C.CochainP0,
-          penalty: dict) -> List[npt.NDArray]:
+def score(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
+          u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
 
-    MSE, _ = eval_MSE_sol(individual, X, y, S, u_0)
+    MSE, _ = eval_MSE_sol(individual, D, S, u_0)
 
     return MSE
 
 
 @ray.remote
-def fitness(individual: Callable, indlen: int, X: npt.NDArray, y: npt.NDArray,
-            S: SimplicialComplex, u_0: C.CochainP0,
-            penalty: dict) -> Tuple[float, ]:
+def fitness(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
+            u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
 
-    MSE, _ = eval_MSE_sol(individual, X, y, S, u_0)
+    MSE, _ = eval_MSE_sol(individual, D, S, u_0)
 
     # add penalty on length of the tree to promote simpler solutions
     fitness = MSE + penalty["reg_param"]*indlen
@@ -156,13 +154,13 @@ def test_poisson1d(set_test_dir, yamlfile):
         common_data=common_params, feature_extractors=[len],
         seed=seed_str)
 
-    param_names = ('X', 'y')
+    train_data = Dataset("D", X_train, y_train)
 
-    gpsr.fit(X_train, y_train, param_names, X_val=X_train, y_val=y_train)
+    gpsr.fit(train_data, val_data=train_data)
 
-    u_best = gpsr.predict(X_train, y_train, param_names)
+    u_best = gpsr.predict(train_data)
 
-    fit_score = gpsr.score(X_train, y_train, param_names)
+    fit_score = gpsr.score(train_data)
 
     ray.shutdown()
     assert np.allclose(u.coeffs, np.ravel(u_best))
