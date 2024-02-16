@@ -249,8 +249,8 @@ class GPSymbolicRegressor():
 
     def store_datasets(self, datasets: Dict[str, Dataset]):
         """Store datasets with the corresponding label ("train", "val" or "test")
-            in the common object space. The datasets are passed as parameters to
-            the fitness, and possibly to the error metric and the prediction functions.
+        in the common object space. The datasets are passed as parameters to
+        the fitness, and possibly to the error metric and the prediction functions.
 
         Args:
             datasets: the keys are 'train', 'val' and 'test' denoting the training,
@@ -301,7 +301,7 @@ class GPSymbolicRegressor():
         return valid_fit, valid_err
 
     def __stats(self, pop, gen, evals):
-        """Computes and prints statistics of a population."""
+        """Compute and print statistics of a population."""
 
         # Compile statistics for the current population
         record = self.mstats.compile(pop)
@@ -320,7 +320,7 @@ class GPSymbolicRegressor():
             print(self.logbook.stream, flush=True)
 
     def tournament_with_elitism(self, individuals):
-        """Performs tournament selection with elitism.
+        """Perform tournament selection with elitism.
 
             Args:
                 individuals: a list of individuals to select from.
@@ -396,8 +396,8 @@ class GPSymbolicRegressor():
 
     def __register_val_funcs(self):
         """Register the functions needed for validation, i.e. the error metric and the
-            fitness function. Must be called after storing the datasets in the common
-            obj space.
+        fitness function. Must be called after storing the datasets in the common
+        obj space.
         """
         store = self.data_store
         args_val = store['common'] | store['val']
@@ -608,7 +608,7 @@ class GPSymbolicRegressor():
 
     def save_best_test_sols(self, test_data: Dataset, output_path: str):
         """Compute and save the predictions corresponding to the best individual
-            at the end of the evolution, evaluated over the test dataset.
+        at the end of the evolution, evaluated over the test dataset.
 
         Args:
             test_data: test dataset.
