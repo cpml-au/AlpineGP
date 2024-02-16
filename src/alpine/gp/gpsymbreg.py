@@ -32,7 +32,7 @@ class GPSymbolicRegressor():
             individualCreator: set to None if `config_file_data` is provided.
             NINDIVIDUALS: number of individuals in the parent population.
             NGEN: number of generations.
-            CXPB: cross-over probability.
+            crossover_prob: cross-over probability.
             MUTPB: mutation probability.
             frac_elitist: best individuals to keep expressed as a percentage of the
                 population (ex. 0.1 = keep top 10% individuals)
@@ -65,13 +65,15 @@ class GPSymbolicRegressor():
                  individualCreator: gp.PrimitiveTree = None,
                  NINDIVIDUALS: int = 10,
                  NGEN: int = 1,
-                 CXPB: float = 0.5,
+                 crossover_prob: float = 0.5,
                  MUTPB: float = 0.2,
                  frac_elitist: float = 0.,
                  overlapping_generation: bool = False,
                  tournsize: int = 3,
                  stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  validate: bool = False,
+                 preprocess_func: Callable | None = None,
+                 callback_func: Callable | None = None,
                  seed: List[str] | None = None,
                  config_file_data: Dict | None = None,
                  plot_history: bool = False,
@@ -79,8 +81,6 @@ class GPSymbolicRegressor():
                  plot_best: bool = False,
                  plot_freq: int = 5,
                  plot_best_genealogy: bool = False,
-                 preprocess_func: Callable | None = None,
-                 callback_func: Callable | None = None,
                  plot_best_individual_tree: bool = False,
                  save_best_individual: bool = False,
                  save_train_fit_history: bool = False,
@@ -117,7 +117,7 @@ class GPSymbolicRegressor():
         else:
             self.NINDIVIDUALS = NINDIVIDUALS
             self.NGEN = NGEN
-            self.CXPB = CXPB
+            self.crossover_prob = crossover_prob
             self.MUTPB = MUTPB
 
             self.overlapping_generation = overlapping_generation
@@ -221,7 +221,7 @@ class GPSymbolicRegressor():
         """Load problem settings from YAML file."""
         self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
         self.NGEN = config_file_data["gp"]["NGEN"]
-        self.CXPB = config_file_data["gp"]["CXPB"]
+        self.crossover_prob = config_file_data["gp"]["crossover_prob"]
         self.MUTPB = config_file_data["gp"]["MUTPB"]
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
@@ -503,7 +503,7 @@ class GPSymbolicRegressor():
             elite_ind = tools.selBest(offspring, self.n_elitist)
             offspring = elite_ind + \
                 algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
-                                 self.n_elitist, self.CXPB, self.MUTPB)
+                                 self.n_elitist, self.crossover_prob, self.MUTPB)
 
             # Evaluate the individuals with an invalid fitness (subject to crossover or
             # mutation)

@@ -8,4 +8,3 @@ class Dataset():
         self.name = name
         self.X = X
         self.y = y
-        self.__data_dict = dict(name=[X, y])
