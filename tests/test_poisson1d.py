@@ -53,7 +53,8 @@ def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
+        x = prb.solve(x0=u_0.coeffs.flatten(),
+                      ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
