@@ -5,7 +5,6 @@ import dctkit as dt
 from typing import List, Dict, Callable, Tuple
 from functools import partial
 import operator
-from dctkit.dec import vector as V
 
 
 def protectedDiv(left, right):
@@ -189,13 +188,13 @@ mul_coch = {'fun_info': {'name': 'CMul', 'fun': C.cochain_mul},
                           "rank": ("SC",)},
             'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
                          "rank": lambda x: x}}
-mul_VT = {'fun_info': {'name': 'Mv', 'fun': C.tensor_coch_mul},
-          'input': ["C.Cochain", "C.Cochain"],
-          'output': "C.Cochain",
-          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                        "rank": ("ST", "VT")},
-          'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                       "rank": lambda x: "T"}}
+# mul_VT = {'fun_info': {'name': 'Mv', 'fun': C.tensor_coch_mul},
+#           'input': ["C.Cochain", "C.Cochain"],
+#           'output': "C.Cochain",
+#           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
+#                         "rank": ("ST", "VT")},
+#           'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
+#                        "rank": lambda x: "T"}}
 tran_coch = {'fun_info': {'name': 'tran', 'fun': C.transpose},
              'input': ["C.Cochain"],
              'output': "C.Cochain",
@@ -226,7 +225,7 @@ star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
           'map_rule': {'category': partial(switch_category, ('P', 'D')),
                        'dimension': partial(lambda x, y: y-x, y=2),
                        "rank": lambda x: x}}
-inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner_product},
+inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner},
                  'input': ["C.Cochain", "C.Cochain"],
                  'output': "float",
                  'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
@@ -289,33 +288,17 @@ square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
                              "rank": ("SC", "V", "T")},
                'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
                             "rank": lambda x: x}}
-def_gradient = {'fun_info': {'name': 'def_grad', 'fun': C.deformation_gradient},
-                'input': ["C.Cochain"],
-                'output': "C.Cochain",
-                'att_input': {'category': ('P'), 'dimension': ('0'),
-                              "rank": ("V",)},
-                'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                             'dimension': lambda x: x, "rank": lambda x: "T"}}
-flat_up = {'fun_info': {'name': 'flat_up',
-                        'fun': partial(V.flat_PDD, scheme="upwind")},
-           'input': ["C.Cochain"],
-           'output': "C.Cochain",
-           'att_input': {'category': ('D',), 'dimension': ('0',),
-                         "rank": ("SC",)},
-           'map_rule': {'category': lambda x: x, 'dimension': partial(operator.add, 1),
-                        "rank": lambda x: x}}
-flat_par = {'fun_info': {'name': 'flat_par',
-                         'fun': partial(V.flat_PDD, scheme="parabolic")},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('D',), 'dimension': ('0',),
-                          "rank": ("SC",)},
-            'map_rule': {'category': lambda x: x, 'dimension': partial(operator.add, 1),
-                         "rank": lambda x: x}}
+# def_gradient = {'fun_info': {'name': 'def_grad', 'fun': C.deformation_gradient},
+#                 'input': ["C.Cochain"],
+#                 'output': "C.Cochain",
+#                 'att_input': {'category': ('P'), 'dimension': ('0'),
+#                               "rank": ("V",)},
+#                 'map_rule': {'category': partial(switch_category, ('P', 'D')),
+#                              'dimension': lambda x: x, "rank": lambda x: "T"}}
 coch_prim_list = [add_coch, sub_coch, coboundary, codifferential, tr_coch, mul_FT,
-                  inv_mul_FT, mul_coch, mul_VT, tran_coch, sym_coch, star_1, star_2,
+                  inv_mul_FT, mul_coch, tran_coch, sym_coch, star_1, star_2,
                   inner_product, sin_coch, arcsin_coch, cos_coch, arccos_coch, exp_coch,
-                  log_coch, sqrt_coch, square_coch, def_gradient, flat_up, flat_par]
+                  log_coch, sqrt_coch, square_coch]
 coch_primitives = list(map(generate_primitive, coch_prim_list))
 
 # merge dictionary
