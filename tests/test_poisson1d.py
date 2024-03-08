@@ -37,7 +37,7 @@ def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
         u = C.CochainP0(S, x)
         f = C.CochainP0(S, y)
         r = residual(u, f)
-        total_energy = C.inner_product(r, r) + penalty
+        total_energy = C.inner(r, r) + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(dim=num_nodes, state_dim=num_nodes, objfun=obj)
@@ -53,7 +53,7 @@ def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.solve(x0=u_0.coeffs, ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
+        x = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
         if (prb.last_opt_result == 1 or prb.last_opt_result == 3
                 or prb.last_opt_result == 4):
@@ -128,8 +128,8 @@ def test_poisson1d(set_test_dir, yamlfile):
     # Delta u + f = 0, where Delta is the discrete Laplace-de Rham operator
     f = C.laplacian(u)
     f.coeffs *= -1.
-    X_train = np.array([u.coeffs], dtype=dctkit.float_dtype)
-    y_train = np.array([f.coeffs], dtype=dctkit.float_dtype)
+    X_train = np.array([u.coeffs.flatten()], dtype=dctkit.float_dtype)
+    y_train = np.array([f.coeffs.flatten()], dtype=dctkit.float_dtype)
 
     # initial guess for the unknown of the Poisson problem (cochain of nodals values)
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
@@ -166,5 +166,5 @@ def test_poisson1d(set_test_dir, yamlfile):
     gpsr.save_best_test_sols(train_data, "./")
 
     ray.shutdown()
-    assert np.allclose(u.coeffs, np.ravel(u_best))
+    assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))
     assert fit_score <= 1e-12

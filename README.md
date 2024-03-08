@@ -62,10 +62,11 @@ def eval_MSE_sol(individual: Callable, D: Dataset):
     return MSE, prediction
 ```
 
-2. Define `ray.remote` wrapper functions that return the prediction associated to the best
-   individual and the **fitness** of an individual. These functions **must** have the same
-   arguments. The first argument is always the `Callable` that represents the tree of
-   the individual. 
+2. Define the functions that return the **prediction** and the **fitness** 
+   associated to an individual. These functions **must** have the same
+   arguments. The first argument is **always** the `Callable` that represents the
+   individual tree. The functions **must** be decorated with `ray.remote` to support
+   distributed evaluation (multiprocessing).
 ```python
 @ray.remote
 def predict(individual: Callable, indlen: int, D: Dataset, penalty: float) -> float:
