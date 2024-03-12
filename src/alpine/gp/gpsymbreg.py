@@ -38,8 +38,6 @@ class GPSymbolicRegressor():
                 population (ex. 0.1 = keep top 10% individuals)
             overlapping_generation: True if the offspring competes with the parents
                 for survival.
-            tournsize: number of individuals competing in each tournament when
-                selection of the parents is carried out.
             plot_history: whether to plot fitness vs generation number.
             print_log: whether to print the log containing the population statistics
                 during the run.
@@ -69,8 +67,6 @@ class GPSymbolicRegressor():
                  MUTPB: float = 0.2,
                  frac_elitist: float = 0.,
                  overlapping_generation: bool = False,
-                 tournsize: int = 3,
-                 stochastic_tournament={'enabled': False, 'prob': [0.7, 0.3]},
                  validate: bool = False,
                  preprocess_func: Callable | None = None,
                  callback_func: Callable | None = None,
@@ -121,8 +117,6 @@ class GPSymbolicRegressor():
             self.MUTPB = MUTPB
 
             self.overlapping_generation = overlapping_generation
-            self.tournsize = tournsize
-            self.stochastic_tournament = stochastic_tournament
             self.validate = validate
 
             # Elitism settings
@@ -136,9 +130,6 @@ class GPSymbolicRegressor():
 
         if self.seed is not None:
             self.seed = [self.createIndividual.from_string(i, pset) for i in seed]
-
-        # FIXME: move this instruction in the initialization of the toolbox
-        self.toolbox.register("select", self.tournament_with_elitism)
 
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
@@ -169,52 +160,58 @@ class GPSymbolicRegressor():
 
     def __creator_toolbox_config(self, config_file_data: Dict):
         """Initialize toolbox and individual creator based on config file."""
-        toolbox = base.Toolbox()
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
+        self.toolbox = base.Toolbox()
 
-        min_ = config_file_data["gp"]["min_"]
-        max_ = config_file_data["gp"]["max_"]
+        # SELECTION
+        select_fun = eval(config_file_data["gp"]["select"]["fun"])
+        select_args = eval(config_file_data["gp"]["select"]["kargs"])
+        self.toolbox.register("select", select_fun, **select_args)
 
+        # MUTATION
         expr_mut_fun = config_file_data["gp"]["mutate"]["expr_mut"]
         expr_mut_kargs = eval(config_file_data["gp"]["mutate"]["expr_mut_kargs"])
 
-        toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-
-        crossover_fun = config_file_data["gp"]["crossover"]["fun"]
-        crossover_kargs = eval(config_file_data["gp"]["crossover"]["kargs"])
+        self.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
 
         mutate_fun = config_file_data["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config_file_data["gp"]["mutate"]["kargs"])
-        toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
-        toolbox.register("mutate",
-                         eval(mutate_fun), **mutate_kargs)
-        toolbox.decorate(
+
+        self.toolbox.register("mutate",
+                              eval(mutate_fun), **mutate_kargs)
+
+        # CROSSOVER
+        crossover_fun = config_file_data["gp"]["crossover"]["fun"]
+        crossover_kargs = eval(config_file_data["gp"]["crossover"]["kargs"])
+
+        self.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
+        self.toolbox.decorate(
             "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
-        toolbox.decorate(
+        self.toolbox.decorate(
             "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
-        toolbox.register("expr", gp.genHalfAndHalf,
-                         pset=self.pset, min_=min_, max_=max_)
-        toolbox.register("expr_pop",
-                         gp.genHalfAndHalf,
-                         pset=self.pset,
-                         min_=min_,
-                         max_=max_,
-                         is_pop=True)
+        # INDIVIDUAL GENERATOR/CREATOR
+        min_ = config_file_data["gp"]["min_"]
+        max_ = config_file_data["gp"]["max_"]
+        self.toolbox.register("expr", gp.genHalfAndHalf,
+                              pset=self.pset, min_=min_, max_=max_)
+        self.toolbox.register("expr_pop",
+                              gp.genHalfAndHalf,
+                              pset=self.pset,
+                              min_=min_,
+                              max_=max_,
+                              is_pop=True)
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
         creator.create("Individual",
                        gp.PrimitiveTree,
                        fitness=creator.FitnessMin)
         createIndividual = creator.Individual
-        toolbox.register("individual", tools.initIterate,
-                         createIndividual, toolbox.expr)
+        self.toolbox.register("individual", tools.initIterate,
+                              createIndividual, self.toolbox.expr)
 
-        # toolbox.register("individual_pop", tools.initIterate,
-        #                 createIndividual, toolbox.expr_pop)
-        toolbox.register("population", tools.initRepeat,
-                         list, toolbox.individual)
-        toolbox.register("compile", gp.compile, pset=self.pset)
+        self.toolbox.register("population", tools.initRepeat,
+                              list, self.toolbox.individual)
+        self.toolbox.register("compile", gp.compile, pset=self.pset)
 
-        self.toolbox = toolbox
         self.createIndividual = createIndividual
 
     def __load_config_data(self, config_file_data: Dict):
@@ -225,9 +222,6 @@ class GPSymbolicRegressor():
         self.MUTPB = config_file_data["gp"]["MUTPB"]
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
-        self.tournsize = config_file_data["gp"]["select"]["tournsize"]
-        self.stochastic_tournament = \
-            config_file_data["gp"]["select"]["stochastic_tournament"]
 
         if len(config_file_data["gp"]['primitives']) == 0:
             addPrimitivesToPset(self.pset)
@@ -319,7 +313,9 @@ class GPSymbolicRegressor():
             # Print statistics for the current population
             print(self.logbook.stream, flush=True)
 
-    def tournament_with_elitism(self, individuals):
+    def tournament_with_elitism(self, individuals, tournsize=2,
+                                stochastic_tournament={'enabled': False,
+                                                       'prob': [1., 0.]}):
         """Perform tournament selection with elitism.
 
             Args:
@@ -332,15 +328,14 @@ class GPSymbolicRegressor():
 
         bestind = tools.selBest(individuals, self.n_elitist)
 
-        if self.stochastic_tournament['enabled']:
+        if stochastic_tournament['enabled']:
             return bestind + tools.selStochasticTournament(individuals, n_tournament,
-                                                           tournsize=self.tournsize,
-                                                           prob=self.
-                                                           stochastic_tournament['prob']
+                                                           tournsize=tournsize,
+                                                           prob=stochastic_tournament['prob']
                                                            )
         else:
             return bestind + tools.selTournament(individuals, n_tournament,
-                                                 tournsize=self.tournsize)
+                                                 tournsize=tournsize)
 
     def __plot_history(self):
         """Plots the fitness of the best individual vs generation number."""
