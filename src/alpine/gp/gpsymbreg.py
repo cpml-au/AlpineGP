@@ -9,6 +9,7 @@ from .primitives import addPrimitivesToPset
 from alpine.data import Dataset
 import os
 import ray
+import random
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -451,6 +452,12 @@ class GPSymbolicRegressor():
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
         return score
 
+    def immigration(self, n_immigrants: int):
+        immigrants = self.toolbox.population(n=n_immigrants)
+        for i in range(n_immigrants):
+            idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
+            self.pop[idx_individual_to_replace] = immigrants[i]
+
     def __run(self):
         """Runs symbolic regression."""
 
@@ -490,6 +497,10 @@ class GPSymbolicRegressor():
 
         for gen in range(self.NGEN):
             cgen = gen + 1
+
+            if cgen % 10 == 0:
+                print("Immigration.")
+                self.immigration(990)
 
             # Select and clone the next generation individuals
             offspring = list(map(self.toolbox.clone, self.toolbox.select(self.pop)))

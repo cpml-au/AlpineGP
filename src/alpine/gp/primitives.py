@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import numpy as np
 from deap import gp
 from dctkit.dec import cochain as C
 import dctkit as dt
@@ -116,6 +117,19 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
 # define scalar primitives
 scalar_primitives = {
     # scalar operations
+    'add': PrimitiveParams(np.add, [float, float], float),
+    'sub': PrimitiveParams(np.subtract, [float, float], float),
+    'mul': PrimitiveParams(np.multiply, [float, float], float),
+    # 'div': PrimitiveParams(protectedDiv, [float, float], float),
+    'sin': PrimitiveParams(np.sin, [float], float),
+    'arcsin': PrimitiveParams(np.arcsin, [float], float),
+    'cos': PrimitiveParams(np.cos, [float], float),
+    'arccos': PrimitiveParams(np.arccos, [float], float),
+    'exp': PrimitiveParams(np.exp, [float], float),
+    'log': PrimitiveParams(np.log, [float], float),
+    'sqrt': PrimitiveParams(np.sqrt, [float], float),
+    'square': PrimitiveParams(np.square, [float], float),
+    # scalar operations (JAX backend)
     'AddF': PrimitiveParams(jnp.add, [float, float], float),
     'SubF': PrimitiveParams(jnp.subtract, [float, float], float),
     'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
