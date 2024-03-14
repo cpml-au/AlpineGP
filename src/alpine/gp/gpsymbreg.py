@@ -10,6 +10,7 @@ from alpine.data import Dataset
 import os
 import ray
 import random
+from joblib import Parallel, delayed
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -81,7 +82,10 @@ class GPSymbolicRegressor():
                  plot_best_individual_tree: bool = False,
                  save_best_individual: bool = False,
                  save_train_fit_history: bool = False,
-                 output_path: str | None = None):
+                 output_path: str | None = None,
+                 parallel_lib: str = "ray",
+                 parallel_backend: str = "threads",
+                 num_jobs=-1):
 
         self.pset = pset
 
@@ -104,6 +108,7 @@ class GPSymbolicRegressor():
         self.is_save_best_individual = save_best_individual
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
+        self.parallel_lib = parallel_lib
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
@@ -154,7 +159,11 @@ class GPSymbolicRegressor():
             self.toolbox.decorate("mate", self.history.decorator)
             self.toolbox.decorate("mutate", self.history.decorator)
 
-        self.__register_map(feature_extractors)
+        if self.parallel_lib == "joblib":
+            parallel = Parallel(n_jobs=num_jobs, prefer=parallel_backend)
+        else:
+            parallel = None
+        self.__register_map(feature_extractors, parallel)
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -240,7 +249,7 @@ class GPSymbolicRegressor():
         Args:
             data: dictionary containing arguments names and values.
         """
-        self.__store_ray_objects('common', data)
+        self.__store_shared_objects('common', data)
 
     def store_datasets(self, datasets: Dict[str, Dataset]):
         """Store datasets with the corresponding label ("train", "val" or "test")
@@ -252,26 +261,14 @@ class GPSymbolicRegressor():
                 the validation and the test datasets, respectively. The associated
                 values are `Dataset` objects.
         """
-        # when early stopping is disabled we are not performing validation, but
-        # we can use the validation set together with the training one for training.
-        # if not self.validate and 'val' in datasets:
-        #     for i, _ in enumerate(datasets['train']):
-        #         try:
-        #             datasets['train'][i] = \
-        #                 np.vstack((datasets['train'][i], datasets['val'][i]))
-        #         # FIXME: this could be avoided if the dataset is appropriately
-        #         # structured even in the case of a single sample
-        #         except ValueError:
-        #             datasets['train'][i] = \
-        #                 np.hstack((datasets['train'][i], datasets['val'][i]))
-
         for dataset_label in datasets.keys():
             dataset_name_data = {datasets[dataset_label].name: datasets[dataset_label]}
-            self.__store_ray_objects(dataset_label, dataset_name_data)
+            self.__store_shared_objects(dataset_label, dataset_name_data)
 
-    def __store_ray_objects(self, label: str, data: Dict):
-        for key, value in data.items():
-            data[key] = ray.put(value)
+    def __store_shared_objects(self, label: str, data: Dict):
+        if self.parallel_lib == "ray":
+            for key, value in data.items():
+                data[key] = ray.put(value)
         self.data_store[label] = data
 
     def __init_logbook(self):
@@ -412,17 +409,24 @@ class GPSymbolicRegressor():
         self.toolbox.register("evaluate_test_sols",
                               self.predict_func, **args_predict_func)
 
-    def __register_map(self, individ_feature_extractors: List[Callable] | None = None):
+    def __register_map(self, individ_feature_extractors: List[Callable] | None = None, parallel=None):
         def ray_mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
             feature_values = [[fe(i) for i in individuals]
                               for fe in individ_feature_extractors]
-            fitnesses = ray.get([f(*args) for args in zip(runnables, *feature_values)])
+            if self.parallel_lib == "ray":
+                fitnesses = ray.get([f(*args)
+                                    for args in zip(runnables, *feature_values)])
+            elif self.parallel_lib == "joblib":
+                fitnesses = parallel((delayed(f)(*args)
+                                      for args in zip(runnables,
+                                                      *feature_values)))
             return fitnesses
 
         self.toolbox.register("map", ray_mapper, toolbox=self.toolbox)
 
+    # @profile
     def fit(self, train_data: Dataset, val_data: Dataset | None = None):
         """Fits the training data using GP-based symbolic regression."""
         if self.validate and val_data is not None:
@@ -458,6 +462,7 @@ class GPSymbolicRegressor():
             idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
             self.pop[idx_individual_to_replace] = immigrants[i]
 
+    # @profile
     def __run(self):
         """Runs symbolic regression."""
 
