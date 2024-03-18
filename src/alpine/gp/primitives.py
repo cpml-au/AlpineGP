@@ -6,7 +6,6 @@ import dctkit as dt
 from typing import List, Dict, Callable, Tuple
 from functools import partial
 import operator
-from jax import jit
 
 
 def protectedDiv(left, right):
