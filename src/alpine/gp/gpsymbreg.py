@@ -84,7 +84,7 @@ class GPSymbolicRegressor():
                  save_train_fit_history: bool = False,
                  output_path: str | None = None,
                  parallel_lib: str = "ray",
-                 parallel_backend: str = "threads",
+                 parallel_backend: str = "processes",
                  num_jobs=-1):
 
         self.pset = pset
@@ -160,7 +160,11 @@ class GPSymbolicRegressor():
             self.toolbox.decorate("mutate", self.history.decorator)
 
         if self.parallel_lib == "joblib":
-            parallel = Parallel(n_jobs=num_jobs, prefer=parallel_backend)
+            if parallel_backend != "":
+                parallel = Parallel(
+                    n_jobs=num_jobs, return_as="generator", prefer=parallel_backend)
+            else:
+                parallel = Parallel(n_jobs=num_jobs, return_as="generator")
         else:
             parallel = None
         self.__register_map(feature_extractors, parallel)
@@ -242,6 +246,10 @@ class GPSymbolicRegressor():
 
         self.validate = config_file_data["gp"]["validate"]
 
+        self.immigration_enabled = config_file_data["gp"]["immigration"]["enabled"]
+        self.immigration_freq = config_file_data["gp"]["immigration"]["freq"]
+        self.immigration_frac = config_file_data["gp"]["immigration"]["frac"]
+
     def store_fit_error_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
         the fitness and the error metric functions in the common object space.
@@ -312,8 +320,8 @@ class GPSymbolicRegressor():
             print(self.logbook.stream, flush=True)
 
     def tournament_with_elitism(self, individuals, tournsize=2,
-                                stochastic_tournament={'enabled': False,
-                                                       'prob': [1., 0.]}):
+                                stochastic_tourn={'enabled': False,
+                                                  'prob': [1., 0.]}):
         """Perform tournament selection with elitism.
 
             Args:
@@ -326,10 +334,10 @@ class GPSymbolicRegressor():
 
         bestind = tools.selBest(individuals, self.n_elitist)
 
-        if stochastic_tournament['enabled']:
+        if stochastic_tourn['enabled']:
             return bestind + tools.selStochasticTournament(individuals, n_tournament,
                                                            tournsize=tournsize,
-                                                           prob=stochastic_tournament['prob']
+                                                           prob=stochastic_tourn['prob']
                                                            )
         else:
             return bestind + tools.selTournament(individuals, n_tournament,
@@ -409,8 +417,9 @@ class GPSymbolicRegressor():
         self.toolbox.register("evaluate_test_sols",
                               self.predict_func, **args_predict_func)
 
-    def __register_map(self, individ_feature_extractors: List[Callable] | None = None, parallel=None):
-        def ray_mapper(f, individuals, toolbox):
+    def __register_map(self, individ_feature_extractors: List[Callable] | None = None,
+                       parallel=None):
+        def mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
             feature_values = [[fe(i) for i in individuals]
@@ -419,12 +428,12 @@ class GPSymbolicRegressor():
                 fitnesses = ray.get([f(*args)
                                     for args in zip(runnables, *feature_values)])
             elif self.parallel_lib == "joblib":
-                fitnesses = parallel((delayed(f)(*args)
-                                      for args in zip(runnables,
-                                                      *feature_values)))
+                fitnesses = list(parallel((delayed(f)(*args)
+                                           for args in zip(runnables,
+                                                           *feature_values))))
             return fitnesses
 
-        self.toolbox.register("map", ray_mapper, toolbox=self.toolbox)
+        self.toolbox.register("map", mapper, toolbox=self.toolbox)
 
     # @profile
     def fit(self, train_data: Dataset, val_data: Dataset | None = None):
@@ -503,9 +512,9 @@ class GPSymbolicRegressor():
         for gen in range(self.NGEN):
             cgen = gen + 1
 
-            if cgen % 10 == 0:
-                print("Immigration.")
-                self.immigration(990)
+            if self.immigration_enabled:
+                if cgen % self.immigration_freq == 0:
+                    self.immigration(int(self.immigration_frac*self.NINDIVIDUALS))
 
             # Select and clone the next generation individuals
             offspring = list(map(self.toolbox.clone, self.toolbox.select(self.pop)))
