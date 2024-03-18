@@ -6,6 +6,7 @@ import dctkit as dt
 from typing import List, Dict, Callable, Tuple
 from functools import partial
 import operator
+from jax import jit
 
 
 def protectedDiv(left, right):
@@ -135,9 +136,9 @@ scalar_primitives = {
     'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
     'Div': PrimitiveParams(protectedDiv, [float, float], float),
     'SinF': PrimitiveParams(jnp.sin, [float], float),
-    'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
+    # 'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
     'CosF': PrimitiveParams(jnp.cos, [float], float),
-    'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
+    # 'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
     'ExpF': PrimitiveParams(jnp.exp, [float], float),
     'LogF': PrimitiveParams(protectedLog, [float], float),
     'SqrtF': PrimitiveParams(protectedSqrt, [float], float),
