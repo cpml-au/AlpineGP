@@ -20,9 +20,10 @@ dependencies:
   - typeguard
   - yaml=0.2.5
   - pygraphviz
+  - joblib
   - pip
   - pip:
-    - git+https://github.com/alucantonio/dctkit
-    - git+https://github.com/alucantonio/deap
-    - ray
-    - pygmsh
+      - git+https://github.com/alucantonio/dctkit
+      - git+https://github.com/alucantonio/deap
+      - ray
+      - pygmsh
