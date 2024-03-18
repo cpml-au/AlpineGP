@@ -21,6 +21,7 @@ dependencies:
   - pygraphviz
   - typeguard
   - yaml=0.2.5
+  - joblib
   - pip:
     - sphinx-rtd-theme
     - myst-parser[linkify]
