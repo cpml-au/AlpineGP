@@ -1,6 +1,7 @@
 gp:
   NINDIVIDUALS: 10
   NGEN: 10
+  num_islands: 1
   crossover_prob: 0.2
   MUTPB: 0.8
   frac_elitist: 0.1
