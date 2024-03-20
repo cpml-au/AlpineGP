@@ -118,7 +118,7 @@ scalar_primitives = {
     'add': PrimitiveParams(np.add, [float, float], float),
     'sub': PrimitiveParams(np.subtract, [float, float], float),
     'mul': PrimitiveParams(np.multiply, [float, float], float),
-    'div': PrimitiveParams(protectedDiv, [float, float], float),
+    'div': PrimitiveParams(np.divide, [float, float], float),
     'sin': PrimitiveParams(np.sin, [float], float),
     'arcsin': PrimitiveParams(np.arcsin, [float], float),
     'cos': PrimitiveParams(np.cos, [float], float),

@@ -1,4 +1,5 @@
 from deap import algorithms, tools, gp, base, creator
+from deap.tools import migRing
 import matplotlib.pyplot as plt
 import numpy as np
 import operator
@@ -11,7 +12,6 @@ import os
 import ray
 import random
 from joblib import Parallel, delayed
-from itertools import chain
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -242,7 +242,9 @@ class GPSymbolicRegressor():
         """Load problem settings from YAML file."""
         self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
         self.NGEN = config_file_data["gp"]["NGEN"]
-        self.num_islands = config_file_data["gp"]["num_islands"]
+        self.num_islands = config_file_data["gp"]["multi_island"]["num_islands"]
+        self.migration_freq = config_file_data["gp"]["multi_island"]["migration"]["freq"]
+        self.migration_frac = config_file_data["gp"]["multi_island"]["migration"]["frac"]
         self.crossover_prob = config_file_data["gp"]["crossover_prob"]
         self.MUTPB = config_file_data["gp"]["MUTPB"]
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
@@ -436,7 +438,7 @@ class GPSymbolicRegressor():
                               self.predict_func, **args_predict_func)
 
     def __register_map(self, individ_feature_extractors: List[Callable] | None = None,
-                       parallel=None):
+                       parallel=None, debug=False):
         def mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
@@ -449,6 +451,9 @@ class GPSymbolicRegressor():
                 fitnesses = list(parallel((delayed(f)(*args)
                                            for args in zip(runnables,
                                                            *feature_values))))
+            if debug:
+                for ind, fit in zip(individuals, fitnesses):
+                    print(str(ind), " ", fit)
             return fitnesses
 
         self.toolbox.register("map", mapper, toolbox=self.toolbox)
@@ -494,6 +499,51 @@ class GPSymbolicRegressor():
             flat_list += pop
         return flat_list
 
+    def __local_search(self, n_iter: int = 1, n_mutations: int = 500,
+                       n_inds_to_refine: int = 10):
+
+        for i in range(self.num_islands):
+            # select N best individuals for refinement
+            sel_individuals = tools.selBest(self.pop[i], k=n_inds_to_refine)
+
+            # store indices of best individuals in the population
+            idx_ind = [self.pop[i].index(sel_individuals[j])
+                       for j in range(n_inds_to_refine)]
+
+            # initialize best-so-far individuals and fitnesses with the
+            # current individuals
+            best_so_far_fits = [sel_individuals[j].fitness.values[0]
+                                for j in range(n_inds_to_refine)]
+            best_so_far_inds = self.toolbox.clone(sel_individuals)
+
+            for _ in range(n_iter):
+                mutants = self.toolbox.clone(best_so_far_inds)
+                # generate mutations for each of the best individuals
+                mut_ind = [[gp.mixedMutate(mutants[j], self.toolbox.expr_mut, self.pset,
+                                           [0.4, 0.3, 0.3])[0]
+                            for _ in range(n_mutations)]
+                           for j in range(n_inds_to_refine)]
+                for j in range(n_inds_to_refine):
+                    # evaluate fitnesses of mutated individuals
+                    fitness_mutated_inds = self.toolbox.map(
+                        self.toolbox.evaluate_train, mut_ind[j])
+
+                    # assign fitnesses to mutated individuals
+                    for ind, fit in zip(mut_ind[j], fitness_mutated_inds):
+                        ind.fitness.values = fit
+
+                    # select best mutation
+                    best_mutation = tools.selBest(mut_ind[j], k=1)[0]
+
+                    if best_mutation.fitness.values[0] < best_so_far_fits[j]:
+                        print("Found better individual in tabu search")
+                        best_so_far_inds[j] = best_mutation
+                        best_so_far_fits[j] = best_mutation.fitness.values[0]
+
+            # replace individuals with refined ones (if improved)
+            for j in range(n_inds_to_refine):
+                self.pop[i][idx_ind[j]] = best_so_far_inds[j]
+
     def __evolve_islands(self, cgen: int):
         num_evals = 0
 
@@ -503,7 +553,7 @@ class GPSymbolicRegressor():
                     self.immigration(
                         self.pop[i], int(self.immigration_frac*self.NINDIVIDUALS))
 
-            # Select and clone the next generation individuals
+            # Select the parents for the offspring
             offspring = list(
                 map(self.toolbox.clone, self.toolbox.select(self.pop[i])))
 
@@ -527,6 +577,7 @@ class GPSymbolicRegressor():
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
+            # survival selection
             if not self.overlapping_generation:
                 # The population is entirely replaced by the offspring
                 self.pop[i][:] = offspring
@@ -534,6 +585,13 @@ class GPSymbolicRegressor():
                 # parents and offspring compete for survival (truncation selection)
                 self.pop[i] = tools.selBest(
                     self.pop[i] + offspring, self.NINDIVIDUALS)
+
+        # migrations among islands
+        if cgen % self.migration_frac == 0 and self.num_islands > 1:
+            migRing(self.pop, int(self.migration_frac*self.NINDIVIDUALS),
+                    selection=random.sample)
+
+        self.__local_search()
 
         if self.callback_fun is not None:
             self.callback_fun(self.pop)
@@ -584,7 +642,8 @@ class GPSymbolicRegressor():
 
             num_evals = self.__evolve_islands(cgen)
 
-            # select the best individuals in the current population (including all islands)
+            # select the best individuals in the current population
+            # (including all islands)
             best_inds = tools.selBest(self.__flatten_pop(
                 self.pop), k=self.num_best_inds_str)
 
