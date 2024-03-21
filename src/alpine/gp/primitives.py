@@ -368,3 +368,4 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = prim
                     in_types = full_primitives[typed_primitive].in_types
                     out_type = full_primitives[typed_primitive].out_type
                     pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
+                    print(typed_primitive)
