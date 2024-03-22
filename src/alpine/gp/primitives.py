@@ -96,8 +96,6 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
                     if input == "float":
                         in_type_name.append(input)
                     elif len(in_rank) == 2:
-                        # FIXME: handle scalar cochains in a different way!
-                        in_rank = in_rank.replace("ST", " T")
                         # in this case the correct rank must be taken
                         in_type_name.append(input + in_category +
                                             in_dim + in_rank[i])
@@ -120,7 +118,7 @@ scalar_primitives = {
     'add': PrimitiveParams(np.add, [float, float], float),
     'sub': PrimitiveParams(np.subtract, [float, float], float),
     'mul': PrimitiveParams(np.multiply, [float, float], float),
-    # 'div': PrimitiveParams(protectedDiv, [float, float], float),
+    'div': PrimitiveParams(protectedDiv, [float, float], float),
     'sin': PrimitiveParams(np.sin, [float], float),
     'arcsin': PrimitiveParams(np.arcsin, [float], float),
     'cos': PrimitiveParams(np.cos, [float], float),
@@ -135,9 +133,9 @@ scalar_primitives = {
     'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
     'Div': PrimitiveParams(protectedDiv, [float, float], float),
     'SinF': PrimitiveParams(jnp.sin, [float], float),
-    # 'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
+    'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
     'CosF': PrimitiveParams(jnp.cos, [float], float),
-    # 'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
+    'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
     'ExpF': PrimitiveParams(jnp.exp, [float], float),
     'LogF': PrimitiveParams(protectedLog, [float], float),
     'SqrtF': PrimitiveParams(protectedSqrt, [float], float),
@@ -319,7 +317,8 @@ coch_primitives = list(map(generate_primitive, coch_prim_list))
 primitives = scalar_primitives | {k: v for d in coch_primitives for k, v in d.items()}
 
 
-def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List) -> None:
+def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = primitives,
+                        new_primitives: Dict = {}) -> None:
     """Add a given list of primitives to a given PrimitiveSet.
 
     Args:
@@ -331,6 +330,7 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List) -> No
             scalar primitive is considered); 'rank', containing a list of the possible
             ranks of the primitive input (or None if a scalar primitive is considered).
     """
+    full_primitives = primitives | {k: v for d in new_primitives for k, v in d.items()}
     for primitive in pset_primitives:
         # pre-process scalar primitives
         if primitive['dimension'] is None:
@@ -342,19 +342,29 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List) -> No
                                        set(primitive['dimension']))
         non_feasible_ranks = list(
             set(("SC", "V", "T")) - set(primitive["rank"]))
-        non_feasible_objects = non_feasible_dimensions + non_feasible_ranks
         # iterate over all the primitives, pre-computed and stored in the dictionary
         # primitives
-        for typed_primitive in primitives.keys():
+        for typed_primitive in full_primitives.keys():
             if primitive['name'] in typed_primitive:
+                # remove the case in which the name of the primitive is a subname
+                # of type_primitive (e.g. if primitive['name'] = sin and typed_primitive
+                # = arcsin, we don't want to add the primitive)
+                exact_name_check = len(
+                    typed_primitive.replace(primitive['name'], "")) <= 2
                 # check if the dimension/rank of a typed primitive
                 # is admissible, i.e. if it does not coincide with a non-admissible
                 # dimension/rank
                 # FIXME: change this!
-                if sum([typed_primitive.count(obj)
-                        for obj in non_feasible_objects]) == 0 or (
-                            typed_primitive.count("ST") == 1):
-                    op = primitives[typed_primitive].op
-                    in_types = primitives[typed_primitive].in_types
-                    out_type = primitives[typed_primitive].out_type
+                check_wrong_dim_primal = sum([typed_primitive.count("P" + obj)
+                                              for obj in non_feasible_dimensions])
+                check_wrong_dim_dual = sum([typed_primitive.count("D" + obj)
+                                            for obj in non_feasible_dimensions])
+                check_rank = sum([typed_primitive.count("P" + obj)
+                                  for obj in non_feasible_ranks])
+                check_wrong_dim_rank = check_wrong_dim_primal + check_wrong_dim_dual +\
+                    check_rank
+                if check_wrong_dim_rank == 0 and exact_name_check:
+                    op = full_primitives[typed_primitive].op
+                    in_types = full_primitives[typed_primitive].in_types
+                    out_type = full_primitives[typed_primitive].out_type
                     pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
