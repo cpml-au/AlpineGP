@@ -30,12 +30,3 @@ def detect_nested_trigonometric_functions(equation):
         i += 1
 
     return nested
-
-
-if __name__ == "__main__":
-
-    # Example usage
-    equation = "sin(mul(x, x)) + tan(x)"
-    equation = "sin(mul(x, cos(x))) + tan(x)"
-    print("Nested trigonometric functions detected:" if detect_nested_trigonometric_functions(
-        equation) else "No nested trigonometric functions detected.")
