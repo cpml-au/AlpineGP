@@ -1,7 +1,9 @@
 gp:
   NINDIVIDUALS: 10
   NGEN: 10
-  num_islands: 1
+  multi_island:
+    num_islands: 1
+    migration: { "freq": 10, "frac": 0.05 }
   crossover_prob: 0.2
   MUTPB: 0.8
   frac_elitist: 0
