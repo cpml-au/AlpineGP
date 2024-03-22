@@ -153,7 +153,7 @@ def test_poisson1d(set_test_dir, yamlfile):
         error_metric=score.remote, predict_func=predict.remote,
         config_file_data=config_file_data, print_log=True,
         common_data=common_params, feature_extractors=[len],
-        seed=seed_str, plot_history=True, save_best_individual=True,
+        seed=seed_str, plot_history=False, save_best_individual=True,
         save_train_fit_history=True, output_path="./")
 
     train_data = Dataset("D", X_train, y_train)
