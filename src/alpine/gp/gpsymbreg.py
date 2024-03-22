@@ -92,7 +92,8 @@ class GPSymbolicRegressor():
                  parallel_lib: str = "ray",
                  parallel_backend: str = "processes",
                  num_jobs=-1,
-                 new_primitives: List = []):
+                 new_primitives: List = [],
+                 debug=False):
 
         self.pset = pset
 
@@ -117,7 +118,11 @@ class GPSymbolicRegressor():
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.parallel_lib = parallel_lib
+<<<<<<< HEAD
         self.new_primitives = new_primitives
+=======
+        self.debug = debug
+>>>>>>> cd79b4e (Adding experimental function to check nested trigonometric functions.)
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
@@ -438,7 +443,7 @@ class GPSymbolicRegressor():
                               self.predict_func, **args_predict_func)
 
     def __register_map(self, individ_feature_extractors: List[Callable] | None = None,
-                       parallel=None, debug=False):
+                       parallel=None):
         def mapper(f, individuals, toolbox):
             # Transform the tree expression in a callable function
             runnables = [toolbox.compile(expr=ind) for ind in individuals]
@@ -451,7 +456,7 @@ class GPSymbolicRegressor():
                 fitnesses = list(parallel((delayed(f)(*args)
                                            for args in zip(runnables,
                                                            *feature_values))))
-            if debug:
+            if self.debug:
                 for ind, fit in zip(individuals, fitnesses):
                     print(str(ind), " ", fit)
             return fitnesses
@@ -487,9 +492,9 @@ class GPSymbolicRegressor():
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
         return score
 
-    def immigration(self, pop, n_immigrants: int):
-        immigrants = self.toolbox.population(n=n_immigrants)
-        for i in range(n_immigrants):
+    def immigration(self, pop, num_immigrants: int):
+        immigrants = self.toolbox.population(n=num_immigrants)
+        for i in range(num_immigrants):
             idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
             pop[idx_individual_to_replace] = immigrants[i]
 
@@ -591,7 +596,7 @@ class GPSymbolicRegressor():
             migRing(self.pop, int(self.migration_frac*self.NINDIVIDUALS),
                     selection=random.sample)
 
-        self.__local_search()
+        # self.__local_search()
 
         if self.callback_fun is not None:
             self.callback_fun(self.pop)
