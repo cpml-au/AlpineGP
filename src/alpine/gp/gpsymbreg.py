@@ -118,11 +118,8 @@ class GPSymbolicRegressor():
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.parallel_lib = parallel_lib
-<<<<<<< HEAD
         self.new_primitives = new_primitives
-=======
         self.debug = debug
->>>>>>> cd79b4e (Adding experimental function to check nested trigonometric functions.)
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
@@ -248,8 +245,8 @@ class GPSymbolicRegressor():
         self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
         self.NGEN = config_file_data["gp"]["NGEN"]
         self.num_islands = config_file_data["gp"]["multi_island"]["num_islands"]
-        self.migration_freq = config_file_data["gp"]["multi_island"]["migration"]["freq"]
-        self.migration_frac = config_file_data["gp"]["multi_island"]["migration"]["frac"]
+        self.mig_freq = config_file_data["gp"]["multi_island"]["migration"]["freq"]
+        self.mig_frac = config_file_data["gp"]["multi_island"]["migration"]["frac"]
         self.crossover_prob = config_file_data["gp"]["crossover_prob"]
         self.MUTPB = config_file_data["gp"]["MUTPB"]
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
@@ -592,8 +589,8 @@ class GPSymbolicRegressor():
                     self.pop[i] + offspring, self.NINDIVIDUALS)
 
         # migrations among islands
-        if cgen % self.migration_frac == 0 and self.num_islands > 1:
-            migRing(self.pop, int(self.migration_frac*self.NINDIVIDUALS),
+        if cgen % self.mig_frac == 0 and self.num_islands > 1:
+            migRing(self.pop, int(self.mig_frac*self.NINDIVIDUALS),
                     selection=random.sample)
 
         # self.__local_search()
