@@ -5,7 +5,7 @@ import operator
 from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-from .primitives import addPrimitivesToPset
+from .primitives import addPrimitivesToPset, generate_primitive, primitives
 from alpine.data import Dataset
 import os
 import ray
@@ -85,7 +85,8 @@ class GPSymbolicRegressor():
                  output_path: str | None = None,
                  parallel_lib: str = "ray",
                  parallel_backend: str = "processes",
-                 num_jobs=-1):
+                 num_jobs=-1,
+                 new_primitives: List = []):
 
         self.pset = pset
 
@@ -109,6 +110,7 @@ class GPSymbolicRegressor():
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.parallel_lib = parallel_lib
+        self.new_primitives = new_primitives
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
@@ -240,7 +242,10 @@ class GPSymbolicRegressor():
         if len(config_file_data["gp"]['primitives']) == 0:
             addPrimitivesToPset(self.pset)
         else:
-            addPrimitivesToPset(self.pset, config_file_data["gp"]['primitives'])
+            new_generated_primitives = list(
+                map(generate_primitive, self.new_primitives))
+            addPrimitivesToPset(
+                self.pset, config_file_data["gp"]['primitives'], new_generated_primitives)
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
