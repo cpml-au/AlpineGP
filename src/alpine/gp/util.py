@@ -16,7 +16,8 @@ def detect_nested_trigonometric_functions(equation):
                 j += 1
             if j < len(equation) and equation[j] == '(':
                 if function_depth > 0:
-                    # We are already inside a trig function, this is a nested trig function
+                    # We are already inside a trig function, this is a nested trig
+                    # function
                     nested = 1
                 function_depth += 1
                 i = j  # Move i to the position of '('
