@@ -5,7 +5,7 @@ import operator
 from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-from .primitives import addPrimitivesToPset, generate_primitive, primitives
+from .primitives import addPrimitivesToPset, generate_primitive
 from alpine.data import Dataset
 import os
 import ray
@@ -245,7 +245,8 @@ class GPSymbolicRegressor():
             new_generated_primitives = list(
                 map(generate_primitive, self.new_primitives))
             addPrimitivesToPset(
-                self.pset, config_file_data["gp"]['primitives'], new_generated_primitives)
+                self.pset, config_file_data["gp"]['primitives'],
+                new_generated_primitives)
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
