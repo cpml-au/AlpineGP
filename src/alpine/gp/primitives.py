@@ -6,8 +6,6 @@ from typing import List, Dict, Callable, Tuple
 from dctkit.dec import cochain as C
 
 
-
-
 def switch_category(categories: Tuple, category: str):
     switched_category_list = list(set(categories) - set(category))
     return str(switched_category_list[0])
@@ -20,9 +18,9 @@ class PrimitiveParams:
         self.out_type = out_type
 
 
-def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | str |
-                                       Dict]) -> Dict:
-    """Generate all the primitives given a typed function.
+def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[str] | str |
+                                                Dict]) -> Dict:
+    """Generate primitive variants given a typed primitive.
 
     Args:
         primitive: a dictionary containing the relevant information of the function.
@@ -76,8 +74,8 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
     return primitive_dictionary
 
 
-def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, primitives_to_add: list,
-                        primitives_collection: dict):
+def add_primitives_to_pset(pset: gp.PrimitiveSetTyped, primitives_to_add: list,
+                           primitives_collection: dict):
     """Add a given list of primitives to a given PrimitiveSet.
 
     Args:
