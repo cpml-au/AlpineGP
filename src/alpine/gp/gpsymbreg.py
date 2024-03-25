@@ -13,6 +13,9 @@ import ray
 import random
 from joblib import Parallel, delayed
 from itertools import chain
+from .cochain_primitives import coch_primitives
+from .numpy_primitives import numpy_primitives
+from .jax_primitives import jax_primitives
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -253,11 +256,12 @@ class GPSymbolicRegressor():
         self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
 
-        if len(config_file_data["gp"]['primitives']) == 0:
-            addPrimitivesToPset(self.pset)
-        else:
-            addPrimitivesToPset(
-                self.pset, config_file_data["gp"]['primitives'])
+        # generate primitives collection
+        full_primitives_collection = numpy_primitives | jax_primitives | {
+            k: v for d in coch_primitives for k, v in d.items()}
+
+        addPrimitivesToPset(
+            self.pset, config_file_data["gp"]['primitives'], full_primitives_collection)
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
