@@ -26,7 +26,9 @@ gp:
     kargs: "{}"
   immigration: { "enabled": False, "freq": 10, "frac": 0.9 }
   primitives:
-    [
+    imports: ["alpine.gp.cochain_primitives"]
+    collections: ["coch_primitives"]
+    used: [
       { "name": "AddF", "dimension": None, "rank": None },
       { "name": "SubF", "dimension": None, "rank": None },
       { "name": "MulF", "dimension": None, "rank": None },

@@ -6,7 +6,7 @@ import operator
 from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-from .primitives import addPrimitivesToPset
+from .primitives import add_primitives_to_pset
 from alpine.data import Dataset
 import os
 import ray
@@ -16,6 +16,7 @@ from itertools import chain
 from .cochain_primitives import coch_primitives
 from .numpy_primitives import numpy_primitives
 from .jax_primitives import jax_primitives
+from importlib import import_module
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -257,11 +258,16 @@ class GPSymbolicRegressor():
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
 
         # generate primitives collection
-        full_primitives_collection = numpy_primitives | jax_primitives | {
-            k: v for d in coch_primitives for k, v in d.items()}
+        full_primitives_collection = dict()
+        for i, source in enumerate(config_file_data["gp"]["primitives"]["imports"]):
+            module = import_module(source)
+            collection = getattr(
+                module, config_file_data["gp"]["primitives"]["collections"][i])
+            full_primitives_collection = full_primitives_collection | collection
+        print(full_primitives_collection)
 
-        addPrimitivesToPset(
-            self.pset, config_file_data["gp"]['primitives'], full_primitives_collection)
+        add_primitives_to_pset(
+            self.pset, config_file_data["gp"]['primitives']["used"], full_primitives_collection)
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 

@@ -2,7 +2,7 @@ from dctkit.dec import cochain as C
 import operator
 from functools import partial
 import jax.numpy as jnp
-from .primitives import switch_category, generate_primitive
+from .primitives import switch_category, generate_primitive_variants
 
 
 def inv_scalar_mul(c, f):
@@ -169,4 +169,6 @@ coch_prim_list = [add_coch, sub_coch, coboundary, codifferential, tr_coch, mul_F
                   inner_product, sin_coch, arcsin_coch, cos_coch, arccos_coch, exp_coch,
                   log_coch, sqrt_coch, square_coch]
 
-coch_primitives = list(map(generate_primitive, coch_prim_list))
+# FIXME: why don't we just build a dictionary instead of making a list first???
+coch_primitives = list(map(generate_primitive_variants, coch_prim_list))
+coch_primitives = {k: v for d in coch_primitives for k, v in d.items()}
