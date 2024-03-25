@@ -92,7 +92,7 @@ class GPSymbolicRegressor():
                  output_path: str | None = None,
                  parallel_lib: str = "ray",
                  parallel_backend: str = "processes",
-                 batch_size=10,
+                 batch_size=1,
                  num_jobs=-1,
                  debug=False):
 
@@ -446,13 +446,19 @@ class GPSymbolicRegressor():
                               for fe in individ_feature_extractors]
             if self.parallel_lib == "ray":
                 fitnesses = []*len(individuals)
-                for i in range(0, len(runnables), self.batch_size):
-                    runnables_batch = runnables[i:i+self.batch_size]
-                    feature_values_batch = [feature_values[j][i:i+self.batch_size]
-                                            for j in
-                                            range(len(individ_feature_extractors))]
-                    fitnesses.append(f(runnables_batch, *feature_values_batch))
-                fitnesses = list(chain(*ray.get(fitnesses)))
+                # FIXME: fix .remote functions to work in batch mode
+                if self.batch_size > 1:
+                    for i in range(0, len(runnables), self.batch_size):
+                        runnables_batch = runnables[i:i+self.batch_size]
+                        feature_values_batch = [feature_values[j][i:i+self.batch_size]
+                                                for j in
+                                                range(len(individ_feature_extractors))]
+                        fitnesses.append(f(runnables_batch, *feature_values_batch))
+                    fitnesses = list(chain(*ray.get(fitnesses)))
+                else:
+                    fitnesses = ray.get([f(*args)
+                                        for args in zip(runnables, *feature_values)])
+
             elif self.parallel_lib == "joblib":
                 fitnesses = list(parallel((delayed(f)(*args)
                                            for args in
