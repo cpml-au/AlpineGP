@@ -1,47 +1,11 @@
 import jax.numpy as jnp
 import numpy as np
 from deap import gp
-from dctkit.dec import cochain as C
 import dctkit as dt
 from typing import List, Dict, Callable, Tuple
-from functools import partial
-import operator
+from dctkit.dec import cochain as C
 
 
-def protectedDiv(left, right):
-    try:
-        return jnp.divide(left, right)
-    except ZeroDivisionError:
-        return jnp.nan
-
-
-def protectedLog(x):
-    try:
-        return jnp.log(x)
-    except ValueError:
-        return jnp.nan
-
-
-def protectedSqrt(x):
-    try:
-        return jnp.sqrt(x)
-    except ValueError:
-        return jnp.nan
-
-
-def inv_float(x):
-    return protectedDiv(1., x)
-
-
-def inv_scalar_mul(c, f):
-    try:
-        return C.scalar_mul(c, 1/f)
-    except ZeroDivisionError:
-        return C.scalar_mul(c, jnp.nan)
-
-
-def square_mod(x):
-    return jnp.square(x).astype(dt.float_dtype)
 
 
 def switch_category(categories: Tuple, category: str):
@@ -112,200 +76,8 @@ def generate_primitive(primitive: Dict[str, Dict[str, Callable] | List[str] | st
     return primitive_dictionary
 
 
-# define scalar primitives
-scalar_primitives = {
-    # scalar operations
-    'add': PrimitiveParams(np.add, [float, float], float),
-    'sub': PrimitiveParams(np.subtract, [float, float], float),
-    'mul': PrimitiveParams(np.multiply, [float, float], float),
-    'div': PrimitiveParams(np.divide, [float, float], float),
-    'sin': PrimitiveParams(np.sin, [float], float),
-    'arcsin': PrimitiveParams(np.arcsin, [float], float),
-    'cos': PrimitiveParams(np.cos, [float], float),
-    'arccos': PrimitiveParams(np.arccos, [float], float),
-    'exp': PrimitiveParams(np.exp, [float], float),
-    'log': PrimitiveParams(np.log, [float], float),
-    'sqrt': PrimitiveParams(np.sqrt, [float], float),
-    'square': PrimitiveParams(np.square, [float], float),
-    # scalar operations (JAX backend)
-    'AddF': PrimitiveParams(jnp.add, [float, float], float),
-    'SubF': PrimitiveParams(jnp.subtract, [float, float], float),
-    'MulF': PrimitiveParams(jnp.multiply, [float, float], float),
-    'Div': PrimitiveParams(protectedDiv, [float, float], float),
-    'SinF': PrimitiveParams(jnp.sin, [float], float),
-    'ArcsinF': PrimitiveParams(jnp.arcsin, [float], float),
-    'CosF': PrimitiveParams(jnp.cos, [float], float),
-    'ArccosF': PrimitiveParams(jnp.arccos, [float], float),
-    'ExpF': PrimitiveParams(jnp.exp, [float], float),
-    'LogF': PrimitiveParams(protectedLog, [float], float),
-    'SqrtF': PrimitiveParams(protectedSqrt, [float], float),
-    'SquareF': PrimitiveParams(jnp.square, [float], float),
-    'InvF': PrimitiveParams(inv_float, [float], float)}
-
-# define cochain primitives
-add_coch = {'fun_info': {'name': 'AddC', 'fun': C.add},
-            'input': ["C.Cochain", "C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-sub_coch = {'fun_info': {'name': 'SubC', 'fun': C.sub},
-            'input': ["C.Cochain", "C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-coboundary = {'fun_info': {'name': 'cob', 'fun': C.coboundary},
-              'input': ["C.Cochain"],
-              'output': "C.Cochain",
-              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
-                            "rank": ("SC", "V", "T")},
-              'map_rule': {'category': lambda x: x,
-                           'dimension': partial(operator.add, 1),
-                           "rank": lambda x: x}}
-codifferential = {'fun_info': {'name': 'del', 'fun': C.codifferential},
-                  'input': ["C.Cochain"],
-                  'output': "C.Cochain",
-                  'att_input': {'category': ('P', 'D'), 'dimension': ('1', '2'),
-                                "rank": ("SC", "V", "T")},
-                  'map_rule': {'category': lambda x: x, 'dimension':
-                               partial(operator.add, -1), "rank": lambda x: x}}
-tr_coch = {'fun_info': {'name': 'tr', 'fun': C.trace},
-           'input': ["C.Cochain"],
-           'output': "C.Cochain",
-           'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                         "rank": ("T",)},
-           'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                        "rank": lambda x: ""}}
-mul_FT = {'fun_info': {'name': 'MF', 'fun': C.scalar_mul},
-          'input': ["C.Cochain", "float"],
-          'output': "C.Cochain",
-          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                        "rank": ("SC", "V", "T")},
-          'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                       "rank": lambda x: x}}
-inv_mul_FT = {'fun_info': {'name': 'InvM', 'fun': inv_scalar_mul},
-              'input': ["C.Cochain", "float"],
-              'output': "C.Cochain",
-              'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                            "rank": ("SC", "V", "T")},
-              'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                           "rank": lambda x: x}}
-mul_coch = {'fun_info': {'name': 'CMul', 'fun': C.cochain_mul},
-            'input': ["C.Cochain", "C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC",)},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-tran_coch = {'fun_info': {'name': 'tran', 'fun': C.transpose},
-             'input': ["C.Cochain"],
-             'output': "C.Cochain",
-             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                           "rank": ("T",)},
-             'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                          "rank": lambda x: x}}
-sym_coch = {'fun_info': {'name': 'sym', 'fun': C.sym},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("T",)},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-star_1 = {'fun_info': {'name': 'St1', 'fun': C.star},
-          'input': ["C.Cochain"],
-          'output': "C.Cochain",
-          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1'),
-                        "rank": ("SC", "V", "T")},
-          'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': partial(lambda x, y: y - x, y=1),
-                       "rank": lambda x: x}}
-star_2 = {'fun_info': {'name': 'St2', 'fun': C.star},
-          'input': ["C.Cochain"],
-          'output': "C.Cochain",
-          'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                        "rank": ("SC", "V", "T")},
-          'map_rule': {'category': partial(switch_category, ('P', 'D')),
-                       'dimension': partial(lambda x, y: y-x, y=2),
-                       "rank": lambda x: x}}
-inner_product = {'fun_info': {'name': 'Inn', 'fun': C.inner},
-                 'input': ["C.Cochain", "C.Cochain"],
-                 'output': "float",
-                 'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                               "rank": ("SC", "V", "T")},
-                 'map_rule': {'category': lambda x: "", 'dimension': lambda x: "",
-                              "rank": lambda x: ""}}
-sin_coch = {'fun_info': {'name': 'Sin', 'fun': C.sin},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-arcsin_coch = {'fun_info': {'name': 'ArcSin', 'fun': C.arcsin},
-               'input': ["C.Cochain"],
-               'output': "C.Cochain",
-               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC", "V", "T")},
-               'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                            "rank": lambda x: x}}
-cos_coch = {'fun_info': {'name': 'Cos', 'fun': C.cos},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-arccos_coch = {'fun_info': {'name': 'ArcCos', 'fun': C.arccos},
-               'input': ["C.Cochain"],
-               'output': "C.Cochain",
-               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC", "V", "T")},
-               'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                            "rank": lambda x: x}}
-exp_coch = {'fun_info': {'name': 'Exp', 'fun': C.exp},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-log_coch = {'fun_info': {'name': 'Log', 'fun': C.log},
-            'input': ["C.Cochain"],
-            'output': "C.Cochain",
-            'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                          "rank": ("SC", "V", "T")},
-            'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                         "rank": lambda x: x}}
-sqrt_coch = {'fun_info': {'name': 'Sqrt', 'fun': C.sqrt},
-             'input': ["C.Cochain"],
-             'output': "C.Cochain",
-             'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                           "rank": ("SC", "V", "T")},
-             'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                          "rank": lambda x: x}}
-square_coch = {'fun_info': {'name': 'Square', 'fun': C.square},
-               'input': ["C.Cochain"],
-               'output': "C.Cochain",
-               'att_input': {'category': ('P', 'D'), 'dimension': ('0', '1', '2'),
-                             "rank": ("SC", "V", "T")},
-               'map_rule': {'category': lambda x: x, 'dimension': lambda x: x,
-                            "rank": lambda x: x}}
-
-coch_prim_list = [add_coch, sub_coch, coboundary, codifferential, tr_coch, mul_FT,
-                  inv_mul_FT, mul_coch, tran_coch, sym_coch, star_1, star_2,
-                  inner_product, sin_coch, arcsin_coch, cos_coch, arccos_coch, exp_coch,
-                  log_coch, sqrt_coch, square_coch]
-coch_primitives = list(map(generate_primitive, coch_prim_list))
-
-# merge dictionary
-primitives = scalar_primitives | {k: v for d in coch_primitives for k, v in d.items()}
-
-
-def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = primitives,
-                        new_primitives: Dict = {}) -> None:
+def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, primitives_to_add: list,
+                        primitives_collection: dict):
     """Add a given list of primitives to a given PrimitiveSet.
 
     Args:
@@ -317,8 +89,7 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = prim
             scalar primitive is considered); 'rank', containing a list of the possible
             ranks of the primitive input (or None if a scalar primitive is considered).
     """
-    full_primitives = primitives | {k: v for d in new_primitives for k, v in d.items()}
-    for primitive in pset_primitives:
+    for primitive in primitives_to_add:
         # pre-process scalar primitives
         if primitive['dimension'] is None:
             primitive['dimension'] = []
@@ -331,7 +102,7 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = prim
             set(("SC", "V", "T")) - set(primitive["rank"]))
         # iterate over all the primitives, pre-computed and stored in the dictionary
         # primitives
-        for typed_primitive in full_primitives.keys():
+        for typed_primitive in primitives_collection.keys():
             if primitive['name'] in typed_primitive:
                 # remove the case in which the name of the primitive is a subname
                 # of type_primitive (e.g. if primitive['name'] = sin and typed_primitive
@@ -351,7 +122,7 @@ def addPrimitivesToPset(pset: gp.PrimitiveSetTyped, pset_primitives: List = prim
                 check_wrong_dim_rank = check_wrong_dim_primal + check_wrong_dim_dual +\
                     check_rank
                 if check_wrong_dim_rank == 0 and exact_name_check:
-                    op = full_primitives[typed_primitive].op
-                    in_types = full_primitives[typed_primitive].in_types
-                    out_type = full_primitives[typed_primitive].out_type
+                    op = primitives_collection[typed_primitive].op
+                    in_types = primitives_collection[typed_primitive].in_types
+                    out_type = primitives_collection[typed_primitive].out_type
                     pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
