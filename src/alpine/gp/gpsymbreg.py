@@ -92,7 +92,6 @@ class GPSymbolicRegressor():
                  parallel_lib: str = "ray",
                  parallel_backend: str = "processes",
                  num_jobs=-1,
-                 new_primitives: List = [],
                  debug=False):
 
         self.pset = pset
@@ -118,7 +117,6 @@ class GPSymbolicRegressor():
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.parallel_lib = parallel_lib
-        self.new_primitives = new_primitives
         self.debug = debug
 
         if common_data is not None:
@@ -255,11 +253,8 @@ class GPSymbolicRegressor():
         if len(config_file_data["gp"]['primitives']) == 0:
             addPrimitivesToPset(self.pset)
         else:
-            new_generated_primitives = list(
-                map(generate_primitive, self.new_primitives))
             addPrimitivesToPset(
-                self.pset, config_file_data["gp"]['primitives'],
-                new_generated_primitives)
+                self.pset, config_file_data["gp"]['primitives'])
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
