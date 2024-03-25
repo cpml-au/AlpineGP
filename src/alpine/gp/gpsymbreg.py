@@ -12,6 +12,7 @@ import os
 import ray
 import random
 from joblib import Parallel, delayed
+from itertools import chain
 
 # reducing the number of threads launched by fitness evaluations
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -91,6 +92,7 @@ class GPSymbolicRegressor():
                  output_path: str | None = None,
                  parallel_lib: str = "ray",
                  parallel_backend: str = "processes",
+                 batch_size=10,
                  num_jobs=-1,
                  debug=False):
 
@@ -117,6 +119,7 @@ class GPSymbolicRegressor():
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.parallel_lib = parallel_lib
+        self.batch_size = batch_size
         self.debug = debug
 
         if common_data is not None:
@@ -442,12 +445,19 @@ class GPSymbolicRegressor():
             feature_values = [[fe(i) for i in individuals]
                               for fe in individ_feature_extractors]
             if self.parallel_lib == "ray":
-                fitnesses = ray.get([f(*args)
-                                    for args in zip(runnables, *feature_values)])
+                fitnesses = []*len(individuals)
+                for i in range(0, len(runnables), self.batch_size):
+                    runnables_batch = runnables[i:i+self.batch_size]
+                    feature_values_batch = [feature_values[j][i:i+self.batch_size]
+                                            for j in
+                                            range(len(individ_feature_extractors))]
+                    fitnesses.append(f(runnables_batch, *feature_values_batch))
+                fitnesses = list(chain(*ray.get(fitnesses)))
             elif self.parallel_lib == "joblib":
                 fitnesses = list(parallel((delayed(f)(*args)
-                                           for args in zip(runnables,
-                                                           *feature_values))))
+                                           for args in
+                                           zip(runnables,
+                                               *feature_values))))
             if self.debug:
                 for ind, fit in zip(individuals, fitnesses):
                     print(str(ind), " ", fit)
