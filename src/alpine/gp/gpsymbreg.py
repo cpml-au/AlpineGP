@@ -6,7 +6,7 @@ import operator
 from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-from .primitives import addPrimitivesToPset, generate_primitive
+from .primitives import addPrimitivesToPset
 from alpine.data import Dataset
 import os
 import ray
