@@ -264,7 +264,6 @@ class GPSymbolicRegressor():
             collection = getattr(
                 module, config_file_data["gp"]["primitives"]["collections"][i])
             full_primitives_collection = full_primitives_collection | collection
-        print(full_primitives_collection)
 
         add_primitives_to_pset(
             self.pset, config_file_data["gp"]['primitives']["used"], full_primitives_collection)
@@ -694,6 +693,9 @@ class GPSymbolicRegressor():
                 self.toolbox.plot_best_func(best_inds[0])
 
             self.best = best_inds[0]
+            if self.best.fitness.values[0] <= 1e-15:
+                print("EARLY STOPPING.")
+                break
 
         self.plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
