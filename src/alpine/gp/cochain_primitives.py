@@ -174,7 +174,6 @@ coch_prim_list = [add_coch, sub_coch, coboundary, codifferential, tr_coch, mul_F
                   inner_product, sin_coch, arcsin_coch, cos_coch, arccos_coch, exp_coch,
                   log_coch, sqrt_coch, square_coch]
 
-# FIXME: why don't we just build a dictionary instead of making a list first???
-coch_primitives = list(
-    map(partial(generate_primitive_variants, imports=modules_functions), coch_prim_list))
+coch_primitives = list(map(partial(generate_primitive_variants,
+                                   imports=modules_functions), coch_prim_list))
 coch_primitives = {k: v for d in coch_primitives for k, v in d.items()}

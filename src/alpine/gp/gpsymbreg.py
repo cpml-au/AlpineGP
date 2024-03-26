@@ -13,9 +13,6 @@ import ray
 import random
 from joblib import Parallel, delayed
 from itertools import chain
-from .cochain_primitives import coch_primitives
-from .numpy_primitives import numpy_primitives
-from .jax_primitives import jax_primitives
 from importlib import import_module
 
 # reducing the number of threads launched by fitness evaluations
