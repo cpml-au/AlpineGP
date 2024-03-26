@@ -1,9 +1,6 @@
-import jax.numpy as jnp
-import numpy as np
-from deap import gp
-import dctkit as dt
+from deap.gp import PrimitiveSetTyped
 from typing import List, Dict, Callable, Tuple
-from dctkit.dec import cochain as C
+import importlib
 
 
 def switch_category(categories: Tuple, category: str):
@@ -19,7 +16,7 @@ class PrimitiveParams:
 
 
 def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[str] | str |
-                                                Dict]) -> Dict:
+                                                Dict], imports: Dict = None) -> Dict:
     """Generate primitive variants given a typed primitive.
 
     Args:
@@ -39,17 +36,28 @@ def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[
         a dict in which each key is the name of the sub-primitive and each value
             is a PrimitiveParams object.
     """
-    general_primitive = primitive['fun_info']
+    base_primitive = primitive['fun_info']
     in_attribute = primitive['att_input']
     map_rule = primitive['map_rule']
     primitive_dictionary = dict()
+
+    # Dynamically import modules and functions needed to eval input/output types
+    custom_globals = {}
+    for module_name, function_names in imports.items():
+        module = importlib.import_module(module_name)
+        for function_name in function_names:
+            custom_globals[function_name] = getattr(module, function_name)
+
+    def eval_with_globals(expression):
+        return eval(expression, custom_globals)
+
     for in_category in in_attribute['category']:
         for in_dim in in_attribute['dimension']:
             for in_rank in in_attribute['rank']:
                 # compute the primitive name taking into account
                 # the right category, dim and rank
                 in_rank = in_rank.replace("SC", "")
-                primitive_name = general_primitive['name'] + \
+                primitive_name = base_primitive['name'] + \
                     in_category + in_dim + in_rank
                 in_type_name = []
                 # compute the input type list
@@ -63,18 +71,18 @@ def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[
                                             in_dim + in_rank[i])
                     else:
                         in_type_name.append(input + in_category + in_dim + in_rank)
-                in_type = list(map(eval, in_type_name))
+                in_type = list(map(eval_with_globals, in_type_name))
                 out_category = map_rule['category'](in_category)
                 out_dim = str(map_rule['dimension'](int(in_dim)))
                 out_rank = map_rule['rank'](in_rank)
                 out_type_name = primitive['output'] + out_category + out_dim + out_rank
-                out_type = eval(out_type_name)
+                out_type = eval_with_globals(out_type_name)
                 primitive_dictionary[primitive_name] = PrimitiveParams(
-                    general_primitive['fun'], in_type, out_type)
+                    base_primitive['fun'], in_type, out_type)
     return primitive_dictionary
 
 
-def add_primitives_to_pset(pset: gp.PrimitiveSetTyped, primitives_to_add: list,
+def add_primitives_to_pset(pset: PrimitiveSetTyped, primitives_to_add: list,
                            primitives_collection: dict):
     """Add a given list of primitives to a given PrimitiveSet.
 
