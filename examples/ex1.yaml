@@ -26,16 +26,18 @@ gp:
     kargs: "{}"
   immigration: { "enabled": False, "freq": 10, "frac": 0.9 }
   primitives:
-    [
-      { "name": "AddF", "dimension": None, "rank": None },
-      { "name": "SubF", "dimension": None, "rank": None },
-      { "name": "MulF", "dimension": None, "rank": None },
-      { "name": "Div", "dimension": None, "rank": None },
-      { "name": "AddC", "dimension": ["0", "1"], "rank": ["SC"] },
-      { "name": "SubC", "dimension": ["0", "1"], "rank": ["SC"] },
-      { "name": "cob", "dimension": ["0", "1"], "rank": ["SC"] },
-      { "name": "del", "dimension": ["1"], "rank": ["SC"] },
-      { "name": "St1", "dimension": ["0", "1"], "rank": ["SC"] },
-      { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
-      { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
-    ]
+    imports: { "alpine.gp.cochain_primitives": ["coch_primitives"] }
+    used:
+      [
+        { "name": "AddF", "dimension": None, "rank": None },
+        { "name": "SubF", "dimension": None, "rank": None },
+        { "name": "MulF", "dimension": None, "rank": None },
+        { "name": "Div", "dimension": None, "rank": None },
+        { "name": "AddC", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "SubC", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "cob", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "del", "dimension": ["1"], "rank": ["SC"] },
+        { "name": "St1", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
+      ]
