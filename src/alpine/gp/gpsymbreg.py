@@ -258,15 +258,17 @@ class GPSymbolicRegressor():
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
 
         # generate primitives collection
-        full_primitives_collection = dict()
-        for i, source in enumerate(config_file_data["gp"]["primitives"]["imports"]):
-            module = import_module(source)
-            collection = getattr(
-                module, config_file_data["gp"]["primitives"]["collections"][i])
-            full_primitives_collection = full_primitives_collection | collection
+        primitives_collection = dict()
+        imports = config_file_data["gp"]["primitives"]["imports"].items()
+        for module_name, function_names in imports:
+            module = import_module(module_name)
+            for function_name in function_names:
+                primitive = getattr(module, function_name)
+                primitives_collection = primitives_collection | primitive
 
         add_primitives_to_pset(
-            self.pset, config_file_data["gp"]['primitives']["used"], full_primitives_collection)
+            self.pset, config_file_data["gp"]['primitives']["used"],
+            primitives_collection)
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
