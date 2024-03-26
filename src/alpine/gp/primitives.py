@@ -15,8 +15,9 @@ class PrimitiveParams:
         self.out_type = out_type
 
 
-def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[str] | str |
-                                                Dict], imports: Dict = None) -> Dict:
+def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[str]
+                                                | str | Dict],
+                                imports: Dict = None) -> Dict:
     """Generate primitive variants given a typed primitive.
 
     Args:
@@ -31,9 +32,11 @@ def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[
           same keys of 'att_input'. In this case, each key contains a callable object
           that provides the map to get the output category/dimension/rank given the
           input one.
+        imports: dictionary whose keys and values are the modules and the functions to
+            be imported in order to evaluate the input/output types of the primitive.
 
     Returns:
-        a dict in which each key is the name of the sub-primitive and each value
+        a dict in which each key is the name of the primitive variant and each value
             is a PrimitiveParams object.
     """
     base_primitive = primitive['fun_info']

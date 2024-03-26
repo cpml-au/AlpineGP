@@ -15,7 +15,7 @@ gp:
   select:
     fun: self.tournament_with_elitism
     kargs: "{'tournsize': 3, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7,
-    0.2, 0.1] }}"
+      0.2, 0.1] }}"
   mutate:
     fun: gp.mutUniform
     kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset}" # string is important
