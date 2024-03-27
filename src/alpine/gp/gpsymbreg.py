@@ -448,30 +448,20 @@ class GPSymbolicRegressor():
     def __register_map(self, individ_feature_extractors: List[Callable] | None = None,
                        parallel=None):
         def mapper(f, individuals, toolbox):
-            # Transform the tree expression in a callable function
-            runnables = [toolbox.compile(expr=ind) for ind in individuals]
-            feature_values = [[fe(i) for i in individuals]
-                              for fe in individ_feature_extractors]
             if self.parallel_lib == "ray":
                 fitnesses = []*len(individuals)
-                # FIXME: fix .remote functions to work in batch mode
-                if self.batch_size > 1:
-                    for i in range(0, len(runnables), self.batch_size):
-                        runnables_batch = runnables[i:i+self.batch_size]
-                        feature_values_batch = [feature_values[j][i:i+self.batch_size]
-                                                for j in
-                                                range(len(individ_feature_extractors))]
-                        fitnesses.append(f(runnables_batch, *feature_values_batch))
-                    fitnesses = list(chain(*ray.get(fitnesses)))
-                else:
-                    fitnesses = ray.get([f(*args)
-                                        for args in zip(runnables, *feature_values)])
-
-            elif self.parallel_lib == "joblib":
-                fitnesses = list(parallel((delayed(f)(*args)
-                                           for args in
-                                           zip(runnables,
-                                               *feature_values))))
+                toolbox_ref = ray.put(toolbox)
+                for i in range(0, len(individuals), self.batch_size):
+                    individuals_batch = individuals[i:i+self.batch_size]
+                    fitnesses.append(
+                        f(individuals_batch, individ_feature_extractors,
+                          toolbox_ref))
+                fitnesses = list(chain(*ray.get(fitnesses)))
+            # elif self.parallel_lib == "joblib":
+            #     fitnesses = list(parallel((delayed(f)(*args)
+            #                                for args in
+            #                                zip(runnables,
+            #                                    *feature_values))))
             if self.debug:
                 for ind, fit in zip(individuals, fitnesses):
                     print(str(ind), " ", fit)
@@ -514,11 +504,21 @@ class GPSymbolicRegressor():
             idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
             pop[idx_individual_to_replace] = immigrants[i]
 
-    def __flatten_pop(self, pop):
+    def __flatten_list(self, nested_lst):
         flat_list = []
-        for pop in self.pop:
-            flat_list += pop
+        for lst in nested_lst:
+            flat_list += lst
         return flat_list
+
+    def __unflatten_list(self, flat_lst, lengths):
+        result = []
+        start = 0  # Starting index of the current sublist
+        for length in lengths:
+            # Slice the list from the current start index to start+length
+            end = start + length
+            result.append(flat_lst[start:end])
+            start = end  # Update the start index for the next sublist
+        return result
 
     def __local_search(self, n_iter: int = 1, n_mutations: int = 500,
                        n_inds_to_refine: int = 10):
@@ -568,6 +568,10 @@ class GPSymbolicRegressor():
     def __evolve_islands(self, cgen: int):
         num_evals = 0
 
+        invalid_inds = [None]*self.num_islands
+        offsprings = [None]*self.num_islands
+        elite_inds = [None]*self.num_islands
+
         for i in range(self.num_islands):
             if self.immigration_enabled:
                 if cgen % self.immigration_freq == 0:
@@ -575,37 +579,39 @@ class GPSymbolicRegressor():
                         self.pop[i], int(self.immigration_frac*self.NINDIVIDUALS))
 
             # Select the parents for the offspring
-            offspring = list(
+            offsprings[i] = list(
                 map(self.toolbox.clone, self.toolbox.select(self.pop[i])))
 
             # Apply crossover and mutation to the offspring with elitism
-            elite_ind = tools.selBest(offspring, self.n_elitist)
-            offspring = elite_ind + \
-                algorithms.varOr(offspring, self.toolbox, self.NINDIVIDUALS -
+            elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
+            offsprings[i] = elite_inds[i] + \
+                algorithms.varOr(offsprings[i], self.toolbox, self.NINDIVIDUALS -
                                  self.n_elitist, self.crossover_prob, self.MUTPB)
 
-            # Evaluate the individuals with an invalid fitness (subject to
-            # crossover or # mutation)
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+            # add individuals subject to cross-over and mutation to the list of invalids
+            invalid_inds[i] = [ind for ind in offsprings[i] if not ind.fitness.valid]
 
-            num_evals += len(invalid_ind)
+            num_evals += len(invalid_inds[i])
 
             if self.preprocess_func is not None:
-                self.preprocess_func(invalid_ind)
+                self.preprocess_func(invalid_inds[i])
 
-            fitnesses = self.toolbox.map(self.toolbox.evaluate_train, invalid_ind)
+        fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
+                                     self.__flatten_list(invalid_inds))
+        fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
 
-            for ind, fit in zip(invalid_ind, fitnesses):
+        for i in range(self.num_islands):
+            for ind, fit in zip(invalid_inds[i], fitnesses[i]):
                 ind.fitness.values = fit
 
             # survival selection
             if not self.overlapping_generation:
                 # The population is entirely replaced by the offspring
-                self.pop[i][:] = offspring
+                self.pop[i][:] = offsprings[i]
             else:
                 # parents and offspring compete for survival (truncation selection)
                 self.pop[i] = tools.selBest(
-                    self.pop[i] + offspring, self.NINDIVIDUALS)
+                    self.pop[i] + offsprings[i], self.NINDIVIDUALS)
 
         # migrations among islands
         if cgen % self.mig_frac == 0 and self.num_islands > 1:
@@ -665,11 +671,11 @@ class GPSymbolicRegressor():
 
             # select the best individuals in the current population
             # (including all islands)
-            best_inds = tools.selBest(self.__flatten_pop(
+            best_inds = tools.selBest(self.__flatten_list(
                 self.pop), k=self.num_best_inds_str)
 
             # compute and print population statistics (including all islands)
-            self.__stats(self.__flatten_pop(self.pop), cgen, num_evals)
+            self.__stats(self.__flatten_list(self.pop), cgen, num_evals)
 
             print("Best individuals of this generation:", flush=True)
             for i in range(self.num_best_inds_str):
