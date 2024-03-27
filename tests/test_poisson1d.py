@@ -21,6 +21,18 @@ import pytest
 config()
 
 
+def compile_individuals(toolbox, individuals_str_batch):
+    return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
+
+
+def get_features_batch(individ_feature_extractors, individuals_str_batch):
+    features_batch = [[fe(i) for i in individuals_str_batch]
+                      for fe in individ_feature_extractors]
+
+    indlen = features_batch[0]
+    return indlen
+
+
 def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
                  u_0: C.CochainP0) -> float:
 
@@ -77,33 +89,51 @@ def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
 
 
 @ray.remote
-def predict(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
-            u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
+def predict(individuals_str: list[str], individ_feature_extractors: list[Callable],
+            toolbox, D: Dataset, S: SimplicialComplex,
+            u_0: C.CochainP0, penalty: dict) -> List:
 
-    _, u = eval_MSE_sol(individual, D, S, u_0)
+    callables = compile_individuals(toolbox, individuals_str)
+
+    u = [None]*len(individuals_str)
+
+    for i, ind in enumerate(callables):
+        _, u[i] = eval_MSE_sol(ind, D, S, u_0)
 
     return u
 
 
 @ray.remote
-def score(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
-          u_0: C.CochainP0, penalty: dict) -> List[npt.NDArray]:
+def score(individuals_str: list[str], individ_feature_extractors: list[Callable],
+          toolbox, D: Dataset, S: SimplicialComplex,
+          u_0: C.CochainP0, penalty: dict) -> List:
 
-    MSE, _ = eval_MSE_sol(individual, D, S, u_0)
+    callables = compile_individuals(toolbox, individuals_str)
+
+    MSE = [None]*len(individuals_str)
+
+    for i, ind in enumerate(callables):
+        MSE[i], _ = eval_MSE_sol(ind, D, S, u_0)
 
     return MSE
 
 
 @ray.remote
-def fitness(individual: Callable, indlen: int, D: Dataset, S: SimplicialComplex,
+def fitness(individuals_str: list[str], individ_feature_extractors: list[Callable],
+            toolbox, D: Dataset, S: SimplicialComplex,
             u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
 
-    MSE, _ = eval_MSE_sol(individual, D, S, u_0)
+    callables = compile_individuals(toolbox, individuals_str)
+    indlen = get_features_batch(individ_feature_extractors, individuals_str)
 
-    # add penalty on length of the tree to promote simpler solutions
-    fitness = MSE + penalty["reg_param"]*indlen
+    fitnesses = [None]*len(individuals_str)
+    for i, ind in enumerate(callables):
+        MSE, _ = eval_MSE_sol(ind, D, S, u_0)
 
-    return fitness,
+        # add penalty on length of the tree to promote simpler solutions
+        fitnesses[i] = (MSE + penalty["reg_param"]*indlen[i],)
+
+    return fitnesses
 
 
 cases = ['poisson1d_1.yaml', 'poisson1d_2.yaml']
