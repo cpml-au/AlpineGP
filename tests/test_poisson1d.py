@@ -12,7 +12,6 @@ import ray
 import math
 import yaml
 from typing import Tuple, Callable, List
-import numpy.typing as npt
 import os
 import pytest
 
