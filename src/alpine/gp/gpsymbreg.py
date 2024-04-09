@@ -601,8 +601,11 @@ class GPSymbolicRegressor():
         fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
 
         for i in range(self.num_islands):
-            for ind, fit in zip(invalid_inds[i], fitnesses[i]):
-                ind.fitness.values = fit
+            if self.callback_fun is not None:
+                self.callback_fun(invalid_inds[i], fitnesses[i])
+            else:
+                for ind, fit in zip(invalid_inds[i], fitnesses[i]):
+                    ind.fitness.values = fit
 
             # survival selection
             if not self.overlapping_generation:
@@ -619,9 +622,6 @@ class GPSymbolicRegressor():
                     selection=random.sample)
 
         # self.__local_search()
-
-        if self.callback_fun is not None:
-            self.callback_fun(self.pop)
 
         return num_evals
 
@@ -656,8 +656,11 @@ class GPSymbolicRegressor():
         for i in range(self.num_islands):
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop[i])
 
-            for ind, fit in zip(self.pop[i], fitnesses):
-                ind.fitness.values = fit
+            if self.callback_fun is not None:
+                self.callback_fun(self.pop[i], fitnesses)
+            else:
+                for ind, fit in zip(self.pop[i], fitnesses):
+                    ind.fitness.values = fit
 
         if self.validate:
             print("Using validation dataset.")
