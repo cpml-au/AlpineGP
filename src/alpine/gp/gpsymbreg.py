@@ -349,30 +349,6 @@ class GPSymbolicRegressor():
             # print(LINE_UP, end=LINE_CLEAR, flush=True)
             print(self.logbook.stream, flush=True)
 
-    # def tournament_with_elitism(self, individuals, tournsize=2,
-    #                             stochastic_tourn={'enabled': False,
-    #                                               'prob': [1., 0.]}):
-    #     """Perform tournament selection with elitism.
-
-    #         Args:
-    #             individuals: a list of individuals to select from.
-
-    #         Returns:
-    #             population after selection/tournament.
-    #     """
-    #     n_tournament = self.NINDIVIDUALS - self.n_elitist
-
-    #     bestind = tools.selBest(individuals, self.n_elitist)
-
-    #     if stochastic_tourn['enabled']:
-    #         return bestind + tools.selStochasticTournament(individuals, n_tournament,
-    #                                                        tournsize=tournsize,
-    #                                                        prob=stochastic_tourn['prob']
-    #                                                        )
-    #     else:
-    #         return bestind + tools.selTournament(individuals, n_tournament,
-    #                                              tournsize=tournsize)
-
     def __plot_history(self):
         """Plots the fitness of the best individual vs generation number."""
         if not self.plot_initialized:
