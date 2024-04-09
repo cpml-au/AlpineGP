@@ -13,8 +13,8 @@ gp:
   validate: False
   penalty: { "method": "length", "reg_param": 0.1 }
   select:
-    fun: self.tournament_with_elitism
-    kargs: "{'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}"
+    fun: tools.selection.tournament_with_elitism
+    kargs: "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}"
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
