@@ -1,0 +1,37 @@
+gp:
+  NINDIVIDUALS: 10
+  NGEN: 10
+  multi_island:
+    num_islands: 1
+    migration: { "freq": 10, "frac": 0.05 }
+  crossover_prob: 0.2
+  MUTPB: 0.8
+  frac_elitist: 0
+  min_: 1
+  max_: 4
+  overlapping_generation: True
+  validate: False
+  penalty: { "method": "length", "reg_param": 0.1 }
+  select:
+    fun: tools.selection.tournament_with_elitism
+    kargs: "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  immigration: { "enabled": False, "freq": 10, "frac": 0.9 }
+  primitives:
+    imports: { "alpine.gp.jax_primitives": ["jax_primitives"] }
+    used:
+      [
+        { "name": "AddF", "dimension": None, "rank": None },
+        { "name": "SubF", "dimension": None, "rank": None },
+        { "name": "MulF", "dimension": None, "rank": None },
+        { "name": "Div", "dimension": None, "rank": None },
+        { "name": "SinF", "dimension": None, "rank": None },
+        { "name": "CosF", "dimension": None, "rank": None },
+      ]
