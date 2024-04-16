@@ -3,22 +3,22 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - gmsh=4.11.1
+  - gmsh
   - jax
   - jaxopt
-  - numpy=1.24.2
-  - pygmo=2.19.5
-  - python
+  - numpy
+  - pygmo
+  - python<3.11
   - python-gmsh
   - petsc4py
   - jupyterlab
   - trame
   - ipywidgets
-  - scipy=1.10.0
+  - scipy
   - scikit-learn
   - pyvista
   - typeguard
-  - yaml=0.2.5
+  - yaml
   - pygraphviz
   - joblib
   - pip
@@ -27,3 +27,4 @@ dependencies:
       - git+https://github.com/alucantonio/deap
       - ray
       - pygmsh
+      - tox
