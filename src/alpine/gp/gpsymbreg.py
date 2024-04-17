@@ -11,7 +11,6 @@ from alpine.data import Dataset
 import os
 import ray
 import random
-from joblib import Parallel
 from itertools import chain
 from importlib import import_module
 
@@ -92,11 +91,7 @@ class GPSymbolicRegressor():
                  save_best_individual: bool = False,
                  save_train_fit_history: bool = False,
                  output_path: str | None = None,
-                 parallel_lib: str = "ray",
-                 parallel_backend: str = "processes",
-                 batch_size=1,
-                 num_jobs=-1,
-                 debug=False):
+                 batch_size=1):
 
         self.pset = pset
 
@@ -120,9 +115,7 @@ class GPSymbolicRegressor():
         self.is_save_best_individual = save_best_individual
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
-        self.parallel_lib = parallel_lib
         self.batch_size = batch_size
-        self.debug = debug
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
@@ -174,15 +167,7 @@ class GPSymbolicRegressor():
             self.toolbox.decorate("mate", self.history.decorator)
             self.toolbox.decorate("mutate", self.history.decorator)
 
-        if self.parallel_lib == "joblib":
-            if parallel_backend != "":
-                parallel = Parallel(
-                    n_jobs=num_jobs, return_as="generator", prefer=parallel_backend)
-            else:
-                parallel = Parallel(n_jobs=num_jobs, return_as="generator")
-        else:
-            parallel = None
-        self.__register_map(parallel)
+        self.__register_map()
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -300,9 +285,8 @@ class GPSymbolicRegressor():
             self.__store_shared_objects(dataset_label, dataset_name_data)
 
     def __store_shared_objects(self, label: str, data: Dict):
-        if self.parallel_lib == "ray":
-            for key, value in data.items():
-                data[key] = ray.put(value)
+        for key, value in data.items():
+            data[key] = ray.put(value)
         self.data_store[label] = data
 
     def __init_logbook(self):
@@ -422,23 +406,14 @@ class GPSymbolicRegressor():
         self.toolbox.register("evaluate_test_sols",
                               self.predict_func, **args_predict_func)
 
-    def __register_map(self, parallel=None):
+    def __register_map(self):
         def mapper(f, individuals, toolbox):
-            if self.parallel_lib == "ray":
-                fitnesses = []*len(individuals)
-                toolbox_ref = ray.put(toolbox)
-                for i in range(0, len(individuals), self.batch_size):
-                    individuals_batch = individuals[i:i+self.batch_size]
-                    fitnesses.append(f(individuals_batch, toolbox_ref))
-                fitnesses = list(chain(*ray.get(fitnesses)))
-            # elif self.parallel_lib == "joblib":
-            #     fitnesses = list(parallel((delayed(f)(*args)
-            #                                for args in
-            #                                zip(runnables,
-            #                                    *feature_values))))
-            if self.debug:
-                for ind, fit in zip(individuals, fitnesses):
-                    print(str(ind), " ", fit)
+            fitnesses = []*len(individuals)
+            toolbox_ref = ray.put(toolbox)
+            for i in range(0, len(individuals), self.batch_size):
+                individuals_batch = individuals[i:i+self.batch_size]
+                fitnesses.append(f(individuals_batch, toolbox_ref))
+            fitnesses = list(chain(*ray.get(fitnesses)))
             return fitnesses
 
         self.toolbox.register("map", mapper, toolbox=self.toolbox)
