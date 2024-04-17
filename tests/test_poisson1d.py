@@ -88,8 +88,7 @@ def eval_MSE_sol(residual: Callable, D: Dataset, S: SimplicialComplex,
 
 
 @ray.remote
-def predict(individuals_str: list[str], individ_feature_extractors: list[Callable],
-            toolbox, D: Dataset, S: SimplicialComplex,
+def predict(individuals_str: list[str], toolbox, D: Dataset, S: SimplicialComplex,
             u_0: C.CochainP0, penalty: dict) -> List:
 
     callables = compile_individuals(toolbox, individuals_str)
@@ -103,8 +102,7 @@ def predict(individuals_str: list[str], individ_feature_extractors: list[Callabl
 
 
 @ray.remote
-def score(individuals_str: list[str], individ_feature_extractors: list[Callable],
-          toolbox, D: Dataset, S: SimplicialComplex,
+def score(individuals_str: list[str], toolbox, D: Dataset, S: SimplicialComplex,
           u_0: C.CochainP0, penalty: dict) -> List:
 
     callables = compile_individuals(toolbox, individuals_str)
@@ -118,12 +116,11 @@ def score(individuals_str: list[str], individ_feature_extractors: list[Callable]
 
 
 @ray.remote
-def fitness(individuals_str: list[str], individ_feature_extractors: list[Callable],
-            toolbox, D: Dataset, S: SimplicialComplex,
+def fitness(individuals_str: list[str], toolbox, D: Dataset, S: SimplicialComplex,
             u_0: C.CochainP0, penalty: dict) -> Tuple[float, ]:
 
     callables = compile_individuals(toolbox, individuals_str)
-    indlen = get_features_batch(individ_feature_extractors, individuals_str)
+    indlen = get_features_batch([len], individuals_str)
 
     fitnesses = [None]*len(individuals_str)
     for i, ind in enumerate(callables):
@@ -181,8 +178,8 @@ def test_poisson1d(set_test_dir, yamlfile):
         pset=pset, fitness=fitness.remote,
         error_metric=score.remote, predict_func=predict.remote,
         config_file_data=config_file_data, print_log=True,
-        common_data=common_params, feature_extractors=[len],
-        seed=seed_str, plot_history=False, save_best_individual=True,
+        common_data=common_params, seed=seed_str,
+        plot_history=False, save_best_individual=True,
         save_train_fit_history=True, output_path="./")
 
     train_data = Dataset("D", X_train, y_train)
