@@ -32,7 +32,7 @@ def eval_MSE_sol(individual, true_data):
 
 
 @ray.remote
-def predict(individuals_str, feature_extractors, toolbox, true_data):
+def predict(individuals_str, toolbox, true_data):
 
     callables = compile_individuals(toolbox, individuals_str)
 
@@ -45,7 +45,7 @@ def predict(individuals_str, feature_extractors, toolbox, true_data):
 
 
 @ray.remote
-def score(individuals_str, feature_extractors, toolbox, true_data):
+def score(individuals_str, toolbox, true_data):
 
     callables = compile_individuals(toolbox, individuals_str)
 
@@ -58,7 +58,7 @@ def score(individuals_str, feature_extractors, toolbox, true_data):
 
 
 @ray.remote
-def fitness(individuals_str, feature_extractors, toolbox, true_data):
+def fitness(individuals_str, toolbox, true_data):
     callables = compile_individuals(toolbox, individuals_str)
 
     fitnesses = [None]*len(individuals_str)

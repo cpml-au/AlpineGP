@@ -68,7 +68,6 @@ class GPSymbolicRegressor():
                  error_metric: Callable | None = None,
                  predict_func: Callable | None = None,
                  common_data: Dict | None = None,
-                 feature_extractors: List = [],
                  toolbox: base.Toolbox = None,
                  individualCreator: gp.PrimitiveTree = None,
                  NINDIVIDUALS: int = 10,
@@ -183,7 +182,7 @@ class GPSymbolicRegressor():
                 parallel = Parallel(n_jobs=num_jobs, return_as="generator")
         else:
             parallel = None
-        self.__register_map(feature_extractors, parallel)
+        self.__register_map(parallel)
 
         self.plot_initialized = False
         self.fig_id = 0
@@ -423,17 +422,14 @@ class GPSymbolicRegressor():
         self.toolbox.register("evaluate_test_sols",
                               self.predict_func, **args_predict_func)
 
-    def __register_map(self, individ_feature_extractors: List[Callable] | None = None,
-                       parallel=None):
+    def __register_map(self, parallel=None):
         def mapper(f, individuals, toolbox):
             if self.parallel_lib == "ray":
                 fitnesses = []*len(individuals)
                 toolbox_ref = ray.put(toolbox)
                 for i in range(0, len(individuals), self.batch_size):
                     individuals_batch = individuals[i:i+self.batch_size]
-                    fitnesses.append(
-                        f(individuals_batch, individ_feature_extractors,
-                          toolbox_ref))
+                    fitnesses.append(f(individuals_batch, toolbox_ref))
                 fitnesses = list(chain(*ray.get(fitnesses)))
             # elif self.parallel_lib == "joblib":
             #     fitnesses = list(parallel((delayed(f)(*args)
