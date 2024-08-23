@@ -189,10 +189,13 @@ def compute_attributes(individuals_str_batch, toolbox, dataset, penalty):
             # add penalty on length of the tree to promote simpler solutions
             MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, dataset)
             fitness = (
-                MSE
-                + 100000 * nested_trigs[i]
-                + 0.0 * num_trigs[i]
-                + penalty["reg_param"] * individ_length[i],
+                1e6
+                * (
+                    MSE
+                    + 100000 * nested_trigs[i]
+                    + 0.0 * num_trigs[i]
+                    + penalty["reg_param"] * individ_length[i]
+                ),
             )
         attributes[i] = {"consts": consts, "fitness": fitness}
     return attributes
@@ -327,10 +330,18 @@ def generate_dataset(problem="Nguyen-8"):
         y_train = func(X_train)
         y_test = func(X_test)
     else:
-        # PMLB datasets
-        X, y = fetch_data(problem, return_X_y=True)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-        num_variables = X.shape[1]
+        if problem == "C1":
+            data = np.loadtxt("C1.csv", delimiter=",", skiprows=1)
+            X = data[:, 1]
+            y = data[:, 0]
+            num_variables = 1
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+            print(X_train, y_train)
+        else:
+            # PMLB datasets
+            X, y = fetch_data(problem, return_X_y=True)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+            num_variables = X.shape[1]
 
     return X_train, y_train, X_test, y_test, num_variables
 
@@ -341,6 +352,9 @@ def alpine_bench(problem="Nguyen-8"):
             config_file_data = yaml.safe_load(config_file)
     elif problem == "227_cpu_small":
         with open("bench_alpine_227_cpu_small.yaml") as config_file:
+            config_file_data = yaml.safe_load(config_file)
+    elif problem == "C1":
+        with open("bench_alpine_C1.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
     else:
         with open("bench_alpine.yaml") as config_file:
@@ -372,6 +386,11 @@ def alpine_bench(problem="Nguyen-8"):
     ):
         batch_size = 10
         config_file_data["gp"]["penalty"]["reg_param"] = 0.0001
+        pset.addTerminal(object, float, "a")
+
+    if problem == "C1":
+        batch_size = 100
+        config_file_data["gp"]["penalty"]["reg_param"] = 0.0
         pset.addTerminal(object, float, "a")
 
     # import re
@@ -424,10 +443,10 @@ def alpine_bench(problem="Nguyen-8"):
     # print(u_best)
     # print(y_test)
 
-    # plt.figure()
-    # plt.plot(u_best)
-    # plt.plot(y_test, '+')
-    # plt.show()
+    plt.figure()
+    plt.plot(u_best)
+    plt.plot(y_test, "+")
+    plt.show()
 
     MSE = np.sum((u_best - y_test) ** 2) / len(u_best)
     r2 = r2_score(y_test, u_best)
@@ -457,7 +476,7 @@ if __name__ == "__main__":
         "strogatz_glider1",
     ]
 
-    # problems = ["227_cpu_small"]
+    problems = ["C1"]
 
     ave_success_rate = 0.0
 
