@@ -23,8 +23,8 @@ dependencies:
   - joblib
   - pip
   - pip:
-      - git+https://github.com/alucantonio/dctkit
-      - git+https://github.com/alucantonio/deap
+      - git+https://github.com/cpml-au/dctkit
+      - git+https://github.com/cpml-au/deap
       - ray
       - pygmsh
       - tox
