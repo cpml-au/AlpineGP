@@ -1,9 +1,8 @@
-# template for Poisson parameters file
 gp:
-  NINDIVIDUALS: 8000 # 1000
+  NINDIVIDUALS: 1000 # 1000
   NGEN: 200 # 200
   multi_island:
-    num_islands: 1 # 15
+    num_islands: 8 # 15
     migration: { "freq": 10, "frac": 0.05 }
   crossover_prob: 0.
   MUTPB: 1.
