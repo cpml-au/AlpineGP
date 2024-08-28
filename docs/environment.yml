@@ -9,7 +9,7 @@ dependencies:
   - jaxopt
   - numpy
   - pygmo
-  - python<3.11
+  - python
   - python-gmsh
   - petsc4py
   - jupyterlab
@@ -21,12 +21,11 @@ dependencies:
   - pygraphviz
   - typeguard
   - yaml
-  - joblib
   - pip:
       - sphinx-rtd-theme
       - myst-parser[linkify]
       - sphinx>=3.2.1
-      - git+https://github.com/alucantonio/dctkit
-      - git+https://github.com/alucantonio/deap
+      - git+https://github.com/cpml-au/dctkit
+      - git+https://github.com/cpml-au/deap
       - ray
       - pygmsh
