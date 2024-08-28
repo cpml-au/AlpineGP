@@ -2,25 +2,28 @@
 
 # AlpineGP
 
-_AlpineGP_ is a Python library that solves **symbolic regression** problems using
-_Genetic Programming_. It provides a high-level interface to the
-[`DEAP`](https://github.com/alucantonio/DEAP) library and leverages the high-performance
-distributed computing functionalities provided by the [`ray`](https://www.ray.io) library. 
+_AlpineGP_ is a Python library for **symbolic regression** via _Genetic Programming_.
+It provides a high-level interface to the [`DEAP`](https://github.com/alucantonio/DEAP)
+library, including distributed computing functionalities.
 
-Beside solving classical symbolic regression problems involving algebraic equations
+Besides solving classical symbolic regression problems involving algebraic equations
 (see, for example, the benchmark problems contained in the
-[SRBench](https://github.com/cavalab/srbench)
-repository), _AlpineGP_ is specifically design to help identifying _interpretable_, 
-_symbolic_ models of _physical systems_ starting from data. To this aim, it exploits as a natural and
-effective language to express physical models (i.e., conservation laws) a **discrete
-calculus** framework, including tools from discrete differential geometry and discrete
-exterior calculus, defined and implemented in the library
-[`dctkit`](https://github.com/alucantonio/dctkit).
+[SRBench](https://github.com/cavalab/srbench) repository), _AlpineGP_ is specifically
+design to help identifying _symbolic_ models of _physical systems_ governed by **field equations**.
+To this aim, it allows to exploit the **discrete calculus** framework defined and implemented in the library
+[`dctkit`](https://github.com/alucantonio/dctkit) as a natural and effective language to express physical models
+(i.e., conservation laws).
 
 _AlpineGP_ has been introduced in the paper [_Discovering interpretable physical models
 with symbolic regression and discrete exterior calculus_](https://iopscience.iop.org/article/10.1088/2632-2153/ad1af2),
-along with several benchmark problems.
+along with several benchmark problems (heat transfer, linear elasticity, Euler's elastica).
 
+**Features**:
+- distributed computing provided by the [`ray`](https://www.ray.io) library;
+- scikit-learn compatible interface;
+- hyperparameter configuration via YAML files;
+- support for custom operators (with/without strong-typing);
+- benchmark suite (Nguyen and interface to SRBench) 
 
 ## Installation
 
@@ -33,7 +36,7 @@ environment based on the provided `.yaml` file, use the command
 $ mamba env create -f environment.yaml
 ```
 
-Otherwise, update an existing environment using the same `.yaml` file.
+Otherwise, you can update an existing environment using the same `.yaml` file.
 
 After activating the environment, clone the git repository and launch the following command
 
@@ -148,7 +151,9 @@ gpsr.fit(train_data)
 pred_test = gpsr.predict(test_data)
 ```
 
-A complete example notebook can be found in the `examples` directory.
+A complete example notebook can be found in the `examples` directory. Also check the
+`simple_sr.py` script for an introductory example (use it as a template/skeleton for
+defining your symbolic regression problem).
 
 ## Citing
 ```
