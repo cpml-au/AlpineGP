@@ -1,0 +1,39 @@
+gp:
+  NINDIVIDUALS: 100
+  NGEN: 200
+  multi_island:
+    num_islands: 10
+    migration: { "freq": 10, "frac": 0.05 }
+  crossover_prob: 0.9
+  MUTPB: 0.1
+  frac_elitist: 0
+  min_: 2
+  max_: 6
+  overlapping_generation: True
+  validate: False
+  penalty: { "method": "length", "reg_param": 0. }
+  select:
+    fun: tools.selection.tournament_with_elitism
+    kargs: "{'num_elitist': self.n_elitist, 'tournsize': 2, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  immigration: { "enabled": False, "freq": 10, "frac": 0.9 }
+  primitives:
+    imports: { "alpine.gp.numpy_primitives": ["numpy_primitives"] }
+    used:
+      [
+        { "name": "add", "dimension": None, "rank": None },
+        { "name": "sub", "dimension": None, "rank": None },
+        { "name": "mul", "dimension": None, "rank": None },
+        { "name": "div", "dimension": None, "rank": None },
+        { "name": "sin", "dimension": None, "rank": None },
+        { "name": "cos", "dimension": None, "rank": None },
+        { "name": "exp", "dimension": None, "rank": None },
+        { "name": "log", "dimension": None, "rank": None },
+      ]

@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from deap import gp
 
 # from dctkit import config
@@ -75,7 +75,8 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
     if num_consts > 0:
         # config()
 
-        # TODO: do we really need to redefine this function instead of using the one outside?
+        # TODO: do we really need to redefine this function instead of using the one
+        # outside?
         def eval_MSE(consts):
             warnings.filterwarnings("ignore")
             y_pred = individual(*D.X, consts)
@@ -151,7 +152,7 @@ def get_features_batch(
 
 
 @ray.remote(num_cpus=num_cpus)
-def predict(individuals_str_batch, toolbox, dataset, penalty):
+def predict(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
 
     predictions = [None] * len(individuals_str_batch)
 
@@ -163,7 +164,7 @@ def predict(individuals_str_batch, toolbox, dataset, penalty):
 
 
 @ray.remote(num_cpus=num_cpus)
-def compute_MSEs(individuals_str_batch, toolbox, dataset, penalty):
+def compute_MSEs(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
 
     total_errs = [None] * len(individuals_str_batch)
 
@@ -175,7 +176,7 @@ def compute_MSEs(individuals_str_batch, toolbox, dataset, penalty):
 
 
 @ray.remote(num_cpus=num_cpus)
-def compute_attributes(individuals_str_batch, toolbox, dataset, penalty):
+def compute_attributes(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
 
     attributes = [None] * len(individuals_str_batch)
 
@@ -188,10 +189,9 @@ def compute_attributes(individuals_str_batch, toolbox, dataset, penalty):
             consts = None
             fitness = (1e8,)
         else:
-            # add penalty on length of the tree to promote simpler solutions
             MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, dataset)
             fitness = (
-                1e6
+                fitness_scale
                 * (
                     MSE
                     + 100000 * nested_trigs[i]
@@ -236,11 +236,9 @@ def alpine_bench(problem="Nguyen-8"):
     else:
         pset = gp.PrimitiveSetTyped("Main", [float] * num_variables, float)
 
-    penalty = config_file_data["gp"]["penalty"]
-    common_params = {"penalty": penalty}
-
     batch_size = 1000
     callback_func = assign_attributes
+    fitness_scale = 1.0
 
     if (
         problem == "Nguyen-13"
@@ -253,9 +251,12 @@ def alpine_bench(problem="Nguyen-8"):
 
     if problem == "C1":
         batch_size = 100
+        fitness_scale = 1e6
         config_file_data["gp"]["penalty"]["reg_param"] = 0.0
         pset.addTerminal(object, float, "a")
 
+    penalty = config_file_data["gp"]["penalty"]
+    common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
     # import re
 
     # lambda ind: len(re.findall("cos", str(ind)))
@@ -265,7 +266,6 @@ def alpine_bench(problem="Nguyen-8"):
         fitness=compute_attributes.remote,
         predict_func=predict.remote,
         error_metric=compute_MSEs.remote,
-        validate=False,
         common_data=common_params,
         callback_func=callback_func,
         print_log=True,
