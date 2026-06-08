@@ -765,7 +765,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     delattr(ind, "_newborn")
 
         # migrations among islands
-        if cgen % self.mig_frac == 0 and self.num_islands > 1:
+        if cgen % self.mig_freq == 0 and self.num_islands > 1:
             migRing(
                 self.__pop,
                 int(self.mig_frac * self.num_individuals),
