@@ -32,6 +32,199 @@ os.environ["XLA_FLAGS"] = (
 )
 
 
+def _register_creator_classes():
+    """Create the DEAP ``creator`` classes used for individuals.
+
+    These classes must exist in every process that constructs individuals. In the
+    coarse-grained island strategy the Ray workers reconstruct individuals from their
+    string representation (see ``_unpack_individual``) using ``creator.Individual``;
+    importing this module on a worker triggers this registration, so the class is
+    available before any island is evolved. The classes are configuration-independent
+    (the primitive set is supplied to ``compile`` via the toolbox, not baked into the
+    class), so creating them eagerly at import time is safe and idempotent.
+    """
+    if not hasattr(creator, "FitnessMin"):
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+    if not hasattr(creator, "Individual"):
+        creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
+
+
+# Register the creator classes eagerly at import time (driver and Ray workers alike).
+_register_creator_classes()
+
+
+def _island_one_generation(
+    pop: List,
+    toolbox: base.Toolbox,
+    fitness_func: Callable,
+    fitness_args: Dict,
+    callback_func: Callable | None,
+    params: Dict,
+):
+    """Evolve a single island by one generation.
+
+    This mirrors the per-island body of ``GPSymbolicRegressor.__evolve_islands``
+    but evaluates the fitness locally (i.e. in the calling process/worker) instead
+    of dispatching it as a separate Ray task. It is the building block of the
+    coarse-grained island-parallel strategy.
+
+    Args:
+        pop: the island population (a list of individuals).
+        toolbox: the DEAP toolbox (selection/variation/compile registered).
+        fitness_func: the plain (non-remote) fitness function.
+        fitness_args: concrete keyword arguments passed to ``fitness_func``.
+        callback_func: optional callback used to assign fitness/attributes.
+        params: dictionary of evolution parameters.
+
+    Returns:
+        a tuple ``(pop, num_evals)`` with the evolved population and the number of
+        fitness evaluations performed.
+    """
+    num_individuals = params["num_individuals"]
+    n_elitist = params["n_elitist"]
+    variation = params["variation_mechanism"]
+    crossover_prob = params["crossover_prob"]
+    mut_prob = params["mut_prob"]
+    overlapping = params["overlapping_generation"]
+
+    # Select the parents and clone them to form the offspring
+    offspring = list(map(toolbox.clone, toolbox.select(pop)))
+
+    # Elitism + variation
+    elite_inds = tools.selBest(offspring, n_elitist)
+    if variation == "varand":
+        varied_offspring = algorithms.varAnd(
+            offspring[: num_individuals - n_elitist],
+            toolbox,
+            crossover_prob,
+            mut_prob,
+        )
+    elif variation == "varor":
+        varied_offspring = algorithms.varOr(
+            offspring,
+            toolbox,
+            num_individuals - n_elitist,
+            crossover_prob,
+            mut_prob,
+        )
+    else:
+        raise ValueError(
+            "variation_mechanism must be either 'varAnd' or 'varOr'. "
+            f"Got: {variation}"
+        )
+    offspring = elite_inds + varied_offspring
+
+    invalid_inds = [ind for ind in offspring if not ind.fitness.valid]
+    for ind in invalid_inds:
+        ind._newborn = True
+
+    # Evaluate the fitness locally (on this worker)
+    if callback_func is not None:
+        results = fitness_func(invalid_inds, toolbox, **fitness_args)
+        callback_func(invalid_inds, results)
+    else:
+        fitnesses = fitness_func(invalid_inds, toolbox, **fitness_args)
+        for ind, fit in zip(invalid_inds, fitnesses):
+            ind.fitness.values = fit
+
+    # Survival selection
+    if not overlapping:
+        pop[:] = offspring
+    else:
+        pop = tools.selBest(pop + offspring, num_individuals)
+
+    # Update individual ages after survival
+    for ind in pop:
+        if getattr(ind, "_newborn", False):
+            ind.age = 0
+        else:
+            ind.age = getattr(ind, "age", 0) + 1
+        if hasattr(ind, "_newborn"):
+            delattr(ind, "_newborn")
+
+    return pop, len(invalid_inds)
+
+
+def _pack_individual(ind):
+    """Serialize an individual into a transport-safe, ``creator``-free payload.
+
+    Individuals are *not* shipped across the Ray boundary as ``creator.Individual``
+    instances: cloudpickle reconstructs DEAP's dynamically-created classes in a way
+    that is incompatible with its ``MetaCreator`` metaclass (raising a metaclass
+    conflict), and the behaviour is fragile across repeated round-trips. Instead each
+    individual is reduced to its list of nodes (plain ``deap.gp`` ``Primitive``/
+    ``Terminal`` objects, which pickle cleanly by reference), its fitness values (or
+    ``None`` if not yet evaluated), and any plain instance attributes (e.g. ``age``,
+    ``consts``). The ``fitness`` object itself is excluded because it is a
+    ``creator``-derived class; only its raw values are transferred.
+
+    Returns:
+        a tuple ``(nodes, fitness_values, attrs)``.
+    """
+    fitness_values = ind.fitness.values if ind.fitness.valid else None
+    attrs = {key: value for key, value in vars(ind).items() if key != "fitness"}
+    return (list(ind), fitness_values, attrs)
+
+
+def _unpack_individual(packed):
+    """Reconstruct an individual from a payload produced by ``_pack_individual``.
+
+    Args:
+        packed: a ``(nodes, fitness_values, attrs)`` tuple.
+
+    Returns:
+        a ``creator.Individual`` with its fitness and attributes restored.
+    """
+    nodes, fitness_values, attrs = packed
+    ind = creator.Individual(nodes)
+    if fitness_values is not None:
+        ind.fitness.values = fitness_values
+    for key, value in attrs.items():
+        setattr(ind, key, value)
+    return ind
+
+
+def _evolve_island(
+    packed_pop: List,
+    toolbox: base.Toolbox,
+    fitness_func: Callable,
+    fitness_args: Dict,
+    callback_func: Callable | None,
+    n_gens: int,
+    params: Dict,
+):
+    """Evolve a single island for ``n_gens`` generations.
+
+    Both variation and fitness evaluation run in the calling process. When wrapped
+    as a Ray task (see ``_evolve_island_remote``), an entire island evolves on a
+    single worker with no per-generation synchronization with the driver, which is
+    the essence of coarse-grained island parallelism.
+
+    The population crosses the Ray boundary as ``creator``-free payloads (see
+    ``_pack_individual``); it is reconstructed here and packed again on return.
+    ``fitness_args`` may contain ``ray.ObjectRef`` values (e.g. shared datasets);
+    they are dereferenced once, before the generational loop.
+
+    Returns:
+        a tuple ``(packed_pop, num_evals)``.
+    """
+    concrete_args = {
+        key: (ray.get(value) if isinstance(value, ray.ObjectRef) else value)
+        for key, value in fitness_args.items()
+    }
+    pop = [_unpack_individual(p) for p in packed_pop]
+    num_evals = 0
+    for _ in range(n_gens):
+        pop, evals = _island_one_generation(
+            pop, toolbox, fitness_func, concrete_args, callback_func, params
+        )
+        num_evals += evals
+    return [_pack_individual(ind) for ind in pop], num_evals
+
+
+_evolve_island_remote = ray.remote(_evolve_island)
+
+
 class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     """Symbolic regression via Genetic Programming (GP).
 
@@ -110,6 +303,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             The default is `0`, which means infinite number of tasks.
         custom_logger: user-defined logging function called with the best individuals.
         multiprocessing: whether to use Ray for parallel fitness evaluation.
+        coarse_grained_islands: if True (and ``multiprocessing`` is enabled with more
+            than one island), each island is evolved on its own Ray worker for
+            ``mig_freq`` generations at a time (variation *and* fitness), with the
+            driver only synchronizing to migrate and collect statistics. This removes
+            the per-generation global barrier and parallelizes the variation
+            operators, but population statistics are recorded every ``mig_freq``
+            generations rather than every generation.
     """
 
     def __init__(
@@ -158,6 +358,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         max_calls: int = 0,
         custom_logger: Callable = None,
         multiprocessing: bool = True,
+        coarse_grained_islands: bool = False,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -211,6 +412,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.max_calls = max_calls
         self.custom_logger = custom_logger
         self.multiprocessing = multiprocessing
+        self.coarse_grained_islands = coarse_grained_islands
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -484,7 +686,21 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             toolbox: the toolbox for the evolution.
         """
         if self.multiprocessing:
-            toolbox_ref = ray.put(toolbox)
+            # Build a lean copy of the toolbox for the object store, excluding the
+            # ``individual`` and ``population`` operators. These embed the
+            # ``creator.Individual`` class, which Ray serializes *by value*; shipping
+            # it to a worker that already defines the class (e.g. via the coarse-grained
+            # setup hook) raises a metaclass conflict. Fitness evaluation and the
+            # variation operators only need compile/clone/select/mate/mutate, so the
+            # lean toolbox is sufficient for both strategies.
+            lean_toolbox = base.Toolbox()
+            for name in vars(toolbox):
+                if name in ("individual", "population"):
+                    continue
+                setattr(lean_toolbox, name, getattr(toolbox, name))
+            toolbox_ref = ray.put(lean_toolbox)
+            # keep a handle to the shared toolbox for coarse-grained island tasks
+            self._toolbox_ref = toolbox_ref
             toolbox.register(
                 "map", mapper, toolbox_ref=toolbox_ref, batch_size=self.batch_size
             )
@@ -774,6 +990,109 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
+    def __evolve_coarse_grained(self, toolbox: base.Toolbox):
+        """Evolve the islands using coarse-grained parallelism.
+
+        Each island is evolved independently on its own Ray worker for ``mig_freq``
+        generations (both variation and fitness evaluation). After each such block
+        the driver gathers the populations, performs migration, records statistics,
+        and checks for early stopping. Compared to the fine-grained strategy this
+        removes the per-generation global barrier and parallelizes the variation
+        operators, at the cost of recording statistics only every ``mig_freq``
+        generations.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
+        if self.preprocess_args is not None:
+            raise NotImplementedError(
+                "coarse_grained_islands does not support preprocess_args; "
+                "set coarse_grained_islands=False to use preprocessing."
+            )
+
+        store = self.__data_store
+        fitness_args = store["common"] | store["train"]
+        params = {
+            "num_individuals": self.num_individuals,
+            "n_elitist": self.n_elitist,
+            "variation_mechanism": str(self.variation_mechanism).lower(),
+            "crossover_prob": self.crossover_prob,
+            "mut_prob": self.mut_prob,
+            "overlapping_generation": self.overlapping_generation,
+        }
+
+        gen = 0
+        while gen < self.generations:
+            # number of generations to evolve before the next migration/sync point
+            n_gens = min(self.mig_freq, self.generations - gen)
+
+            # dispatch one task per island; each evolves locally for n_gens.
+            # populations cross the boundary as creator-free payloads.
+            futures = [
+                _evolve_island_remote.options(num_cpus=self.num_cpus).remote(
+                    [_pack_individual(ind) for ind in self.__pop[i]],
+                    self._toolbox_ref,
+                    self.fitness,
+                    fitness_args,
+                    self.callback_func,
+                    n_gens,
+                    params,
+                )
+                for i in range(self.num_islands)
+            ]
+            results = ray.get(futures)
+            self.__pop = [
+                [_unpack_individual(p) for p in res[0]] for res in results
+            ]
+            num_evals = sum(res[1] for res in results)
+
+            gen += n_gens
+            self.__cgen = gen
+
+            # migration among islands
+            if self.num_islands > 1:
+                migRing(
+                    self.__pop,
+                    int(self.mig_frac * self.num_individuals),
+                    selection=random.sample,
+                )
+
+            # statistics, best individual and history (every mig_freq generations)
+            best_inds = self.get_best_individuals(self.num_best_inds_str)
+            self.__stats(self.__flatten_list(self.__pop), gen, num_evals, toolbox)
+
+            if self.print_log:
+                print("Best individuals of this generation:", flush=True)
+                for i in range(self.num_best_inds_str):
+                    print(str(best_inds[i]), flush=True)
+                if self.custom_logger is not None:
+                    self.custom_logger(best_inds)
+
+            self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
+            if self.validate:
+                self.__val_score_history = self.__logbook.chapters["valid"].select(
+                    "valid_score"
+                )
+                self.max_val_score = max(self.__val_score_history)
+            self._best = best_inds[0]
+
+            if self.save_detailed_log and self.output_path is not None:
+                self.__append_detailed_log(generation=self.__cgen)
+
+            # early stopping
+            if (
+                self.early_stop_fitness_threshold is not None
+                and self._best.fitness.valid
+                and len(self._best.fitness.values) > 0
+                and self._best.fitness.values[0] <= self.early_stop_fitness_threshold
+            ):
+                self.__print(
+                    "Early stopping: best fitness "
+                    f"{self._best.fitness.values[0]} <= threshold "
+                    f"{self.early_stop_fitness_threshold}."
+                )
+                break
+
     def __remove_duplicates(self, toolbox: base.Toolbox):
         """Remove duplicates in the population.
 
@@ -954,25 +1273,34 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__print(" -= START OF EVOLUTION =- ")
 
-        for gen in range(self.generations):
-            self.__cgen = gen + 1
+        coarse_grained = (
+            self.coarse_grained_islands
+            and self.multiprocessing
+            and self.num_islands > 1
+        )
+        if coarse_grained:
+            self.__evolve_coarse_grained(toolbox)
+        else:
+            for gen in range(self.generations):
+                self.__cgen = gen + 1
 
-            self._step(toolbox, self.__cgen)
+                self._step(toolbox, self.__cgen)
 
-            if (
-                self.early_stop_fitness_threshold is not None
-                and self._best.fitness.valid
-                and len(self._best.fitness.values) > 0
-                and self._best.fitness.values[0] <= self.early_stop_fitness_threshold
-            ):
-                self.__print(
-                    "Early stopping: best fitness "
-                    f"{self._best.fitness.values[0]} <= threshold "
-                    f"{self.early_stop_fitness_threshold}."
-                )
-                break
-            if self.save_detailed_log and self.output_path is not None:
-                self.__append_detailed_log(generation=self.__cgen)
+                if (
+                    self.early_stop_fitness_threshold is not None
+                    and self._best.fitness.valid
+                    and len(self._best.fitness.values) > 0
+                    and self._best.fitness.values[0]
+                    <= self.early_stop_fitness_threshold
+                ):
+                    self.__print(
+                        "Early stopping: best fitness "
+                        f"{self._best.fitness.values[0]} <= threshold "
+                        f"{self.early_stop_fitness_threshold}."
+                    )
+                    break
+                if self.save_detailed_log and self.output_path is not None:
+                    self.__append_detailed_log(generation=self.__cgen)
 
         self.__print(" -= END OF EVOLUTION =- ")
 
