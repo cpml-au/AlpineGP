@@ -1,4 +1,4 @@
-"""Compare the fine-grained (master-worker) and coarse-grained (island-parallel)
+"""Compare the fine-grained (master-worker) and hybrid (island-parallel)
 strategies on a PMLB dataset, reusing the existing ``bench.eval`` driver.
 
 This exercises the *expensive, load-imbalanced* fitness regime: the PMLB config uses
@@ -15,34 +15,6 @@ import time
 import ray
 
 from bench import eval as bench_eval
-
-
-def make_step_timer(label):
-    """Return a ``custom_logger`` that times the interval between calls.
-
-    The regressor calls ``custom_logger(best_inds)`` once per generation
-    (fine-grained) or once per migration block (coarse-grained). Printing the
-    wall-clock delta between consecutive calls reveals whether per-step time stays
-    flat (a perceived slowdown is just the bursty print cadence) or rises over the
-    run (a genuine slowdown, typically GP bloat). ``best_size`` is the size of the
-    current best individual, a quick proxy for tree growth.
-    """
-    state = {"last": time.perf_counter(), "step": 0, "cum": 0.0}
-
-    def logger(best_inds):
-        now = time.perf_counter()
-        dt = now - state["last"]
-        state["last"] = now
-        state["step"] += 1
-        state["cum"] += dt
-        size = len(best_inds[0]) if best_inds else -1
-        print(
-            f"[{label} step {state['step']:>3}] +{dt:6.2f}s "
-            f"(cum {state['cum']:7.1f}s)  best_size={size}",
-            flush=True,
-        )
-
-    return logger
 
 
 def warmup_workers():
@@ -91,18 +63,16 @@ def main():
     r2tr_f, r2te_f, model_f, fit_f = bench_eval(
         problem=args.problem, cfgfile=args.cfg, seed=args.seed,
         coarse_grained_islands=False, remove_init_duplicates=False,
-        custom_logger=make_step_timer("fine  "),
     )
     wall_f = time.perf_counter() - t0
 
-    print("\n=== COARSE-GRAINED (island-parallel) ===")
+    print("\n=== HYBRID (island coordinators + cluster-wide fitness) ===")
     t0 = time.perf_counter()
-    r2tr_c, r2te_c, model_c, fit_c = bench_eval(
+    r2tr_h, r2te_h, model_h, fit_h = bench_eval(
         problem=args.problem, cfgfile=args.cfg, seed=args.seed,
-        coarse_grained_islands=True, remove_init_duplicates=False,
-        custom_logger=make_step_timer("coarse"),
+        coarse_grained_islands="hybrid", remove_init_duplicates=False,
     )
-    wall_c = time.perf_counter() - t0
+    wall_h = time.perf_counter() - t0
 
     print("\n" + "=" * 74)
     print(f"{'Strategy':<18}{'fit time (s)':>14}{'wall (s)':>12}"
@@ -110,14 +80,14 @@ def main():
     print("-" * 74)
     print(f"{'fine-grained':<18}{fit_f:>14.2f}{wall_f:>12.2f}"
           f"{r2tr_f:>12.3f}{r2te_f:>12.3f}")
-    print(f"{'coarse-grained':<18}{fit_c:>14.2f}{wall_c:>12.2f}"
-          f"{r2tr_c:>12.3f}{r2te_c:>12.3f}")
+    print(f"{'hybrid':<18}{fit_h:>14.2f}{wall_h:>12.2f}"
+          f"{r2tr_h:>12.3f}{r2te_h:>12.3f}")
     print("-" * 74)
-    speedup = fit_f / fit_c if fit_c > 0 else float("nan")
-    print(f"Speed-up on fit time (fine / coarse): {speedup:.2f}x")
+    speedup_h = fit_f / fit_h if fit_h > 0 else float("nan")
+    print(f"Speed-up on fit time (fine / hybrid): {speedup_h:.2f}x")
     print("=" * 74)
     print(f"best (fine)   = {model_f}")
-    print(f"best (coarse) = {model_c}")
+    print(f"best (hybrid) = {model_h}")
 
     ray.shutdown()
 
